@@ -1,0 +1,354 @@
+{
+  "Version": 1,
+  "LevelId": "level2",
+  "Nodes": [
+    {
+      "Id": 1,
+      "Position": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "L1",
+      "SupportType": "Pinned"
+    },
+    {
+      "Id": 2,
+      "Position": {
+        "X": 16,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "R1",
+      "SupportType": "Pinned"
+    },
+    {
+      "Id": 3,
+      "Position": {
+        "X": 0,
+        "Y": -2,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "L2",
+      "SupportType": "Pinned"
+    },
+    {
+      "Id": 4,
+      "Position": {
+        "X": 16,
+        "Y": -2,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "R2",
+      "SupportType": "Pinned"
+    },
+    {
+      "Id": 5,
+      "Position": {
+        "X": 2.6667,
+        "Y": 0.0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 6,
+      "Position": {
+        "X": 5.3333,
+        "Y": 0.0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 7,
+      "Position": {
+        "X": 8.0,
+        "Y": 0.0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 8,
+      "Position": {
+        "X": 10.6667,
+        "Y": 0.0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 9,
+      "Position": {
+        "X": 13.3333,
+        "Y": 0.0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 10,
+      "Position": {
+        "X": 2.6667,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 11,
+      "Position": {
+        "X": 5.3333,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 12,
+      "Position": {
+        "X": 8.0,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 13,
+      "Position": {
+        "X": 10.6667,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    },
+    {
+      "Id": 14,
+      "Position": {
+        "X": 13.3333,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None"
+    }
+  ],
+  "Members": [
+    {
+      "Id": 1,
+      "StartNodeId": 1,
+      "EndNodeId": 5,
+      "MaterialId": "deck_wood",
+      "Length": 2.6667,
+      "Cost": 346.67,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 2,
+      "StartNodeId": 5,
+      "EndNodeId": 6,
+      "MaterialId": "deck_wood",
+      "Length": 2.6666,
+      "Cost": 346.66,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 3,
+      "StartNodeId": 6,
+      "EndNodeId": 7,
+      "MaterialId": "deck_wood",
+      "Length": 2.6667,
+      "Cost": 346.67,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 4,
+      "StartNodeId": 7,
+      "EndNodeId": 8,
+      "MaterialId": "deck_wood",
+      "Length": 2.6667,
+      "Cost": 346.67,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 5,
+      "StartNodeId": 8,
+      "EndNodeId": 9,
+      "MaterialId": "deck_wood",
+      "Length": 2.6666,
+      "Cost": 346.66,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 6,
+      "StartNodeId": 9,
+      "EndNodeId": 2,
+      "MaterialId": "deck_wood",
+      "Length": 2.6667,
+      "Cost": 346.67,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 7,
+      "StartNodeId": 10,
+      "EndNodeId": 11,
+      "MaterialId": "wood",
+      "Length": 2.6666,
+      "Cost": 319.99,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 8,
+      "StartNodeId": 11,
+      "EndNodeId": 12,
+      "MaterialId": "wood",
+      "Length": 2.6667,
+      "Cost": 320.0,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 9,
+      "StartNodeId": 12,
+      "EndNodeId": 13,
+      "MaterialId": "wood",
+      "Length": 2.6667,
+      "Cost": 320.0,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 10,
+      "StartNodeId": 13,
+      "EndNodeId": 14,
+      "MaterialId": "wood",
+      "Length": 2.6666,
+      "Cost": 319.99,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 11,
+      "StartNodeId": 1,
+      "EndNodeId": 10,
+      "MaterialId": "wood",
+      "Length": 3.6553,
+      "Cost": 438.64,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 12,
+      "StartNodeId": 14,
+      "EndNodeId": 2,
+      "MaterialId": "wood",
+      "Length": 3.6553,
+      "Cost": 438.64,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 13,
+      "StartNodeId": 5,
+      "EndNodeId": 10,
+      "MaterialId": "wood",
+      "Length": 2.5,
+      "Cost": 300.0,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 14,
+      "StartNodeId": 6,
+      "EndNodeId": 11,
+      "MaterialId": "wood",
+      "Length": 2.5,
+      "Cost": 300.0,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 15,
+      "StartNodeId": 7,
+      "EndNodeId": 12,
+      "MaterialId": "wood",
+      "Length": 2.5,
+      "Cost": 300.0,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 16,
+      "StartNodeId": 8,
+      "EndNodeId": 13,
+      "MaterialId": "wood",
+      "Length": 2.5,
+      "Cost": 300.0,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 17,
+      "StartNodeId": 9,
+      "EndNodeId": 14,
+      "MaterialId": "wood",
+      "Length": 2.5,
+      "Cost": 300.0,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 18,
+      "StartNodeId": 10,
+      "EndNodeId": 6,
+      "MaterialId": "wood",
+      "Length": 3.6552,
+      "Cost": 438.63,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 19,
+      "StartNodeId": 11,
+      "EndNodeId": 7,
+      "MaterialId": "wood",
+      "Length": 3.6553,
+      "Cost": 438.64,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 20,
+      "StartNodeId": 13,
+      "EndNodeId": 7,
+      "MaterialId": "wood",
+      "Length": 3.6553,
+      "Cost": 438.64,
+      "DamageState": "Intact"
+    },
+    {
+      "Id": 21,
+      "StartNodeId": 14,
+      "EndNodeId": 8,
+      "MaterialId": "wood",
+      "Length": 3.6552,
+      "Cost": 438.63,
+      "DamageState": "Intact"
+    }
+  ],
+  "NextNodeId": 15,
+  "NextMemberId": 22,
+  "SavedTotalCost": 7491.8
+}

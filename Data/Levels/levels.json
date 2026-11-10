@@ -1,0 +1,188 @@
+{
+  "_units": "坐标 m（X 沿桥向，Y 竖直，Z 为建造平面法向，初版恒为 0），预算 $，承载力 N，时间 s。关卡按难度递增排列。",
+  "Levels": [
+    { "Id": "level1", "Name": "第一关：跨越小河", "Difficulty": "入门 · 找断点、补支撑", "Description": "学会找出断点并补上支撑。",
+      "StartDesign": "level1_start",
+      "StartHint": "这座桥只铺了桥面。先点「开始测试」试车，看看哪里会断，再补上支撑。",
+      "ReferenceHint": "思路：桥面中间的节点需要支撑。从上方用钢梁组成三角形（桁架），或从下方锚点斜撑到桥面节点。",
+      "Budget": 15000,
+      "Terrain": { "RiverWidth": 12, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -4, "RiverBedDepth": -7, "BuildMinY": -4, "BuildMaxY": 10, "BuildMarginX": 10 },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 12, "Y": 0, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "L2", "Position": { "X": 0, "Y": -2, "Z": 0 }, "MaxLoad": 300000, "SupportType": "Pinned" },
+        { "Id": "R2", "Position": { "X": 12, "Y": -2, "Z": 0 }, "MaxLoad": 300000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "road", "deck_wood", "wood", "steel" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "car" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level2", "Name": "第二关：林间步道", "Difficulty": "入门 · 木结构与限量材料", "Description": "林区里普通木材充足，但大型胶合木梁只有 2 根。一队行人和一辆巡林车要过河。",
+      "ReferenceHint": "思路：用便宜的木桥面和木梁搭一座矮桁架就够了；胶合木梁更长更强，留给最需要的那一跨。",
+      "Budget": 10000,
+      "Terrain": { "RiverWidth": 16, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -4, "RiverBedDepth": -7, "BuildMinY": -4, "BuildMaxY": 10, "BuildMarginX": 10 },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 300000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 16, "Y": 0, "Z": 0 }, "MaxLoad": 300000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "L2", "Position": { "X": 0, "Y": -2, "Z": 0 }, "MaxLoad": 200000, "SupportType": "Pinned" },
+        { "Id": "R2", "Position": { "X": 16, "Y": -2, "Z": 0 }, "MaxLoad": 200000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "deck_wood", "road", "wood", "glulam", "steel" ],
+      "MaterialLimits": { "glulam": 2 },
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "pedestrians" }, { "Time": 2, "Type": "Vehicle", "VehicleId": "car" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level3", "Name": "第三关：重型货车", "Difficulty": "基础 · 荷载差异", "Description": "先过轿车，再过重型货车：同一座桥在两种荷载下受力差别很大。",
+      "ReferenceHint": "思路：货车很重，桥面支点要更密（约 3 m 一个），再用较高的钢桁架把载荷传到两岸；下方锚点可以斜撑桥面两端。",
+      "Budget": 35000,
+      "Terrain": { "RiverWidth": 20, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -5, "RiverBedDepth": -8, "BuildMinY": -5, "BuildMaxY": 12, "BuildMarginX": 10 },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 20, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "L2", "Position": { "X": 0, "Y": -3, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" },
+        { "Id": "R2", "Position": { "X": 20, "Y": -3, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "road", "deck_steel", "deck_wood", "wood", "steel", "cable" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 6, "Type": "Vehicle", "VehicleId": "truck" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level4", "Name": "第四关：高低两岸", "Difficulty": "基础 · 桥面坡度", "Description": "右岸比左岸高 2 m。桥面坡度不能超过 15%（半透明扇形标出了可行范围），安排好桥面走势。",
+      "ReferenceHint": "思路：让桥面从左岸到右岸匀速爬坡（约 10%），桁架跟着桥面一起倾斜，下方锚点斜撑两端。",
+      "Budget": 38000,
+      "Terrain": { "RiverWidth": 20, "LeftBankHeight": 0, "RightBankHeight": 2, "WaterLevel": -5, "RiverBedDepth": -8, "BuildMinY": -5, "BuildMaxY": 13, "BuildMarginX": 10 },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 20, "Y": 2, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "L2", "Position": { "X": 0, "Y": -3, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" },
+        { "Id": "R2", "Position": { "X": 20, "Y": -1, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "road", "deck_steel", "wood", "steel", "cable", "concrete" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 6, "Type": "Vehicle", "VehicleId": "truck" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level5", "Name": "第五关：有限锚点", "Difficulty": "进阶 · 利用岩墩", "Description": "右岸只有一个锚点，河中有一座岩墩。观察可用支点：上部桁架、岩墩支撑都能过关。",
+      "ReferenceHint": "思路：30 m 太长，单靠两岸很吃力。从岩墩锚点 P1 竖起一根支撑顶住桥面中点，把一跨变成两跨；也可以用钢筋混凝土柱。",
+      "Budget": 60000,
+      "Terrain": { "RiverWidth": 30, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -6, "RiverBedDepth": -9, "BuildMinY": -6, "BuildMaxY": 14, "BuildMarginX": 10,
+        "Pillars": [ { "X": 15, "TopY": -4, "Width": 3 } ] },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 30, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "L2", "Position": { "X": 0, "Y": -4, "Z": 0 }, "MaxLoad": 300000, "SupportType": "Pinned" },
+        { "Id": "P1", "Position": { "X": 15, "Y": -4, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "road", "deck_steel", "steel", "cable", "concrete", "rc_column" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 4, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 9, "Type": "Vehicle", "VehicleId": "truck" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level6", "Name": "第六关：坦克通行", "Difficulty": "进阶 · 单点高负载", "Description": "60 吨坦克的重量集中在很短的履带上：桥面支点要密、桥面要强，再用岩墩分担跨中。",
+      "ReferenceHint": "思路：用 2 m 一段的钢桥面承受集中荷载；岩墩 P1 上立钢筋混凝土柱顶住跨中，两端用下方锚点斜撑。",
+      "Budget": 45000,
+      "Terrain": { "RiverWidth": 16, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -5, "RiverBedDepth": -8, "BuildMinY": -5, "BuildMaxY": 12, "BuildMarginX": 10,
+        "Pillars": [ { "X": 8, "TopY": -4, "Width": 2.5 } ] },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 800000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 16, "Y": 0, "Z": 0 }, "MaxLoad": 800000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "P1", "Position": { "X": 8, "Y": -4, "Z": 0 }, "MaxLoad": 900000, "SupportType": "Pinned" },
+        { "Id": "L2", "Position": { "X": 0, "Y": -3, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned" },
+        { "Id": "R2", "Position": { "X": 16, "Y": -3, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "deck_steel", "road", "steel", "rc_beam", "concrete", "rc_column" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "truck" }, { "Time": 4, "Type": "Vehicle", "VehicleId": "tank" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level7", "Name": "第七关：航道净空", "Difficulty": "进阶 · 禁止建墩", "Description": "货船要从桥下通过，河道是禁止建墩区：只能利用两岸。橙色框是船的轮廓，框里不能有任何构件。",
+      "ReferenceHint": "思路：把桁架建在桥面上方，桥面下方只在两岸锚点处斜撑；预应力 I 形梁很长很强，适合做上弦或长斜杆。液压杆会在船来时自动收缩让路。",
+      "Budget": 50000,
+      "Terrain": { "RiverWidth": 24, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -6, "RiverBedDepth": -9, "BuildMinY": -6, "BuildMaxY": 14, "BuildMarginX": 10,
+        "NoBuildZones": [ { "X0": 0, "X1": 24, "BelowY": 0, "Name": "禁止建墩区（航道）" } ] },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 24, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "L2", "Position": { "X": 0, "Y": -3, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" },
+        { "Id": "R2", "Position": { "X": 24, "Y": -3, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "road", "deck_steel", "deck_frp", "steel", "cable", "hydraulic", "psc_i", "rc_beam" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 6, "Type": "Vehicle", "VehicleId": "truck" },
+        { "Time": 5, "Type": "Ship", "Name": "货船", "LaneX": 12, "Width": 6, "Height": 4.5, "Length": 14, "Speed": 5 } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level8", "Name": "第八关：货运铁路", "Difficulty": "困难 · 长时间高负载", "Description": "60 m 长、160 吨的货运列车会把整座桥压满很长时间，桥要经得起持续的满载。",
+      "ReferenceHint": "思路：列车荷载像一条很重的均布荷载。用桁架加岩墩支撑把 30 m 分成两跨；预应力箱梁单根可达 28 m，可做长弦杆减少节点。",
+      "Budget": 70000,
+      "Terrain": { "RiverWidth": 30, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -6, "RiverBedDepth": -9, "BuildMinY": -6, "BuildMaxY": 14, "BuildMarginX": 10,
+        "Pillars": [ { "X": 15, "TopY": -4, "Width": 3 } ] },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 900000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 30, "Y": 0, "Z": 0 }, "MaxLoad": 900000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "P1", "Position": { "X": 15, "Y": -4, "Z": 0 }, "MaxLoad": 1500000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "road", "deck_steel", "steel", "cable", "rc_column", "rc_beam", "psc_i", "psc_box" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "train" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.1, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level9", "Name": "第九关：城市立交", "Difficulty": "困难 · 双层通行", "Description": "两岸是立交：下层和上层道路都要通车。上层桥面可以兼作桁架的上弦。",
+      "ReferenceHint": "思路：下层桥面做下弦、上层桥面做上弦，中间用钢竖杆和斜杆连成一座双层桁架。",
+      "Budget": 45000,
+      "Terrain": { "RiverWidth": 20, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -5, "RiverBedDepth": -8, "BuildMinY": -5, "BuildMaxY": 12, "BuildMarginX": 10 },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 600000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 20, "Y": 0, "Z": 0 }, "MaxLoad": 600000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "U1", "Position": { "X": 0, "Y": 6, "Z": 0 }, "MaxLoad": 600000, "SupportType": "Pinned", "IsRoadStart": true, "RoadLane": 1 },
+        { "Id": "U2", "Position": { "X": 20, "Y": 6, "Z": 0 }, "MaxLoad": 600000, "SupportType": "Pinned", "IsRoadEnd": true, "RoadLane": 1 }
+      ],
+      "AllowedMaterials": [ "road", "deck_steel", "deck_frp", "steel", "cable", "rc_beam", "psc_i" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "car", "Lane": 0 }, { "Time": 1, "Type": "Vehicle", "VehicleId": "bus", "Lane": 1 },
+        { "Time": 5, "Type": "Vehicle", "VehicleId": "truck", "Lane": 0 }, { "Time": 6, "Type": "Vehicle", "VehicleId": "car", "Lane": 1 } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level10", "Name": "第十关：旧桥加固", "Difficulty": "困难 · 改造旧桥",
+      "Description": "这座锈蚀的老钢桁架桥只按轿车设计。现在要让重型货车通过：旧构件不花钱，但承载力已经打了折扣，最多只能拆除 4 根。",
+      "StartDesign": "level10_start",
+      "StartHint": "先试车：轿车能过，货车会压坏锈蚀的钢梁。选中旧构件可以“修复”，也可以拆除（最多 4 根）或新增支撑。",
+      "ReferenceHint": "思路：单靠一种手段不够。修复锈蚀最严重的桁架杆件，再从下方锚点加两根钢斜撑分担两端荷载。也可以只换掉部分重型桥面以减轻自重。",
+      "Budget": 9000,
+      "MaxDemolitions": 4, "DemolitionCostPerMeter": 60, "RepairCostRatio": 0.5,
+      "Terrain": { "RiverWidth": 20, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -5, "RiverBedDepth": -8, "BuildMinY": -5, "BuildMaxY": 12, "BuildMarginX": 10 },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 20, "Y": 0, "Z": 0 }, "MaxLoad": 500000, "SupportType": "Pinned", "IsRoadEnd": true },
+        { "Id": "L2", "Position": { "X": 0, "Y": -3, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" },
+        { "Id": "R2", "Position": { "X": 20, "Y": -3, "Z": 0 }, "MaxLoad": 400000, "SupportType": "Pinned" }
+      ],
+      "AllowedMaterials": [ "deck_frp", "road", "steel", "cable", "wood" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 6, "Type": "Vehicle", "VehicleId": "truck" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level11", "Name": "第十一关：软土与桩基", "Difficulty": "困难 · 地基与车队",
+      "Description": "40 m 宽的河，左侧河床是岩石、右侧是软土。一支车队（空载厢车、货车、满载重卡）要连续通过。用桥墩把长跨分成几段。",
+      "ReferenceHint": "思路：用桥墩工具在河床上立墩，点在桥面节点上可让墩顶直接顶住桥面。岩石上浅基础就够了；软土上的浅基础承载很低，要改成桩基础（选中墩底节点切换）。",
+      "Budget": 100000,
+      "Terrain": { "RiverWidth": 40, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -5, "RiverBedDepth": -8, "BuildMinY": -8, "BuildMaxY": 12, "BuildMarginX": 10,
+        "FoundationZones": [ { "X0": 0, "X1": 15, "Soil": "rock" }, { "X0": 15, "X1": 40, "Soil": "soft" } ] },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 800000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 40, "Y": 0, "Z": 0 }, "MaxLoad": 800000, "SupportType": "Pinned", "IsRoadEnd": true }
+      ],
+      "AllowedMaterials": [ "road", "deck_steel", "steel", "cable", "pier_wood", "pier_concrete" ],
+      "TrafficEvents": [ { "Time": 0, "Type": "Vehicle", "VehicleId": "van" }, { "Time": 1, "Type": "Vehicle", "VehicleId": "truck" },
+        { "Time": 2, "Type": "Vehicle", "VehicleId": "truck_heavy" }, { "Time": 3, "Type": "Vehicle", "VehicleId": "van" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    },
+    { "Id": "level12", "Name": "第十二关：洪水冲刷", "Difficulty": "困难 · 洪水与冲刷",
+      "Description": "测试开始后会来一场洪水：水位上涨，河中央的软土冲刷区会被掏空。洪水过后，重型货车要过河。",
+      "ReferenceHint": "思路：木桥墩会被洪水冲毁；冲刷区里的浅基础会被掏空。把混凝土桥墩建在两侧岩石区，或者在冲刷区用桩基础，也可以加大跨径不在冲刷区建墩。",
+      "Budget": 80000,
+      "Terrain": { "RiverWidth": 30, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -5, "RiverBedDepth": -8, "BuildMinY": -8, "BuildMaxY": 12, "BuildMarginX": 10,
+        "FoundationZones": [ { "X0": 0, "X1": 10, "Soil": "rock" }, { "X0": 10, "X1": 20, "Soil": "soft", "Scour": true }, { "X0": 20, "X1": 30, "Soil": "rock" } ] },
+      "Anchors": [
+        { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 800000, "SupportType": "Pinned", "IsRoadStart": true },
+        { "Id": "R1", "Position": { "X": 30, "Y": 0, "Z": 0 }, "MaxLoad": 800000, "SupportType": "Pinned", "IsRoadEnd": true }
+      ],
+      "AllowedMaterials": [ "road", "deck_steel", "steel", "cable", "pier_wood", "pier_concrete" ],
+      "TrafficEvents": [ { "Time": 2, "Type": "Environment", "Name": "洪水", "Height": 2.5, "Duration": 8 },
+        { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 13, "Type": "Vehicle", "VehicleId": "truck" } ],
+      "Objectives": { "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+    "Version":  1,
+    "NextNodeId":  8,
+    "Nodes":  [
+                  {
+                      "Position":  {
+                                       "Y":  0,
+                                       "Z":  0,
+                                       "X":  0
+                                   },
+                      "AnchorId":  "L1",
+                      "SupportType":  "Pinned",
+                      "Id":  1,
+                      "IsAnchor":  true
+                  },
+                  {
+                      "Position":  {
+                                       "Y":  0,
+                                       "Z":  0,
+                                       "X":  12
+                                   },
+                      "AnchorId":  "R1",
+                      "SupportType":  "Pinned",
+                      "Id":  2,
+                      "IsAnchor":  true
+                  },
+                  {
+                      "Position":  {
+                                       "Y":  -2,
+                                       "Z":  0,
+                                       "X":  0
+                                   },
+                      "AnchorId":  "L2",
+                      "SupportType":  "Pinned",
+                      "Id":  3,
+                      "IsAnchor":  true
+                  },
+                  {
+                      "Position":  {
+                                       "Y":  -2,
+                                       "Z":  0,
+                                       "X":  12
+                                   },
+                      "AnchorId":  "R2",
+                      "SupportType":  "Pinned",
+                      "Id":  4,
+                      "IsAnchor":  true
+                  },
+                  {
+                      "Position":  {
+                                       "Y":  0,
+                                       "Z":  0,
+                                       "X":  3
+                                   },
+                      "AnchorId":  null,
+                      "SupportType":  "None",
+                      "Id":  5,
+                      "IsAnchor":  false
+                  },
+                  {
+                      "Position":  {
+                                       "Y":  0,
+                                       "Z":  0,
+                                       "X":  6
+                                   },
+                      "AnchorId":  null,
+                      "SupportType":  "None",
+                      "Id":  6,
+                      "IsAnchor":  false
+                  },
+                  {
+                      "Position":  {
+                                       "Y":  0,
+                                       "Z":  0,
+                                       "X":  9
+                                   },
+                      "AnchorId":  null,
+                      "SupportType":  "None",
+                      "Id":  7,
+                      "IsAnchor":  false
+                  }
+              ],
+    "Members":  [
+                    {
+                        "Id":  1,
+                        "EndNodeId":  5,
+                        "MaterialId":  "deck_wood",
+                        "Cost":  390,
+                        "DamageState":  "Intact",
+                        "Length":  3,
+                        "StartNodeId":  1
+                    },
+                    {
+                        "Id":  2,
+                        "EndNodeId":  6,
+                        "MaterialId":  "deck_wood",
+                        "Cost":  390,
+                        "DamageState":  "Intact",
+                        "Length":  3,
+                        "StartNodeId":  5
+                    },
+                    {
+                        "Id":  3,
+                        "EndNodeId":  7,
+                        "MaterialId":  "deck_wood",
+                        "Cost":  390,
+                        "DamageState":  "Intact",
+                        "Length":  3,
+                        "StartNodeId":  6
+                    },
+                    {
+                        "Id":  4,
+                        "EndNodeId":  2,
+                        "MaterialId":  "deck_wood",
+                        "Cost":  390,
+                        "DamageState":  "Intact",
+                        "Length":  3,
+                        "StartNodeId":  7
+                    }
+                ],
+    "NextMemberId":  5,
+    "LevelId":  "level1",
+    "SavedTotalCost":  1560
+}
