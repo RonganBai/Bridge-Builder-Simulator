@@ -66,6 +66,16 @@ namespace BridgeArchitect3D.Building
             // 梁与立柱的材料颜色带边缘轮廓高光（Rim），钢索与桥面不加
             foreach (var m in db.Materials.Values)
                 if (!m.IsDeck && !m.IsCable) { var bm = _byMaterial[m.MaterialId]; bm.RimEnabled = true; bm.Rim = 0.8f; bm.RimTint = 0.2f; }
+            // Every material gets its own surface pattern (world triplanar, so long members are not stretched)
+            foreach (var m in db.Materials.Values)
+            {
+                if (m.Look == "layered") continue;
+                var tex = PatternTexture(m);
+                if (tex == null) continue;
+                var bm = _byMaterial[m.MaterialId];
+                bm.AlbedoTexture = tex; bm.AlbedoColor = Colors.White;
+                bm.Uv1Triplanar = true; bm.Uv1WorldTriplanar = true; bm.Uv1Scale = new Vector3(0.6f, 0.6f, 0.6f);
+            }
             // 胶合木：表面显示木材层纹（程序生成的条纹贴图，世界坐标三平面映射）
             foreach (var m in db.Materials.Values)
             {
@@ -76,6 +86,41 @@ namespace BridgeArchitect3D.Building
                 bm.Uv1Triplanar = true; bm.Uv1WorldTriplanar = true; bm.Uv1Scale = new Vector3(0.5f, 6f, 0.5f);
                 bm.Metallic = 0; bm.Roughness = 0.75f;
             }
+        }
+
+        /// <summary>
+        /// Procedural 32x32 pattern tinted with the material colour: wood grain, deck planks, steel plate,
+        /// chequer plate, concrete speckle (with rebar marks for reinforced concrete), asphalt, cable strands and
+        /// FRP weave. Deterministic (hash noise), visual only.
+        /// </summary>
+        private static ImageTexture PatternTexture(MaterialDefinition m)
+        {
+            const int N = 32;
+            var baseColor = ParseColor(m.Color);
+            var img = Image.CreateEmpty(N, N, false, Image.Format.Rgb8);
+            float Noise(int x, int y) { uint h = (uint)(x * 374761393 + y * 668265263); h = (h ^ (h >> 13)) * 1274126177u; return ((h ^ (h >> 16)) & 1023) / 1023f; }
+            string id = m.MaterialId;
+            for (int y = 0; y < N; y++)
+                for (int x = 0; x < N; x++)
+                {
+                    float k = 1;
+                    if (id is "wood" or "pier_wood") k = 0.86f + 0.14f * Mathf.Sin(y * 1.3f + Mathf.Sin(x * 0.35f) * 2.2f) + (Noise(x, y) - 0.5f) * 0.08f;
+                    else if (id == "deck_wood") k = (x % 8 == 0 ? 0.62f : 0.92f + 0.08f * Mathf.Sin(y * 0.9f + x)) + (Noise(x, y) - 0.5f) * 0.08f;
+                    else if (id == "deck_steel") k = ((x + y) % 8 < 2 && (x - y + 64) % 8 < 2) ? 1.25f : 0.92f + (Noise(x, y) - 0.5f) * 0.05f;
+                    else if (id is "steel" or "hydraulic") k = 0.95f + 0.08f * Mathf.Sin(x * 0.8f) + (Noise(x, y) - 0.5f) * 0.04f;
+                    else if (id == "cable" || id == "cable_composite") k = ((x + y) % 6 < 3) ? 1.12f : 0.82f;
+                    else if (id == "road") k = 0.85f + Noise(x, y) * 0.3f;
+                    else if (id == "deck_frp") k = ((x / 4 + y / 4) % 2 == 0) ? 1.06f : 0.9f;
+                    else if (id is "concrete" or "pier_concrete" or "rc_column" or "rc_beam" or "psc_i" or "psc_box")
+                    {
+                        k = 0.88f + Noise(x, y) * 0.2f - (Noise(x * 7, y * 3) > 0.94f ? 0.25f : 0);
+                        if (id is "rc_column" or "rc_beam" && x % 16 == 0) k -= 0.12f;   // faint rebar lines
+                    }
+                    else return null;
+                    img.SetPixel(x, y, new Color(Mathf.Clamp(baseColor.R * k, 0, 1), Mathf.Clamp(baseColor.G * k, 0, 1), Mathf.Clamp(baseColor.B * k, 0, 1)));
+                }
+            img.GenerateMipmaps();
+            return ImageTexture.CreateFromImage(img);
         }
 
         /// <summary>层板纹理：深浅相间的木色条纹。</summary>

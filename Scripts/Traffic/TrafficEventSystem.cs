@@ -22,6 +22,12 @@ namespace BridgeArchitect3D.Traffic
         public IReadOnlyList<TrafficEvent> Events => _events;
         public void Reset() => _next = 0;
 
+        /// <summary>The next event that has not fired yet (null when all fired), without consuming it.</summary>
+        public TrafficEvent PeekNext() => _next < _events.Count ? _events[_next] : null;
+
+        /// <summary>Fires the next event now, ahead of its scheduled time.</summary>
+        public TrafficEvent PopNext() => _next < _events.Count ? _events[_next++] : null;
+
         /// <summary>返回当前时间之前尚未触发的下一个事件（无则返回 null）。</summary>
         public TrafficEvent PopDue(double time)
         {

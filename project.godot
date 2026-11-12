@@ -13,6 +13,8 @@ config_version=5
 config/name="Bridge Architect 3D"
 config/description="3D å»ºæ¡¥ç‰©ç†æ¨¡æ‹Ÿæ¸¸æˆï¼ˆåˆç‰ˆï¼‰"
 run/main_scene="res://Scenes/MainMenu.tscn"
+config/icon="res://icon.png"
+config/windows_native_icon="res://icon.ico"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 [autoload]

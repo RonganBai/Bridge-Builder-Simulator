@@ -18,6 +18,12 @@ namespace BridgeArchitect3D.CameraControl
         private Vector3 _homeTarget;
         private float _homeDist = 30;
         private bool _ortho;
+        private float _rightDrag;
+        private const float RotateThreshold = 12f;   // 右键拖动超过多少像素才开始旋转
+
+        /// <summary>侧视 / 俯视（正交）时使用的固定米色背景，保证建造网格清晰可见。</summary>
+        public static readonly Color SideBackground = new("efe6d2");
+        private Godot.Environment _orthoEnv;
 
         /// <summary>设置默认观察中心与距离（关卡加载时调用）。</summary>
         public void Setup(Vector3 center, float distance)
@@ -39,6 +45,15 @@ namespace BridgeArchitect3D.CameraControl
             _ortho = true; _targetGoal = _homeTarget; _yawGoal = 0; _pitchGoal = 0; _distGoal = _homeDist;
             if (snap) { _target = _targetGoal; _yaw = 0; _pitch = 0; _dist = _distGoal; }
         }
+        /// <summary>Frame affected geometry in the usable center area, without changing the home view.</summary>
+        public void FrameDiagnostic(Vector3 center,Vector3 extent)
+        {
+            _ortho=true; _targetGoal=center; _yawGoal=0; _pitchGoal=0;
+            var viewport=GetViewport().GetVisibleRect().Size;
+            float aspect=Mathf.Max(0.4f,(viewport.X-480)/Mathf.Max(1,viewport.Y));
+            _distGoal=Mathf.Clamp(Mathf.Max(extent.Y+4,(extent.X+4)/aspect)*1.35f/0.85f,8,150);
+        }
+
         public void TopView() { _ortho = true; _targetGoal = _homeTarget; _yawGoal = 0; _pitchGoal = -1.5533f; _distGoal = _homeDist; }
         public void PerspectiveView() { _ortho = false; _yawGoal = 0.6f; _pitchGoal = -0.45f; _distGoal = _homeDist * 0.9f; }
 
@@ -48,6 +63,9 @@ namespace BridgeArchitect3D.CameraControl
             {
                 if ((mm.ButtonMask & MouseButtonMask.Right) != 0)
                 {
+                    // 右键单击（例如取消连接）时鼠标的轻微抖动不应把侧视切成 3D：拖动超过阈值才开始旋转
+                    _rightDrag += mm.Relative.Length();
+                    if (_rightDrag < RotateThreshold) return;
                     _yawGoal -= mm.Relative.X * 0.005f * Sensitivity;
                     _pitchGoal = Mathf.Clamp(_pitchGoal - mm.Relative.Y * 0.005f * Sensitivity, -1.55f, 0.6f);
                     _ortho = false;   // 旋转时回到透视，避免正交视图下方向迷失
@@ -58,6 +76,10 @@ namespace BridgeArchitect3D.CameraControl
                     float k = _dist * 0.0018f;
                     _targetGoal += (-b.X * mm.Relative.X + b.Y * mm.Relative.Y) * k;
                 }
+            }
+            else if (e is InputEventMouseButton rmb && rmb.ButtonIndex == MouseButton.Right)
+            {
+                _rightDrag = 0;   // 每次按下 / 松开右键都重新计算拖动距离
             }
             else if (e is InputEventMouseButton mb && mb.Pressed)
             {
@@ -85,9 +107,20 @@ namespace BridgeArchitect3D.CameraControl
             _target = _target.Lerp(_targetGoal, a);
 
             Projection = _ortho ? ProjectionType.Orthogonal : ProjectionType.Perspective;
+            // 正交视图用相机自己的环境（纯米色背景、无天空渐变），透视视图回到场景的天空
+            if (_ortho && _orthoEnv == null)
+                _orthoEnv = new Godot.Environment
+                {
+                    BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = SideBackground,
+                    AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color(1, 1, 1), AmbientLightEnergy = 0.8f,
+                };
+            Environment = _ortho ? _orthoEnv : null;
             Size = _dist * 0.85f;
             var dir = new Vector3(Mathf.Sin(_yaw) * Mathf.Cos(_pitch), -Mathf.Sin(_pitch), Mathf.Cos(_yaw) * Mathf.Cos(_pitch));
-            var pos = _target + dir * _dist;
+            // Orthographic zoom comes from Size, so the camera can stand back outside the scenery: placed closer
+            // than the scene depth it sits inside the bank soil blocks and their faces get culled (banks vanish)
+            float back = _ortho ? Mathf.Max(_dist, (float)BridgeArchitect3D.Data.SceneryLayout.HalfDepth + 40f) : _dist;
+            var pos = _target + dir * back;
             // 俯视时 up 向量改为 -Z，避免 LookAt 与竖直方向平行
             var up = Mathf.Abs(_pitch) > 1.45f ? Vector3.Forward : Vector3.Up;
             LookAtFromPosition(pos, _target, up);

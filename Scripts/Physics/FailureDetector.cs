@@ -35,7 +35,7 @@ namespace BridgeArchitect3D.Physics
                 if (f >= 0)
                 {
                     s.Mode = MemberMode.Tension;
-                    double cap = mat.TensionCapacity;
+                    double cap = mat.TensionCapacity * CrossBeams.TensionFactor(mat, m.Length[k]);
                     s.Utilization = cap > 0 ? f / cap : 99;
                     s.Governing = FailureReason.TensionFailure;
                 }
@@ -46,7 +46,7 @@ namespace BridgeArchitect3D.Physics
                     s.Utilization = cap > 0 ? -f / cap : 99;
                     s.Governing = FailureReason.CompressionFailure;
                 }
-                if (!m.Pinned[k] && mat.BendingCapacity > 0)
+                if ((!m.Pinned[k] || mat.IsDeck) && mat.BendingCapacity > 0)
                 {
                     // 刚接构件：轴力与弯矩线性叠加的相互作用校核 N/Nu + M/Mu ≤ 1
                     s.Moment = LoadCalculator.MemberMaxMoment(m, k, axles, axleCount, o.MomentA[k], o.MomentB[k]);
@@ -110,6 +110,8 @@ namespace BridgeArchitect3D.Physics
             FailureReason.VehicleBlocked => "车辆无法继续行驶",
             FailureReason.ProgressiveCollapse => "结构发生连续失效",
             FailureReason.OverBudget => "建造成本超出预算",
+            FailureReason.Derailed => "列车脱轨（铁轨上下晃动太大）",
+            FailureReason.WrongSurface => "车辆驶上了不能通行的路面",
             _ => "无",
         };
 
@@ -126,6 +128,8 @@ namespace BridgeArchitect3D.Physics
             FailureReason.DeckDeflectionExceeded => new[] { "提高结构刚度：加高桁架、改用钢材", "增加支撑以减小跨度" },
             FailureReason.StructureUnstable => new[] { "每个节点至少需要两根不共线的构件支撑", "用三角形单元组成桁架，避免四边形机构", "桥面节点需要桁架或钢索支撑，不能只靠桥面串联" },
             FailureReason.VehicleBlocked => new[] { "保证车辆经过的桥面完整且坡度不过大" },
+            FailureReason.Derailed => new[] { "铁路桥要很刚：加高桁架、缩短桥面支点间距，减小列车经过时的下沉和起伏", "用更刚的桥面（钢铁轨桥面）或在桥面下加支柱 / 桥墩" },
+            FailureReason.WrongSurface => new[] { "火车只能走铁轨桥面或铁轨公路复合桥面", "汽车只能走公路桥面或铁轨公路复合桥面；两种都要过时用复合桥面" },
             FailureReason.ProgressiveCollapse => new[] { "增加冗余构件，避免单根构件破坏引起连锁失效" },
             FailureReason.OverBudget => new[] { "删除不必要的构件，或换用便宜材料" },
             _ => Array.Empty<string>(),

@@ -22,7 +22,10 @@ namespace BridgeArchitect3D.Physics
         public string[] AnchorIds;
         public readonly Dictionary<int, int> NodeIndex = new();
 
+        public readonly List<(int node,int a,int b,double fraction,int[] members)> RigidSplits = new();
+        public readonly HashSet<int> SplitJoints = new();
         public int MemberCount;
+        public readonly List<(int[] nodes,int pivot,int[] members)> RigidBodies = new();
         public int[] MemberIds;
         public int[] A, B;
         public double[] Length, Cos, Sin, EA, EI, Mass;
@@ -31,10 +34,19 @@ namespace BridgeArchitect3D.Physics
         public MaterialDefinition[] Mat;
         public bool[] Broken;
         public bool[] Slack;      // 钢索松弛（不参与刚度）
+        /// <summary>Moment release (hinge) at end A / end B of a rigid member, e.g. a bascule leaf at its pivot.</summary>
+        public bool[] ReleaseA, ReleaseB;
+        /// <summary>Locked joint: node i shares the translations of node Alias[i] (-1 = none).</summary>
+        public int[] Alias;
+        /// <summary>The alias also shares the rotation (rigid seam: the deck stays continuous while locked).</summary>
+        public bool[] AliasRot;
+        /// <summary>Node positions as designed (mechanism motion changes X / Y during a test).</summary>
+        public double[] X0, Y0;
         public readonly Dictionary<int, int> MemberIndex = new();
 
         public static StructuralModel Build(BridgeDesign design, LevelDefinition level, GameDatabase db)
         {
+            design=HydraulicDeckJoints.Expand(design,db);
             var m = new StructuralModel();
             int n = design.Nodes.Count;
             m.NodeCount = n;
@@ -75,6 +87,10 @@ namespace BridgeArchitect3D.Physics
             m.Condition = new double[c];
             m.Existing = new bool[c];
             m.Mat = new MaterialDefinition[c]; m.Broken = new bool[c]; m.Slack = new bool[c];
+            m.ReleaseA = new bool[c]; m.ReleaseB = new bool[c];
+            m.Alias = new int[n]; m.AliasRot = new bool[n];
+            for (int i = 0; i < n; i++) m.Alias[i] = -1;
+            m.X0 = (double[])m.X.Clone(); m.Y0 = (double[])m.Y.Clone();
             for (int k = 0; k < c; k++)
             {
                 var mem = list[k];
@@ -93,8 +109,24 @@ namespace BridgeArchitect3D.Physics
                 m.Condition[k] = Math.Clamp(mem.Condition, 0.05, 1);
                 m.Existing[k] = mem.Existing;
                 m.MemberIndex[mem.Id] = k;
+                if(design.Nodes[a].IsSplitJoint){m.SplitJoints.Add(a);m.ReleaseA[k]=true;}
+                if(design.Nodes[b].IsSplitJoint){m.SplitJoints.Add(b);m.ReleaseB[k]=true;}
             }
 
+            foreach(var node in design.Nodes)
+                if(node.IsRigidSplit && m.NodeIndex.TryGetValue(node.RigidEndA,out int ra) && m.NodeIndex.TryGetValue(node.RigidEndB,out int rb))
+                {
+                    int ri=m.NodeIndex[node.Id];double dx=m.X[rb]-m.X[ra],dy=m.Y[rb]-m.Y[ra];
+                    double t=((m.X[ri]-m.X[ra])*dx+(m.Y[ri]-m.Y[ra])*dy)/(dx*dx+dy*dy);
+                    var spanNodes=new HashSet<int>{ra,rb};
+                    foreach(var part in design.Nodes)
+                        if(part.IsRigidSplit && part.RigidEndA==node.RigidEndA && part.RigidEndB==node.RigidEndB)spanNodes.Add(m.NodeIndex[part.Id]);
+                    var edges=new List<int>();for(int k=0;k<m.MemberCount;k++)
+                        if(!m.Broken[k] && spanNodes.Contains(m.A[k]) && spanNodes.Contains(m.B[k]) && !m.Mat[k].Extendable)edges.Add(k);
+                    var reached=new HashSet<int>{ra};bool changed;
+                    do{changed=false;foreach(int k in edges){if(reached.Contains(m.A[k]) && reached.Add(m.B[k]))changed=true;if(reached.Contains(m.B[k]) && reached.Add(m.A[k]))changed=true;}}while(changed);
+                    if(reached.Contains(rb) && reached.Contains(ri))m.RigidSplits.Add((ri,ra,rb,t,edges.ToArray()));
+                }
             // 立柱：倾角过大则倒塌；否则基础端成为支座（混凝土柱落地端固接，钢筋混凝土柱的锚点端改为刚接）
             m.FixRot = new bool[n];
             m.IsFoundation = new bool[n];
@@ -132,7 +164,36 @@ namespace BridgeArchitect3D.Physics
                 }
                 else if (mat.BaseRule != BaseRule.None) m.FixRot[bi] = true;
             }
+            // All lockable seams begin closed, including static previews that do not run a controller.
+            foreach(var joint in design.Mechanisms?.Locks ?? new List<DeckLockData>())
+                if(m.NodeIndex.TryGetValue(joint.NodeA,out int a) && m.NodeIndex.TryGetValue(joint.NodeB,out int b) &&
+                   Math.Abs(m.X[a]-m.X[b])<=BasculeSystem.AlignTolerance && Math.Abs(m.Y[a]-m.Y[b])<=BasculeSystem.AlignTolerance)
+                {m.Alias[b]=a;m.AliasRot[b]=true;}
             return m;
+        }
+
+        /// <summary>
+        /// Splits node i into two coincident end points: the given members move to the new node. Used for deck
+        /// seams that a movable bridge releases. The new node's id is -NodeIds[i]. Returns the new index.
+        /// </summary>
+        public int SplitNode(int i, IEnumerable<int> memberIndices)
+        {
+            int j = NodeCount++;
+            T[] Grow<T>(T[] a, T v) { var r = new T[NodeCount]; Array.Copy(a, r, a.Length); r[j] = v; return r; }
+            NodeIds = Grow(NodeIds, -NodeIds[i]);
+            X = Grow(X, X[i]); Y = Grow(Y, Y[i]); X0 = Grow(X0, X0[i]); Y0 = Grow(Y0, Y0[i]);
+            FixX = Grow(FixX, false); FixY = Grow(FixY, false); IsAnchor = Grow(IsAnchor, false);
+            AnchorMaxLoad = Grow(AnchorMaxLoad, 0.0); AnchorIds = Grow(AnchorIds, (string)null);
+            Alias = Grow(Alias, -1); AliasRot = Grow(AliasRot, false);
+            FixRot = Grow(FixRot, false); IsFoundation = Grow(IsFoundation, false);
+            PierFoundation = Grow(PierFoundation, FoundationType.None); ScourZone = Grow(ScourZone, false);
+            NodeIndex[-NodeIds[i]] = j;
+            foreach (int k in memberIndices)
+            {
+                if (A[k] == i) A[k] = j;
+                if (B[k] == i) B[k] = j;
+            }
+            return j;
         }
 
         /// <summary>构件强制伸缩量 m（液压杆收缩为负）。轴力 N = EA/L·(伸长 − Prestrain)。</summary>
@@ -159,5 +220,16 @@ namespace BridgeArchitect3D.Physics
         public readonly List<int> TiltCollapsed = new();
 
         public bool IsActive(int k) => !Broken[k] && !Slack[k];
+
+        /// <summary>Recomputes length / direction / self-weight of member k from the current node positions.</summary>
+        public void UpdateMemberGeometry(int k)
+        {
+            double dx = X[B[k]] - X[A[k]], dy = Y[B[k]] - Y[A[k]];
+            double len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-9) return;
+            Cos[k] = dx / len; Sin[k] = dy / len;
+            Length[k] = len;
+            Mass[k] = Mat[k].MassPerMeter * len;
+        }
     }
 }

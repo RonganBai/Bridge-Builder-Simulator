@@ -15,13 +15,25 @@ namespace BridgeArchitect3D.Physics
         public double FrontS;          // 车头轴在路径上的弧长 m
         public bool Finished;
         public bool Fallen;
+        /// <summary>Train left the rails (derailment animation, then the test fails).</summary>
+        public bool Derailed;
+        /// <summary>Rail drop under each axle at the previous step (NaN = axle not on the bridge).</summary>
+        public double[] RailPrev;
         /// <summary>所在道路层与行驶路径。</summary>
         public int Lane;
         public RoadPath Path;
         /// <summary>在断口处被卡住的累计时间 s。</summary>
         public double StuckTime;
         public double FinishTime;
+        /// <summary>正在液压活动段前停车等候（液压装置动作期间，不算卡住）。</summary>
+        public bool WaitingForBridge;
         public double RearOffset => Def.Axles.Count == 0 ? 0 : Def.Axles.Min(a => a.Offset);
+        /// <summary>Train offsets use the locomotive nose; other vehicles use the leading axle.</summary>
+        public double FrontOverhang => Def.Kind == "train" ? 0.2 : Math.Max(0, (Def.Length + RearOffset) / 2);
+        public double RearOverhang => Def.Kind == "train" ? Math.Max(0, Def.Length + RearOffset) : FrontOverhang;
+        /// <summary>Arc length of the front / rear bumper.</summary>
+        public double BodyFrontS => FrontS + FrontOverhang;
+        public double BodyRearS => FrontS + RearOffset - RearOverhang;
     }
 
     /// <summary>船只状态：沿河道（Z 方向）匀速穿过桥位。</summary>
@@ -36,6 +48,10 @@ namespace BridgeArchitect3D.Physics
         public double WindowStart => Ev.Time + (-BridgeHalfDepth - Ev.Length / 2 - StartZ) / Ev.Speed;
         public double WindowEnd => Ev.Time + (BridgeHalfDepth + Ev.Length / 2 - StartZ) / Ev.Speed;
         public bool InBridgeZone => Spawned && !Done && Math.Abs(Z) - Ev.Length / 2 < BridgeHalfDepth;
+        /// <summary>The whole hull has left the bridge (a movable bridge may close).</summary>
+        public bool PastBridge => Z - Ev.Length / 2 > BridgeHalfDepth;
+        /// <summary>Holding in front of a movable bridge that is not open yet.</summary>
+        public bool Waiting;
     }
 
     /// <summary>结构事件（断裂等），用于界面提示。</summary>
@@ -53,6 +69,8 @@ namespace BridgeArchitect3D.Physics
         public double Time;
         public double[] Displacement;
         public double[] Kinematic;
+        /// <summary>Movable-bridge status line at this frame (the geometry itself is in Displacement / Kinematic).</summary>
+        public string BridgeState;
         public double[] ShipZ;
         public bool[] Broken;
         public float[] Utilization;
@@ -61,6 +79,7 @@ namespace BridgeArchitect3D.Physics
         public void CopyFrom(SimFrame o)
         {
             Time = o.Time;
+            BridgeState = o.BridgeState;
             Array.Copy(o.Displacement, Displacement, Displacement.Length);
             Array.Copy(o.Kinematic, Kinematic, Kinematic.Length);
             Array.Copy(o.ShipZ, ShipZ, ShipZ.Length);
@@ -108,6 +127,27 @@ namespace BridgeArchitect3D.Physics
         /// <summary>仅由液压杆伸缩引起的节点位移（显示时不放大）。</summary>
         public double[] KinematicDisplacement { get; private set; } = Array.Empty<double>();
         public const double HydraulicRampTime = 4.0;   // 液压杆收缩 / 恢复用时 s
+        /// <summary>
+        /// Movable-bridge mechanism (bascule leaves, deck locks). When it is active the legacy automatic
+        /// hydraulic retraction is disabled: leaves move as rigid bodies, never by straining members.
+        /// </summary>
+        public BasculeSystem Bascule { get; } = new();
+        /// <summary>Displacement shown on screen = mechanism motion (exact) + elastic displacement.</summary>
+        public double[] DisplayDisplacement { get; private set; } = Array.Empty<double>();
+        /// <summary>Mechanisms use true-scale elasticity as well as true-scale kinematics, including replays.</summary>
+        public void ComposeDisplayFrame(double[] total, double[] kinematic, double requestedScale, double[] destination)
+        {
+            double scale = Bascule.Active ? 1 : Math.Clamp(requestedScale, 1, 100);
+            for (int i = 0; i < total.Length; i++)
+            {
+                double motion = kinematic != null && i < kinematic.Length ? kinematic[i] : 0;
+                destination[i] = motion + (total[i] - motion) * scale;
+            }
+        }
+        private double[] _mechKin = Array.Empty<double>();
+        private double[] _prestrainKin = Array.Empty<double>();
+        /// <summary>Distance a ship keeps from the bridge while waiting for it to open, m.</summary>
+        public const double ShipHoldMargin = 4.0;
 
         private readonly SolveOutput _kinOut = new();
         private double[] _kinLoads = Array.Empty<double>();
@@ -127,6 +167,53 @@ namespace BridgeArchitect3D.Physics
         public event Action<StructureEvent> MemberCracked;
         private readonly HashSet<int> _cracked = new();
         private readonly List<TrafficEvent> _waitingSpawn = new();
+
+        private double[] _stroke;
+
+        /// <summary>Per-member hydraulic stroke: the player's slider value, else the material default retraction.</summary>
+        private readonly List<(int member, double x, double y)> _crossBeams = new();
+
+        /// <summary>Cross beams (members >= 5 m) as solid obstacles at their midpoints.</summary>
+        private void FillCrossBeams()
+        {
+            _crossBeams.Clear();
+            for (int k = 0; k < Model.MemberCount; k++)
+            {
+                double xa = Model.X[Model.A[k]], ya = Model.Y[Model.A[k]], xb = Model.X[Model.B[k]], yb = Model.Y[Model.B[k]];
+                foreach (double t in CrossBeams.Fractions(Model.Mat[k], Model.Length[k], ya, yb))
+                    _crossBeams.Add((Model.MemberIds[k], xa + (xb - xa) * t, ya + (yb - ya) * t));
+            }
+        }
+
+        /// <summary>Did the vehicle body move into a cross beam that is lower than its roof?</summary>
+        private bool HitsCrossBeam(VehicleState v, double frontBefore, double frontAfter, out int member, out double clear)
+        {
+            member = -1; clear = 0;
+            if (_crossBeams.Count == 0 || frontAfter <= frontBefore) return false;
+            v.Path.Evaluate(frontBefore + v.FrontOverhang, null, 1, out double x0, out _);
+            v.Path.Evaluate(frontAfter + v.FrontOverhang, null, 1, out double x1, out double y1);
+            double lo = System.Math.Min(x0, x1), hi = System.Math.Max(x0, x1);
+            foreach (var c in _crossBeams)
+            {
+                if (c.x < lo - 1e-9 || c.x > hi + 1e-9) continue;
+                double h = c.y - y1;
+                if (h > 0.05 && h < v.Def.Height) { member = c.member; clear = h; return true; }
+            }
+            return false;
+        }
+
+        private void FillStrokes()
+        {
+            _stroke = new double[Model.MemberCount];
+            for (int k = 0; k < Model.MemberCount; k++)
+            {
+                var mat = Model.Mat[k];
+                if (!mat.Extendable) continue;
+                var mem = Design.FindMember(Model.MemberIds[k]);
+                double s = mem?.Stroke ?? -mat.RetractRatio;
+                _stroke[k] = Math.Clamp(s, -LinkageDriverData.MaxStroke, LinkageDriverData.MaxStroke);
+            }
+        }
 
         public BridgeSimulation(BridgeDesign design, LevelDefinition level, GameDatabase db, IStructuralSolver solver = null)
         {
@@ -156,13 +243,18 @@ namespace BridgeArchitect3D.Physics
                 double f = t < FloodRampTime ? t / FloodRampTime : t < FloodRampTime + e.Duration ? 1 : 1 - (t - FloodRampTime - e.Duration) / FloodRampTime;
                 FloodRise = Math.Max(FloodRise, e.Height * f);
                 double floodY = Level.Terrain.WaterLevel + e.Height;
-                // 洪水到来：怕水的木桥墩被冲毁
-                if (_floodHit.Add(e))
+                // Flood-vulnerable (wooden) piers are washed away once the rising water reaches them: when it covers
+                // the member, or at the flood peak for members that stand higher than the peak
+                double waterNow = Level.Terrain.WaterLevel + e.Height * f;
+                if (t <= FloodRampTime + e.Duration && !_floodHit.Contains(e))
                 {
+                    if (t >= FloodRampTime) _floodHit.Add(e);
                     for (int k = 0; k < Model.MemberCount; k++)
                     {
                         if (Model.Broken[k] || !Model.Mat[k].FloodVulnerable) continue;
-                        if (Math.Min(Model.Y[Model.A[k]], Model.Y[Model.B[k]]) > floodY) continue;
+                        double lo = Math.Min(Model.Y[Model.A[k]], Model.Y[Model.B[k]]), hi = Math.Max(Model.Y[Model.A[k]], Model.Y[Model.B[k]]);
+                        if (lo > floodY) continue;
+                        if (waterNow < Math.Min(hi, floodY) - 1e-9) continue;
                         string text = $"构件 #{Model.MemberIds[k]}（{Model.Mat[k].Name}）被洪水冲毁";
                         if (_pendingBreakText == null && _issueReason == FailureReason.None) { _pendingBreakText = text; _pendingBreakMode = FailureReason.FloodScour; _pendingBreakId = Model.MemberIds[k]; }
                         RemoveMember(k, FailureReason.FloodScour, text, countsAsBreak: false);
@@ -183,23 +275,11 @@ namespace BridgeArchitect3D.Physics
                 }
             }
         }
-
-        /// <summary>液压杆收缩程度随时间的变化：船进入桥位前 4 秒开始收缩，船完全离开后 4 秒内恢复。</summary>
-        private double ComputeHydraulicFactor(double t)
-        {
-            double f = 0;
-            foreach (var s in Ships)
-            {
-                double ws = s.WindowStart, we = s.WindowEnd, v;
-                if (t < ws - HydraulicRampTime || t > we + HydraulicRampTime) v = 0;
-                else if (t < ws) v = 1 - (ws - t) / HydraulicRampTime;
-                else if (t <= we) v = 1;
-                else v = 1 - (t - we) / HydraulicRampTime;
-                f = Math.Max(f, v);
-            }
-            return f;
-        }
-
+        /// <summary>
+        /// Legacy automatic retraction was removed: hydraulics only move through a valid movable-bridge mechanism,
+        /// which enforces stroke and force limits. Kept so the HUD / old callers read 0.
+        /// </summary>
+        private double ComputeHydraulicFactor(double t) => 0;
         public int TotalVehicles => _totalVehicles;
         public int FinishedVehicles => Vehicles.Count(v => v.Finished);
         public double Progress => _totalVehicles == 0 ? 1 : (FinishedVehicles + Vehicles.Where(v => !v.Finished).Sum(VehicleProgress)) / _totalVehicles;
@@ -207,7 +287,7 @@ namespace BridgeArchitect3D.Physics
         private double VehicleProgress(VehicleState v)
         {
             if (v.Path == null) return 0;
-            return Math.Clamp((v.FrontS + v.RearOffset) / (v.Path.DeckEndS + 8), 0, 1);
+            return Math.Clamp(v.BodyRearS / (v.Path.DeckEndS + 8), 0, 1);
         }
 
         /// <summary>初始化：预算、道路连续性、结构模型以及仅自重作用下的静力校核。</summary>
@@ -218,10 +298,17 @@ namespace BridgeArchitect3D.Physics
             Result.Budget = Level.Budget;
             Result.TotalCost = Design.TotalCost();
             Model = StructuralModel.Build(Design, Level, Db);
+            // Movable bridge: plan leaves / seams and split the released seams (node count may grow)
+            Bascule.Prepare(Model, Design, Db, Level);
+            FillStrokes();
+            FillCrossBeams();
             Status = new MemberStatus[Model.MemberCount];
             _loads = new double[Model.NodeCount * 2];
             _kinLoads = new double[Model.NodeCount * 2];
             KinematicDisplacement = new double[Model.NodeCount * 2];
+            DisplayDisplacement = new double[Model.NodeCount * 2];
+            _mechKin = new double[Model.NodeCount * 2];
+            _prestrainKin = new double[Model.NodeCount * 2];
             Output.EnsureSize(Model.NodeCount, Model.MemberCount);
             Result.TotalShips = Ships.Count;
 
@@ -252,10 +339,31 @@ namespace BridgeArchitect3D.Physics
                 RemoveMember(k, FailureReason.StructureUnstable, text, countsAsBreak: false);
             }
 
+            // Movable bridge: leaves, pivots and deck locks come from the saved mechanism data.
+            Bascule.Initialize(Paths);
+            if (Bascule.Errors.Count > 0)
+                Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = "开启桥设置有误，桥保持闭合：" + string.Join("；", Bascule.Errors) });
+            Bascule.ApplyGeometry(_mechKin);
+            if (Bascule.Active)
+            {
+                // Static check: with the seams released the structure must still stand (leaves on pivot + actuators).
+                Bascule.TrialRelease(true);
+                Array.Clear(_loads, 0, _loads.Length);
+                LoadCalculator.Compute(Model, _axles, 0, _loads);
+                _solver.Solve(Model, _loads, Output);
+                bool stable = Output.Stable;
+                Bascule.TrialRelease(false);
+                if (!stable)
+                {
+                    Bascule.Disable($"解除接缝后结构不稳定（节点 #{Math.Abs(Output.UnstableNodeId)} 附近缺少约束），开启桥不会动作。请让每片桥叶只通过一个转轴节点连着岸上结构，并用液压杆从固定结构拉住桥叶");
+                    Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = "开启桥设置有误，桥保持闭合：" + Bascule.Fault });
+                }
+            }
+            if (Ships.Count > 0 && !Bascule.Active && Bascule.Linkage == null && Bascule.Plan.Hint() is { } hint)
+                Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = "提示：" + hint });
             SolveAndCheck();   // t=0：仅自重（不稳定的部分会在这里垮塌）
             RecordFrame(true);
         }
-
         /// <summary>首个致命问题（用于失败分析）。测试不会因记录问题而立即结束。</summary>
         private FailureReason _issueReason = FailureReason.None;
         private string _issueText;
@@ -313,15 +421,20 @@ namespace BridgeArchitect3D.Physics
             // 1. 交通事件：生成车辆（车尾位于左岸引道上）
             TrafficEvent ev;
             while ((ev = _traffic.PopDue(Time)) != null) _waitingSpawn.Add(ev);
+            // Nothing on the road and no ship pending: start the next vehicle now instead of idling until its
+            // scheduled time (e.g. the truck after the freight train), so the test never appears to hang
+            if (_waitingSpawn.Count == 0 && _traffic.PeekNext() != null && Vehicles.All(v => v.Finished || v.Fallen) && Ships.All(s => s.Done))
+                _waitingSpawn.Add(_traffic.PopNext());
             // 起点被同层前车占用时，后车排队等待，避免车辆重叠
             for (int w = 0; w < _waitingSpawn.Count; w++)
             {
                 var e = _waitingSpawn[w];
                 var def = Db.Vehicles[e.VehicleId];
                 var vs = new VehicleState { Def = def, Lane = e.Lane, Path = PathFor(e.Lane) };
-                vs.FrontS = -vs.RearOffset + 1.0;
+                // Keep existing short-vehicle staging; a long train enters nose-first from the left approach.
+                vs.FrontS = def.Kind is "train" or "semi" ? 1.0 - vs.FrontOverhang : -vs.RearOffset + 1.0;
                 var last = Vehicles.LastOrDefault(v => v.Lane == e.Lane && !v.Finished && !v.Fallen);
-                if (last != null && last.FrontS + last.RearOffset - def.FollowGap - 1.0 < vs.FrontS) break;   // 保持出发顺序
+                if (last != null && last.BodyRearS - def.FollowGap < vs.BodyFrontS) break;
                 Vehicles.Add(vs);
                 _waitingSpawn.RemoveAt(w); w--;
             }
@@ -331,7 +444,10 @@ namespace BridgeArchitect3D.Physics
             {
                 if (s.Done) continue;
                 if (!s.Spawned) { if (Time >= s.Ev.Time) s.Spawned = true; else continue; }
-                s.Z += s.Ev.Speed * FixedDt;
+                double nz = s.Z + s.Ev.Speed * FixedDt;
+                // A movable bridge must be fully open before the ship's bow reaches the bridge.
+                s.Waiting = false;
+                s.Z = nz;
                 if (s.Z > ShipState.EndZ) { s.Done = true; Result.ShipsPassed++; }
             }
 
@@ -340,10 +456,18 @@ namespace BridgeArchitect3D.Physics
 
             // 1c. 液压杆按船只时间表自动收缩 / 恢复
             HydraulicFactor = ComputeHydraulicFactor(Time);
+            // 1d. Movable bridge: open while a ship needs the channel, only once no vehicle body is on the leaves
+            if (Bascule.Active)
+            {
+                bool wantOpen = Ships.Any(s => !s.Done && !s.PastBridge && Time + Bascule.RequiredOpeningTime + TrafficClearanceTime() + 1 >= s.WindowStart);
+                Bascule.Update(FixedDt, wantOpen, SpanClear());
+                Bascule.ApplyGeometry(_mechKin);
+            }
             for (int k = 0; k < Model.MemberCount; k++)
             {
                 var mat = Model.Mat[k];
-                Model.Prestrain[k] = mat.Extendable && mat.RetractRatio > 0 ? -mat.RetractRatio * Model.Length[k] * HydraulicFactor : 0;
+                double stroke = _stroke != null && k < _stroke.Length ? _stroke[k] : -mat.RetractRatio;
+                Model.Prestrain[k] = mat.Extendable ? stroke * Model.Length[k] * HydraulicFactor : 0;
             }
 
             // 2. 车辆前进（同一层道路上的后车与前车保持跟车距离，形成车队）
@@ -360,13 +484,43 @@ namespace BridgeArchitect3D.Physics
                     if (up > lim + RoadPath.SlopeTolerance) speed *= Math.Clamp(1 - 0.65 * (up - lim) / lim, 0.35, 1);
                 }
                 double next = v.FrontS + speed * FixedDt;
+                // 液压装置动作期间：还没驶入活动段的车辆在活动段前停车等候，动作结束后继续通行
+                // Movable bridge in operation: vehicles whose body has not reached the movable span stop
+                // in front of it (front overhang included). Waiting is not a failure.
+                v.WaitingForBridge = false;
+                var zone = Bascule.ZoneOn(Path);
+                if (zone.HasValue && Bascule.TrafficStopped)
+                {
+                    double stop = zone.Value.s0 - BasculeSystem.StopMargin - v.FrontOverhang;
+                    if (v.FrontS <= stop + 1e-9 && next > stop) { next = Math.Max(v.FrontS, stop); v.WaitingForBridge = true; }
+                }
                 for (int j = vi - 1; j >= 0; j--)
                 {
                     var ahead = Vehicles[j];
                     if (ahead.Finished || ahead.Fallen || ahead.Lane != v.Lane) continue;
-                    double limit = ahead.FrontS + ahead.RearOffset - v.Def.FollowGap - 1.0;
+                    double limit = ahead.BodyRearS - v.Def.FollowGap - v.FrontOverhang;
                     if (next > limit) next = Math.Max(v.FrontS, limit);
                     break;
+                }
+                {
+                    // Trains only on rails, road vehicles only on road surface
+                    int segAt = Path.Locate(next, out _);
+                    int dk = segAt >= 0 && segAt < Path.SegmentMember.Count ? Path.SegmentMember[segAt] : -1;
+                    if (dk >= 0 && !RailTrack.Allows(Model.Mat[dk], v.Def))
+                    {
+                        _failVehicle = v;
+                        string why = RailTrack.IsTrain(v.Def)
+                            ? $"{v.Def.Name}只能在铁轨上行驶：桥面 #{Model.MemberIds[dk]}（{Model.Mat[dk].Name}）没有铁轨，请改用铁轨桥面或铁轨公路复合桥面"
+                            : $"{v.Def.Name}只能在公路路面上行驶：桥面 #{Model.MemberIds[dk]}（{Model.Mat[dk].Name}）是铁路专用，请改用公路桥面或铁轨公路复合桥面";
+                        Fail(FailureReason.WrongSurface, why, new List<int> { Model.MemberIds[dk] });
+                        return;
+                    }
+                }
+                if (HitsCrossBeam(v, v.FrontS, next, out int beam, out double beamClear))
+                {
+                    _failVehicle = v;
+                    Fail(FailureReason.VehicleBlocked, $"{v.Def.Name}（高 {v.Def.Height:0.0} m）撞上构件 #{beam} 的横梁：横梁离路面只有 {beamClear:0.0} m（普通构件 ≥ {CrossBeams.MinLength:0} m 在中点加横梁，柱每 {CrossBeams.ColumnSpacing:0} m 加一根横杆），请缩短这根构件或把它移出车辆通行高度", new List<int> { beam });
+                    return;
                 }
                 v.FrontS = next;
                 if (!Path.Complete && v.FrontS > Path.TotalLength)
@@ -382,7 +536,7 @@ namespace BridgeArchitect3D.Physics
                         return;
                     }
                 }
-                if (Path.Complete && v.FrontS + v.RearOffset > Path.DeckEndS + 8)
+                if (Path.Complete && v.BodyRearS > Path.DeckEndS + 8)
                 {
                     v.Finished = true; v.FinishTime = Time;
                 }
@@ -390,6 +544,10 @@ namespace BridgeArchitect3D.Physics
 
             // 3. 求解 + 失效检测
             SolveAndCheck();
+            if (State != SimState.Running) return;
+
+            // 3a. Rail sway: a train derails when the track drops or bounces too much under its wheels
+            CheckRailSway();
             if (State != SimState.Running) return;
 
             // 3b. 船只净空检查
@@ -402,13 +560,14 @@ namespace BridgeArchitect3D.Physics
 
             // 5. 完成判定
             if (_totalVehicles > 0 && Vehicles.Count == _totalVehicles && Vehicles.All(v => v.Finished)
-                && Ships.All(s => s.Done) && HydraulicFactor <= 0)
+                && Ships.All(s => s.Done) && HydraulicFactor <= 0 && Bascule.ClosedAndLocked)
             {
                 // 车辆都通过了，但期间出现过致命结构问题（如桥面下沉超限）时仍判定失败
                 if (HasFatalIssue) Fail(_issueReason, _issueText + "\n车辆虽已通过，但结构出现了致命问题", _issueMembers);
                 else Succeed();
             }
-            else if (Time > MaxTestTime) Fail(FailureReason.VehicleBlocked, "测试超时，车辆未能到达出口", null);
+            else if (Time > MaxTestTime) Fail(FailureReason.VehicleBlocked, "测试超时，车辆或船只未能通过" +
+                (Bascule.Fault == null ? "" : "\n开启桥：" + Bascule.Fault), null);
         }
 
         /// <summary>收集所有车轴荷载。若车轴位于路径的桥面段，则把荷载交给对应构件。</summary>
@@ -447,14 +606,17 @@ namespace BridgeArchitect3D.Physics
             for (int iter = 0; iter < guard; iter++)
             {
                 // 仅液压杆伸缩引起的位移（用于显示时与弹性变形区分，避免被视觉放大）
+                // (legacy hydraulic retraction without a mechanism: displacement caused by the forced strain only)
                 if (Model.HasPrestrain)
                 {
                     Array.Clear(_kinLoads, 0, _kinLoads.Length);
                     LoadCalculator.AddPrestrainLoads(Model, _kinLoads);
                     _solver.Solve(Model, _kinLoads, _kinOut);
-                    if (_kinOut.Stable) Array.Copy(_kinOut.Displacement, KinematicDisplacement, KinematicDisplacement.Length);
+                    if (_kinOut.Stable) Array.Copy(_kinOut.Displacement, _prestrainKin, _prestrainKin.Length);
                 }
-                else Array.Clear(KinematicDisplacement, 0, KinematicDisplacement.Length);
+                else Array.Clear(_prestrainKin, 0, _prestrainKin.Length);
+                // Exact mechanism motion is never scaled on screen, and neither is the legacy forced strain
+                for (int q = 0; q < KinematicDisplacement.Length; q++) KinematicDisplacement[q] = _mechKin[q] + _prestrainKin[q];
 
                 LoadCalculator.Compute(Model, _axles, _axleCount, _loads);
                 LoadCalculator.AddPrestrainLoads(Model, _loads);
@@ -467,6 +629,11 @@ namespace BridgeArchitect3D.Physics
                     if (State != SimState.Running) return;
                     continue;
                 }
+                // 液压动作期间：桥面连接处受力超过连接强度时先分离（变铰或分开），再做强度校核
+                for (int q = 0; q < DisplayDisplacement.Length; q++) DisplayDisplacement[q] = _mechKin[q] + Output.Displacement[q];
+                // Actuator over its force limit: the leaf stalls (this step's motion is undone) instead of
+                // the actuator dragging the structure with unlimited force
+                if (Bascule.CheckActuators(Output, FixedDt)) { Bascule.ApplyGeometry(_mechKin); continue; }
                 FailureDetector.EvaluateMembers(Model, Output, _axles, _axleCount, Status);
                 int worst = FailureDetector.WorstMember(Model, Status, out double util);
                 if (worst >= 0 && util > 1.0)
@@ -505,7 +672,8 @@ namespace BridgeArchitect3D.Physics
                 double sag = 0; int sagNode = -1;
                 foreach (int i in Paths.SelectMany(p => p.RoadNodeIndices).Distinct())
                 {
-                    double s = -(Output.Displacement[2 * i + 1] - KinematicDisplacement[2 * i + 1]);
+                    if (!Bascule.ClosedAndLocked && Bascule.IsLeafNode(i)) continue;   // a raised leaf is not deck sag
+                    double s = -(Output.Displacement[2 * i + 1] - _prestrainKin[2 * i + 1]);
                     if (s > sag) { sag = s; sagNode = i; }
                 }
                 if (sag > Level.Objectives.MaxDeckDeflection)
@@ -517,11 +685,70 @@ namespace BridgeArchitect3D.Physics
         }
 
         /// <summary>船只在桥位时，检查航道净空：任何完好构件进入船体包络（航道宽 × 水面以上船高）即撞船。</summary>
+        /// <summary>No vehicle body overlaps the movable span on any road.</summary>
+        private double TrafficClearanceTime()
+        {
+            double seconds=0;
+            foreach(var v in Vehicles.Where(v=>!v.Finished && !v.Fallen))
+            {
+                var zone=Bascule.ZoneOn(v.Path);
+                if(zone.HasValue && v.BodyFrontS>=zone.Value.s0 && v.BodyRearS<=zone.Value.s1)
+                    seconds=Math.Max(seconds,(zone.Value.s1-v.BodyRearS)/Math.Max(0.1,v.Def.Speed*0.35));
+            }
+            return seconds;
+        }
+
+        private bool SpanClear()
+        {
+            foreach (var v in Vehicles)
+            {
+                if (v.Finished || v.Fallen || v.Path == null) continue;
+                var z = Bascule.ZoneOn(v.Path);
+                if (z.HasValue && v.BodyFrontS > z.Value.s0 - 0.05 && v.BodyRearS < z.Value.s1 + 0.05) return false;
+            }
+            return true;
+        }
+
+        /// <summary>Largest elastic rail drop (m) and wheel vertical speed (m/s) seen under any train so far.</summary>
+        public double MaxRailSag { get; private set; }
+        public double MaxRailBounce { get; private set; }
+
+        private void CheckRailSway()
+        {
+            if (!Output.Stable || !Bascule.ClosedAndLocked) return;
+            foreach (var v in Vehicles)
+            {
+                if (!RailTrack.IsTrain(v.Def) || v.Finished || v.Fallen || v.Path == null) continue;
+                var axles = v.Def.Axles;
+                if (v.RailPrev == null || v.RailPrev.Length != axles.Count) { v.RailPrev = new double[axles.Count]; Array.Fill(v.RailPrev, double.NaN); }
+                for (int i = 0; i < axles.Count; i++)
+                {
+                    double s = v.FrontS + axles[i].Offset;
+                    int seg = s >= 0 && s <= v.Path.TotalLength ? v.Path.Locate(s, out _) : -1;
+                    if (seg < 0 || v.Path.SegmentMember[seg] < 0) { v.RailPrev[i] = double.NaN; continue; }
+                    v.Path.Evaluate(s, Output.Displacement, 1, out _, out double yd);
+                    v.Path.Evaluate(s, _prestrainKin, 1, out _, out double y0);
+                    double sag = y0 - yd;
+                    double bounce = double.IsNaN(v.RailPrev[i]) ? 0 : Math.Abs(sag - v.RailPrev[i]) / FixedDt;
+                    v.RailPrev[i] = sag;
+                    MaxRailSag = Math.Max(MaxRailSag, sag); MaxRailBounce = Math.Max(MaxRailBounce, bounce);
+                    if (sag <= RailTrack.MaxSag && bounce <= RailTrack.MaxBounce) continue;
+                    v.Derailed = true; _failVehicle = v;
+                    int id = Model.MemberIds[v.Path.SegmentMember[seg]];
+                    string what = sag > RailTrack.MaxSag
+                        ? $"车轮下的铁轨下沉 {sag:0.00} m（上限 {RailTrack.MaxSag:0.00} m）"
+                        : $"车轮上下晃动速度 {bounce:0.00} m/s（上限 {RailTrack.MaxBounce:0.00} m/s）";
+                    Fail(FailureReason.Derailed, $"{v.Def.Name}在桥面 #{id} 上脱轨：{what}，铁路桥需要更刚、起伏更小", new List<int> { id });
+                    return;
+                }
+            }
+        }
+
         private void CheckShipClearance()
         {
             foreach (var s in Ships)
             {
-                if (!s.InBridgeZone) continue;
+                if (!s.Spawned || s.Done) continue;
                 double x0 = s.Ev.LaneX - s.Ev.Width / 2, x1 = s.Ev.LaneX + s.Ev.Width / 2;
                 double y0 = Level.Terrain.WaterLevel, y1 = Level.Terrain.WaterLevel + s.Ev.Height;
                 var u = Output.Displacement;
@@ -531,9 +758,15 @@ namespace BridgeArchitect3D.Physics
                     int a = Model.A[k], b = Model.B[k];
                     double ax = Model.X[a] + u[2 * a], ay = Model.Y[a] + u[2 * a + 1];
                     double bx = Model.X[b] + u[2 * b], by = Model.Y[b] + u[2 * b + 1];
-                    if (SegmentHitsRect(ax, ay, bx, by, x0, y0, x1, y1))
+                    // The member is a band of its visual thickness, not a line
+                    var mat = Model.Mat[k];
+                    double offset = mat.IsDeck ? 0.2 - mat.VisualThickness / 2 : 0;
+                    bool Hit(double z, double depth) => ShipGeometry.Intersects(s.Ev, Level.Terrain.WaterLevel, s.Z, ax, ay + offset, bx, by + offset, z, mat.VisualThickness, depth);
+                    if (mat.IsDeck ? Hit(0, mat.DeckWidth) : Hit(-2.2, mat.VisualThickness) || Hit(2.2, mat.VisualThickness))
                     {
-                        RecordIssue(FailureReason.ShipCollision, $"{s.Ev.Name}（高 {s.Ev.Height:0.#} m）撞上构件 #{Model.MemberIds[k]}（{Model.Mat[k].Name}）", new[] { Model.MemberIds[k] });
+                        string why = Bascule.Fault != null || Bascule.ConfigNote != null ? "\n开启桥：" + string.Join("；", new[] { Bascule.Fault, Bascule.ConfigNote }.Where(x => x != null))
+                            : !Bascule.Active && Model.Mat[k].IsDeck ? "\n提示：桥面净空不足，需要开启桥。" + (Bascule.Plan.Hint() ?? "让每片桥叶只通过一个转轴节点连着岸上结构，液压杆一端接桥叶、一端接固定结构") : "";
+                        RecordIssue(FailureReason.ShipCollision, $"{s.Ev.Name}（高 {s.Ev.Height:0.#} m）撞上构件 #{Model.MemberIds[k]}（{Model.Mat[k].Name}）{why}", new[] { Model.MemberIds[k] });
                         Fail(_issueReason, _issueText, _issueMembers);
                         return;
                     }
@@ -688,6 +921,10 @@ namespace BridgeArchitect3D.Physics
                     r.Headline = $"{where}的结构缺少支撑而垮塌"; r.TopSuggestion = "给这里的节点再连一根不同方向的构件，组成三角形"; break;
                 case FailureReason.RoadNotConnected:
                     r.Headline = $"{who}开到桥面尽头过不去了"; r.TopSuggestion = "把桥面一直铺到右岸的“终点”锚点，中间不要留断口"; break;
+                case FailureReason.Derailed:
+                    r.Headline = $"{who}在{where}脱轨了"; r.TopSuggestion = "铁路桥要更刚：加高桁架、加密桥面下的支点，减小列车经过时铁轨的下沉与起伏"; break;
+                case FailureReason.WrongSurface:
+                    r.Headline = $"{who}驶上了不能通行的路面"; r.TopSuggestion = "火车走铁轨桥面，汽车走公路桥面；两种都要过就用铁轨公路复合桥面"; break;
                 case FailureReason.VehicleBlocked:
                     r.Headline = $"{who}无法继续行驶"; r.TopSuggestion = "检查桥面是否连续、坡度是否过大"; break;
                 case FailureReason.ShipCollision:
@@ -708,11 +945,31 @@ namespace BridgeArchitect3D.Physics
             }
         }
 
+        /// <summary>
+        /// Finish time if every vehicle drove its whole path at its own speed from its event time and every ship
+        /// sailed straight through: the lower bound used by the time score.
+        /// </summary>
+        private double IdealFinishTime()
+        {
+            double t = 0;
+            foreach (var e in Level.TrafficEvents)
+            {
+                if (e.Type == TrafficEventType.Vehicle && Db.Vehicles.TryGetValue(e.VehicleId, out var def) && def.Speed > 0)
+                {
+                    var path = PathFor(e.Lane);
+                    if (path != null) t = Math.Max(t, e.Time + (path.DeckEndS + 8 + def.Length) / def.Speed);
+                }
+                else if (e.Type == TrafficEventType.Ship && e.Speed > 0) t = Math.Max(t, e.Time + (ShipState.EndZ - ShipState.StartZ) / e.Speed);
+            }
+            return t;
+        }
+
         private void Succeed()
         {
             State = SimState.Succeeded;
             Result.IsSuccess = true;
             Result.CompletionTime = Time;
+            Result.ReferenceTime = IdealFinishTime();
             FillVehicleResults();
             double total = 0, intact = 0;
             for (int k = 0; k < Model.MemberCount; k++)
@@ -725,7 +982,7 @@ namespace BridgeArchitect3D.Physics
             ComputeScore(Result);
         }
 
-        public const double BudgetWeight = 7, IntegrityWeight = 2, StressWeight = 1;  // 权重 7 : 2 : 1
+        public const double BudgetWeight = 6, TimeWeight = 2, IntegrityWeight = 1, StressWeight = 1;  // budget : time : integrity : stress = 6 : 2 : 1 : 1
         public const double MaxSafetyMargin = 1.5;   // 安全冗余加分上限 150%
 
         /// <summary>
@@ -742,9 +999,12 @@ namespace BridgeArchitect3D.Physics
             r.SafetyMargin = util > 1e-9 ? Math.Min(1 / util - 1, MaxSafetyMargin) : MaxSafetyMargin;
             r.StressUsesMargin = r.SafetyMargin > util;
             r.BudgetScore = (int)Math.Round(1000 * BudgetWeight * r.Budget / Math.Max(r.TotalCost, 1));
+            // Time: ideal / actual finish time (waiting at a closed bridge, slow climbs or queues cost points)
+            double tr = r.ReferenceTime > 0 && r.CompletionTime > 0 ? Math.Min(1, r.ReferenceTime / r.CompletionTime) : 1;
+            r.TimeScore = (int)Math.Round(1000 * TimeWeight * tr);
             r.IntegrityScore = (int)Math.Round(1000 * IntegrityWeight * r.DeckIntegrity);
             r.StressScore = (int)Math.Round(1000 * StressWeight * Math.Max(util, r.SafetyMargin));
-            r.Score = r.BudgetScore + r.IntegrityScore + r.StressScore;
+            r.Score = r.BudgetScore + r.TimeScore + r.IntegrityScore + r.StressScore;
         }
 
         private void FillVehicleResults()
@@ -766,7 +1026,8 @@ namespace BridgeArchitect3D.Physics
         private void WriteFrame(SimFrame f)
         {
             f.Time = Time;
-            Array.Copy(Output.Displacement, f.Displacement, Math.Min(Output.Displacement.Length, f.Displacement.Length));
+            Array.Copy(DisplayDisplacement, f.Displacement, Math.Min(DisplayDisplacement.Length, f.Displacement.Length));
+            f.BridgeState = Bascule.StatusText;
             Array.Copy(KinematicDisplacement, f.Kinematic, Math.Min(KinematicDisplacement.Length, f.Kinematic.Length));
             for (int i = 0; i < Ships.Count && i < f.ShipZ.Length; i++) f.ShipZ[i] = Ships[i].Spawned && !Ships[i].Done ? Ships[i].Z : double.NaN;
             for (int k = 0; k < Model.MemberCount; k++) { f.Broken[k] = Model.Broken[k]; f.Utilization[k] = (float)Status[k].Utilization; }
@@ -777,9 +1038,16 @@ namespace BridgeArchitect3D.Physics
             }
         }
 
+        // Whole-test timeline (0.1 s frames) for scrubbing with the progress bar
+        private const int TimelineCap = 18000;
+        private readonly List<SimFrame> _timeline = new();
+        public int TimelineCount => _timeline.Count;
+        public SimFrame GetTimelineFrame(int i) => _timeline[i];
+
         private void RecordFrame(bool reset)
         {
-            if (reset) { _historyHead = 0; _historyCount = 0; }
+            if (reset) { _historyHead = 0; _historyCount = 0; _timeline.Clear(); }
+            if (_timeline.Count < TimelineCap) { var t = NewFrame(); WriteFrame(t); _timeline.Add(t); }
             WriteFrame(_history[_historyHead]);
             _historyHead = (_historyHead + 1) % HistoryFrames;
             _historyCount = Math.Min(_historyCount + 1, HistoryFrames);
@@ -798,7 +1066,13 @@ namespace BridgeArchitect3D.Physics
         public static BridgeSimulation StaticAnalysis(BridgeDesign design, LevelDefinition level, GameDatabase db)
         {
             var sim = new BridgeSimulation(design, level, db);
+            if ((design.Mechanisms?.Linkage?.Drivers.Count ?? 0)>0)
+            {
+                sim.Initialize();
+                return sim;
+            }
             sim.Model = StructuralModel.Build(sim.Design, level, db);
+            sim.FillStrokes();
             sim.Status = new MemberStatus[sim.Model.MemberCount];
             sim._loads = new double[sim.Model.NodeCount * 2];
             sim._axleCount = 0;

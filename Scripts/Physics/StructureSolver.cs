@@ -72,6 +72,27 @@ namespace BridgeArchitect3D.Physics
                 {  k2,  k4, -k2,  k3 },
             };
             for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) _kl[r[i] * 6 + r[j]] = b[i, j];
+            // Moment release (hinge) at one end: statically condense that rotation out of the element.
+            bool relA = m.ReleaseA != null && m.ReleaseA[k], relB = m.ReleaseB != null && m.ReleaseB[k];
+            if (relA && relB) { for (int i = 0; i < 36; i++) if (i != 0 && i != 3 && i != 18 && i != 21) _kl[i] = 0; return; }
+            if (relA) Condense(2);
+            else if (relB) Condense(5);
+        }
+
+        private void Condense(int rd)
+        {
+            double krr = _kl[rd * 6 + rd];
+            if (Math.Abs(krr) < 1e-30) return;
+            for (int i = 0; i < 6; i++)
+            {
+                if (i == rd) continue;
+                for (int j = 0; j < 6; j++)
+                {
+                    if (j == rd) continue;
+                    _kl[i * 6 + j] -= _kl[i * 6 + rd] * _kl[rd * 6 + j] / krr;
+                }
+            }
+            for (int i = 0; i < 6; i++) { _kl[i * 6 + rd] = 0; _kl[rd * 6 + i] = 0; }
         }
 
         /// <summary>k_global = Tᵀ k_local T。</summary>
@@ -116,18 +137,44 @@ namespace BridgeArchitect3D.Physics
             {
                 if (!m.IsActive(k)) continue;
                 _degree[m.A[k]]++; _degree[m.B[k]]++;
-                if (!m.Pinned[k]) { _hasRigid[m.A[k]] = true; _hasRigid[m.B[k]] = true; }
+                if (!m.Pinned[k])
+                {
+                    if (m.ReleaseA == null || !m.ReleaseA[k]) _hasRigid[m.A[k]] = true;
+                    if (m.ReleaseB == null || !m.ReleaseB[k]) _hasRigid[m.B[k]] = true;
+                }
             }
+            // Locked joints: an aliased node shares the translations of its master node (pin joint).
+            bool hasAlias = m.Alias != null;
+            if (hasAlias)
+                for (int i = 0; i < n; i++)
+                {
+                    int j = m.Alias[i];
+                    if (j < 0) continue;
+                    int sum = _degree[i] + _degree[j];
+                    _degree[i] = sum; _degree[j] = sum;
+                    // Rigid seam: both end points share one rotation
+                    if (m.AliasRot != null && m.AliasRot[i]) { bool r = _hasRigid[i] || _hasRigid[j]; _hasRigid[i] = r; _hasRigid[j] = r; }
+                }
 
             // 自由度编号：被约束 / 孤立的平动自由度、无刚接构件节点的转角自由度不参与求解
             int nf = 0;
             for (int i = 0; i < n; i++)
             {
                 bool iso = _degree[i] == 0;
-                _dofMap[3 * i] = (m.FixX[i] || iso) ? -1 : nf++;
-                _dofMap[3 * i + 1] = (m.FixY[i] || iso) ? -1 : nf++;
-                _dofMap[3 * i + 2] = (!_hasRigid[i] || iso || (m.FixRot != null && m.FixRot[i])) ? -1 : nf++;
+                bool alias = hasAlias && m.Alias[i] >= 0;
+                _dofMap[3 * i] = (alias || m.FixX[i] || iso) ? -1 : nf++;
+                _dofMap[3 * i + 1] = (alias || m.FixY[i] || iso) ? -1 : nf++;
+                _dofMap[3 * i + 2] = (!_hasRigid[i] || iso || (alias && m.AliasRot != null && m.AliasRot[i]) || (m.FixRot != null && m.FixRot[i])) ? -1 : nf++;
             }
+            if (hasAlias)
+                for (int i = 0; i < n; i++)
+                {
+                    int j = m.Alias[i];
+                    if (j < 0) continue;
+                    _dofMap[3 * i] = _dofMap[3 * j];
+                    _dofMap[3 * i + 1] = _dofMap[3 * j + 1];
+                    if (m.AliasRot != null && m.AliasRot[i]) _dofMap[3 * i + 2] = _dofMap[3 * j + 2];
+                }
             Array.Clear(o.Displacement, 0, o.Displacement.Length);
             Array.Clear(o.Rotation, 0, o.Rotation.Length);
             o.Stable = true; o.Message = ""; o.UnstableNodeId = -1;
@@ -139,8 +186,8 @@ namespace BridgeArchitect3D.Physics
             Array.Clear(_f, 0, nf);
             for (int i = 0; i < n; i++)
             {
-                if (_dofMap[3 * i] >= 0) _f[_dofMap[3 * i]] = loads[2 * i];
-                if (_dofMap[3 * i + 1] >= 0) _f[_dofMap[3 * i + 1]] = loads[2 * i + 1];
+                if (_dofMap[3 * i] >= 0) _f[_dofMap[3 * i]] += loads[2 * i];
+                if (_dofMap[3 * i + 1] >= 0) _f[_dofMap[3 * i + 1]] += loads[2 * i + 1];
             }
 
             for (int k = 0; k < m.MemberCount; k++)
@@ -196,13 +243,16 @@ namespace BridgeArchitect3D.Physics
                 for (int c = p + 1; c < nf; c++) sum -= _k[p * nf + c] * _f[c];
                 _f[p] = sum / _k[p * nf + p];
             }
+            // Mechanism motion (bascule leaves) is applied to the geometry before solving, so only elastic
+            // displacements appear here and the plain divergence limit applies.
+            double limit = MaxDisplacement;
             for (int i = 0; i < n; i++)
             {
                 for (int d = 0; d < 3; d++)
                 {
                     int g = _dofMap[3 * i + d];
                     double v = g >= 0 ? _f[g] : 0;
-                    if (double.IsNaN(v) || double.IsInfinity(v) || (d < 2 && Math.Abs(v) > MaxDisplacement))
+                    if (double.IsNaN(v) || double.IsInfinity(v) || (d < 2 && Math.Abs(v) > limit))
                     {
                         o.Stable = false; o.UnstableNodeId = m.NodeIds[i];
                         o.Message = $"节点 #{o.UnstableNodeId} 位移发散，结构失稳";
@@ -220,7 +270,7 @@ namespace BridgeArchitect3D.Physics
         }
 
         /// <summary>计算构件轴力、端弯矩与支座反力（R = Σ单元端力 − P）。</summary>
-        private static void ComputeForces(StructuralModel m, double[] loads, SolveOutput o)
+        private void ComputeForces(StructuralModel m, double[] loads, SolveOutput o)
         {
             if (!o.Stable) return;
             var u = o.Displacement; var th = o.Rotation;
@@ -237,10 +287,13 @@ namespace BridgeArchitect3D.Physics
                 double v = 0, m1 = 0, m2 = 0;
                 if (!m.Pinned[k])
                 {
-                    double ei = m.EI[k], t1 = th[a], t2 = th[b];
-                    v = 12 * ei / (L * L * L) * (v1 - v2) + 6 * ei / (L * L) * (t1 + t2);
-                    m1 = 6 * ei / (L * L) * (v1 - v2) + ei / L * (4 * t1 + 2 * t2);
-                    m2 = 6 * ei / (L * L) * (v1 - v2) + ei / L * (2 * t1 + 4 * t2);
+                    // End forces from the (possibly condensed) local stiffness: released rotations carry no moment.
+                    LocalStiffness(m, k);
+                    double t1 = th[a], t2 = th[b];
+                    double[] d = { u1, v1, t1, u2, v2, t2 };
+                    double f1 = 0, f2 = 0, f5 = 0;
+                    for (int j = 0; j < 6; j++) { f1 += _kl[1 * 6 + j] * d[j]; f2 += _kl[2 * 6 + j] * d[j]; f5 += _kl[5 * 6 + j] * d[j]; }
+                    v = f1; m1 = f2; m2 = f5;
                 }
                 // 反力用 k·u 计算（loads 中已含强制伸缩等效力），构件轴力需扣除强制伸缩
                 o.AxialForce[k] = n - m.EA[k] / L * m.Prestrain[k];

@@ -1,0 +1,416 @@
+{
+  "Version": 1,
+  "LevelId": "level7",
+  "Nodes": [
+    {
+      "Id": 1,
+      "Position": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "L1",
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 2,
+      "Position": {
+        "X": 24,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "R1",
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 3,
+      "Position": {
+        "X": 0,
+        "Y": -3,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "L2",
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 4,
+      "Position": {
+        "X": 24,
+        "Y": -3,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "R2",
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 5,
+      "Position": {
+        "X": 5,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 7,
+      "Position": {
+        "X": 19,
+        "Y": -0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 9,
+      "Position": {
+        "X": 3,
+        "Y": 3,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 10,
+      "Position": {
+        "X": 21,
+        "Y": 3,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 12,
+      "Position": {
+        "X": 9,
+        "Y": -0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 13,
+      "Position": {
+        "X": 12,
+        "Y": -0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 14,
+      "Position": {
+        "X": 15,
+        "Y": -0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 15,
+      "Position": {
+        "X": 7,
+        "Y": 2,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 16,
+      "Position": {
+        "X": 17,
+        "Y": 2,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    }
+  ],
+  "Members": [
+    {
+      "Id": 1,
+      "StartNodeId": 1,
+      "EndNodeId": 5,
+      "MaterialId": "road",
+      "Length": 5,
+      "Cost": 1200,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 3,
+      "StartNodeId": 2,
+      "EndNodeId": 7,
+      "MaterialId": "road",
+      "Length": 5,
+      "Cost": 1200,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 6,
+      "StartNodeId": 3,
+      "EndNodeId": 5,
+      "MaterialId": "psc_i",
+      "Length": 5.830951894845301,
+      "Cost": 2448.9997958350264,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 7,
+      "StartNodeId": 4,
+      "EndNodeId": 7,
+      "MaterialId": "psc_i",
+      "Length": 5.830951894845301,
+      "Cost": 2448.9997958350264,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 8,
+      "StartNodeId": 1,
+      "EndNodeId": 9,
+      "MaterialId": "steel",
+      "Length": 4.242640687119285,
+      "Cost": 1272.7922061357854,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 9,
+      "StartNodeId": 9,
+      "EndNodeId": 5,
+      "MaterialId": "steel",
+      "Length": 3.605551275463989,
+      "Cost": 1081.6653826391967,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 10,
+      "StartNodeId": 7,
+      "EndNodeId": 10,
+      "MaterialId": "steel",
+      "Length": 3.605551275463989,
+      "Cost": 1081.6653826391967,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 11,
+      "StartNodeId": 10,
+      "EndNodeId": 2,
+      "MaterialId": "steel",
+      "Length": 4.242640687119285,
+      "Cost": 1272.7922061357854,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 15,
+      "StartNodeId": 5,
+      "EndNodeId": 12,
+      "MaterialId": "road",
+      "Length": 4,
+      "Cost": 960,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 16,
+      "StartNodeId": 12,
+      "EndNodeId": 13,
+      "MaterialId": "road",
+      "Length": 3,
+      "Cost": 720,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 17,
+      "StartNodeId": 13,
+      "EndNodeId": 14,
+      "MaterialId": "road",
+      "Length": 3,
+      "Cost": 720,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 18,
+      "StartNodeId": 14,
+      "EndNodeId": 7,
+      "MaterialId": "road",
+      "Length": 4,
+      "Cost": 960,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 19,
+      "StartNodeId": 5,
+      "EndNodeId": 15,
+      "MaterialId": "steel",
+      "Length": 2.8284271247461903,
+      "Cost": 848.5281374238571,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 20,
+      "StartNodeId": 15,
+      "EndNodeId": 12,
+      "MaterialId": "steel",
+      "Length": 2.8284271247461903,
+      "Cost": 848.5281374238571,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 21,
+      "StartNodeId": 14,
+      "EndNodeId": 16,
+      "MaterialId": "steel",
+      "Length": 2.8284271247461903,
+      "Cost": 848.5281374238571,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 22,
+      "StartNodeId": 16,
+      "EndNodeId": 7,
+      "MaterialId": "steel",
+      "Length": 2.8284271247461903,
+      "Cost": 848.5281374238571,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 23,
+      "StartNodeId": 9,
+      "EndNodeId": 15,
+      "MaterialId": "hydraulic",
+      "Length": 4.123105625617661,
+      "Cost": 2061.5528128088304,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 24,
+      "StartNodeId": 15,
+      "EndNodeId": 13,
+      "MaterialId": "hydraulic",
+      "Length": 5.385164807134504,
+      "Cost": 2692.5824035672517,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 25,
+      "StartNodeId": 16,
+      "EndNodeId": 13,
+      "MaterialId": "hydraulic",
+      "Length": 5.385164807134504,
+      "Cost": 2692.5824035672517,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 26,
+      "StartNodeId": 10,
+      "EndNodeId": 16,
+      "MaterialId": "hydraulic",
+      "Length": 4.123105625617661,
+      "Cost": 2061.5528128088304,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    }
+  ],
+  "NextNodeId": 17,
+  "NextMemberId": 27,
+  "SavedTotalCost": 28269.29775166761,
+  "DemolishedCount": 0,
+  "DemolitionCost": 0,
+  "RepairCost": 0
+}

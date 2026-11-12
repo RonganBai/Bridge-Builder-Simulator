@@ -80,19 +80,31 @@ namespace BridgeArchitect3D.Traffic
             {
                 if (Math.Abs(cx - m.X[end]) <= GapTolerance && Math.Abs(cy - m.Y[end]) <= StepTolerance) { complete = true; break; }
 
-                // 找出车轮当前位置下方（或缝隙范围内）能衔接、且向前延伸最远的桥面构件
-                int best = -1; double bestHi = cx + 0.05;
+                // Follow explicit segment endpoints before a longer overlapping member can skip their joint.
+                int best = -1; double bestHi = cx + 0.05;bool bestValid=false,bestStartsHere=false;
                 for (int k = 0; k < m.MemberCount; k++)
                 {
                     if (m.Broken[k] || !m.Mat[k].IsDeck) continue;
                     int lo = m.X[m.A[k]] <= m.X[m.B[k]] ? m.A[k] : m.B[k];
                     int hi = lo == m.A[k] ? m.B[k] : m.A[k];
                     double xl = m.X[lo], xh = m.X[hi];
-                    if (xh - xl < 0.05 || xl > cx + GapTolerance || xh <= bestHi) continue;
+                    if (xh - xl < 0.05 || xl > cx + GapTolerance || xh <= cx+0.05) continue;
                     double xe = Math.Clamp(cx, xl, xh);
                     double ye = m.Y[lo] + (m.Y[hi] - m.Y[lo]) * (xe - xl) / (xh - xl);
                     if (Math.Abs(ye - cy) > StepTolerance) continue;
-                    best = k; bestHi = xh;
+                    double grade=Math.Abs((m.Y[hi]-m.Y[lo])/(xh-xl));
+                    bool valid=m.Length[k]<=m.Mat[k].MaximumLength+1e-6 && grade<=level.Objectives.MaxDeckSlope*MaxSlopeFactor+SlopeTolerance;
+                    bool startsHere=Math.Abs(xl-cx)<1e-6;
+                    if(best>=0)
+                    {
+                        if(bestValid && !valid)continue;
+                        if(bestValid==valid)
+                        {
+                            if(bestStartsHere && !startsHere)continue;
+                            if(bestStartsHere==startsHere && (startsHere?xh>=bestHi:xh<=bestHi))continue;
+                        }
+                    }
+                    best = k; bestHi = xh;bestValid=valid;bestStartsHere=startsHere;
                 }
                 if (best < 0) break;
 
@@ -190,6 +202,9 @@ namespace BridgeArchitect3D.Traffic
         /// </summary>
         public void Evaluate(double s, double[] displacement, double displacementScale, out double x, out double y)
         {
+            // Long trains extend beyond the stored approach; never pile their cars onto its first point.
+            if (s < 0) { x = PointX[0] + s; y = PointY[0]; return; }
+            if (Complete && s > TotalLength) { x = PointX[^1] + s - TotalLength; y = PointY[^1]; return; }
             int seg = Locate(s, out double t);
             PointAt(seg, displacement, displacementScale, out double x0, out double y0);
             PointAt(seg + 1, displacement, displacementScale, out double x1, out double y1);

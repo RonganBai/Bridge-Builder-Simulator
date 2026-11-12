@@ -1,0 +1,569 @@
+{
+  "Version": 3,
+  "LevelId": "level7",
+  "Nodes": [
+    {
+      "Id": 1,
+      "Position": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "L1",
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 2,
+      "Position": {
+        "X": 24,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "R1",
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 3,
+      "Position": {
+        "X": 0,
+        "Y": -3,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "L2",
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 4,
+      "Position": {
+        "X": 24,
+        "Y": -3,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "R2",
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 58,
+      "Position": {
+        "X": 6,
+        "Y": -0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 59,
+      "Position": {
+        "X": 12,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 61,
+      "Position": {
+        "X": -0,
+        "Y": 5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 62,
+      "Position": {
+        "X": 24,
+        "Y": 5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 76,
+      "Position": {
+        "X": 7.5,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 77,
+      "Position": {
+        "X": 16.5,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 78,
+      "Position": {
+        "X": 9,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": true,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 79,
+      "Position": {
+        "X": 1.5,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 80,
+      "Position": {
+        "X": 22.5,
+        "Y": 2.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 81,
+      "Position": {
+        "X": 3,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": true,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 82,
+      "Position": {
+        "X": 21,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": true,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 83,
+      "Position": {
+        "X": 15,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": true,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    }
+  ],
+  "Members": [
+    {
+      "Id": 174,
+      "StartNodeId": 1,
+      "EndNodeId": 61,
+      "MaterialId": "rc_beam",
+      "Length": 5,
+      "Cost": 1300,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 175,
+      "StartNodeId": 2,
+      "EndNodeId": 62,
+      "MaterialId": "rc_beam",
+      "Length": 5,
+      "Cost": 1300,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 202,
+      "StartNodeId": 58,
+      "EndNodeId": 76,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 208,
+      "StartNodeId": 58,
+      "EndNodeId": 78,
+      "MaterialId": "deck_steel",
+      "Length": 3,
+      "Cost": 1320,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 209,
+      "StartNodeId": 78,
+      "EndNodeId": 59,
+      "MaterialId": "deck_steel",
+      "Length": 3,
+      "Cost": 1320,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 210,
+      "StartNodeId": 76,
+      "EndNodeId": 78,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 213,
+      "StartNodeId": 1,
+      "EndNodeId": 79,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 216,
+      "StartNodeId": 80,
+      "EndNodeId": 2,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 217,
+      "StartNodeId": 1,
+      "EndNodeId": 81,
+      "MaterialId": "deck_steel",
+      "Length": 3,
+      "Cost": 1320,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 219,
+      "StartNodeId": 81,
+      "EndNodeId": 58,
+      "MaterialId": "deck_steel",
+      "Length": 3,
+      "Cost": 1320,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 220,
+      "StartNodeId": 82,
+      "EndNodeId": 2,
+      "MaterialId": "deck_steel",
+      "Length": 3,
+      "Cost": 1320,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 221,
+      "StartNodeId": 79,
+      "EndNodeId": 81,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 222,
+      "StartNodeId": 82,
+      "EndNodeId": 80,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 225,
+      "StartNodeId": 3,
+      "EndNodeId": 81,
+      "MaterialId": "steel",
+      "Length": 4.242640687119285,
+      "Cost": 1272.7922061357854,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 226,
+      "StartNodeId": 4,
+      "EndNodeId": 82,
+      "MaterialId": "steel",
+      "Length": 4.242640687119285,
+      "Cost": 1272.7922061357854,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 229,
+      "StartNodeId": 61,
+      "EndNodeId": 79,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 230,
+      "StartNodeId": 62,
+      "EndNodeId": 80,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 231,
+      "StartNodeId": 59,
+      "EndNodeId": 83,
+      "MaterialId": "deck_steel",
+      "Length": 3,
+      "Cost": 1320,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 233,
+      "StartNodeId": 83,
+      "EndNodeId": 77,
+      "MaterialId": "steel",
+      "Length": 2.9154759474226504,
+      "Cost": 874.6427842267951,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 234,
+      "StartNodeId": 77,
+      "EndNodeId": 59,
+      "MaterialId": "hydraulic",
+      "Length": 5.1478150704935,
+      "Cost": 2573.9075352467503,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 235,
+      "StartNodeId": 76,
+      "EndNodeId": 59,
+      "MaterialId": "hydraulic",
+      "Length": 5.1478150704935,
+      "Cost": 2573.9075352467503,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    },
+    {
+      "Id": 236,
+      "StartNodeId": 79,
+      "EndNodeId": 76,
+      "MaterialId": "hydraulic",
+      "Length": 6,
+      "Cost": 3000,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1
+    }
+  ],
+  "NextNodeId": 84,
+  "NextMemberId": 237,
+  "SavedTotalCost": 29085.18454080623,
+  "DemolishedCount": 0,
+  "DemolitionCost": 0,
+  "RepairCost": 0,
+  "Mechanisms": {
+    "Leaves": [],
+    "Locks": [],
+    "Linkage": {
+      "Duration": 4,
+      "Drivers": []
+    },
+    "NextId": 8
+  }
+}

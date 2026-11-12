@@ -59,6 +59,26 @@ namespace BridgeArchitect3D.Data
         public int LevelIndex(string id) => Levels.FindIndex(l => l.Id == id);
 
         public static string SerializeDesign(BridgeDesign d) => JsonSerializer.Serialize(d, JsonOptions);
-        public static BridgeDesign DeserializeDesign(string json) => JsonSerializer.Deserialize<BridgeDesign>(json, JsonOptions);
+        /// <summary>
+        /// Loads a design. Version-1 saves (no mechanisms) migrate in memory to the current version with an empty
+        /// mechanism set; the file on disk is only rewritten when the player saves again.
+        /// </summary>
+        public static BridgeDesign DeserializeDesign(string json)
+        {
+            var d = JsonSerializer.Deserialize<BridgeDesign>(json, JsonOptions);
+            if (d == null) return null;
+            var mechanisms=d.EnsureMechanisms();
+            if(mechanisms.Linkage?.Drivers!=null)
+                foreach(var driver in mechanisms.Linkage.Drivers)
+                {
+                    // Keep the saved direction and stroke; only bring it into the allowed range (old saves are +-50%)
+                    double mag=System.Math.Abs(driver.Ratio);
+                    if(!double.IsFinite(mag) || mag<1e-9) mag=LinkageDriverData.StrokeFraction;
+                    mag=System.Math.Clamp(mag,LinkageDriverData.MinStroke,LinkageDriverData.MaxStroke);
+                    driver.Ratio=driver.Ratio>0?mag:-mag;
+                }
+            if (d.Version < BridgeDesign.CurrentVersion) d.Version = BridgeDesign.CurrentVersion;
+            return d;
+        }
     }
 }

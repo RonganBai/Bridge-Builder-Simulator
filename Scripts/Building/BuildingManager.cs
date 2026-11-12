@@ -17,7 +17,7 @@ namespace BridgeArchitect3D.Building
     /// </summary>
     public partial class BuildingManager : Node3D
     {
-        private const float NodeSnapRadius = 0.6f;     // 自动连接吸附半径 m
+        private const float NodeSnapRadius = (float)DesignEditor.NodeSnapRadius;   // snap / pick radius m (hold Ctrl: no node snap)
         private const float MemberPickRadius = 0.35f;
 
         public DesignEditor Editor { get; private set; }
@@ -56,8 +56,10 @@ namespace BridgeArchitect3D.Building
             // 吸附光圈：鼠标吸附到已有节点时显示
             _ring = new MeshInstance3D { Mesh = new TorusMesh { InnerRadius = 0.42f, OuterRadius = 0.55f, Rings = 24, RingSegments = 8 }, MaterialOverride = World.TerrainBuilder.Unshaded(new Color(0.4f, 1f, 0.9f, 0.9f)), Visible = false, RotationDegrees = new Vector3(90, 0, 0) };
             AddChild(_ring);
-            _grid = new MeshInstance3D { Mesh = BuildGrid(editor.Level), MaterialOverride = World.TerrainBuilder.Unshaded(new Color(1, 1, 1, 0.08f)), Visible = showGrid };
+            _grid = new MeshInstance3D { Mesh = BuildGrid(editor.Level), MaterialOverride = World.TerrainBuilder.Unshaded(new Color(0.30f, 0.24f, 0.15f, 0.28f)), Visible = showGrid };
             AddChild(_grid);
+            if(_grid.MaterialOverride is StandardMaterial3D gridMaterial)
+            {gridMaterial.AlbedoColor=Colors.White;gridMaterial.VertexColorUseAsAlbedo=true;}
             OnDesignChanged();
         }
 
@@ -71,6 +73,7 @@ namespace BridgeArchitect3D.Building
         public void SetEnabled(bool enabled)
         {
             Enabled = enabled;
+            if(!enabled) ClearDiagnostic();
             CancelChain();
             _dragNode = -1;
             _cursor.Visible = false; _previewBeam.Visible = false; _ring.Visible = false;
@@ -108,6 +111,7 @@ namespace BridgeArchitect3D.Building
             if (Editor.Design.FindMember(SelectedMemberId) == null) SelectedMemberId = -1;
             if (Editor.Design.FindNode(_chainStart) == null) _chainStart = -1;
             _problemMembers.Clear();   // 设计改动后不再显示上次失败的高亮
+            ClearDiagnostic();
             SelNodes.RemoveWhere(id => Editor.Design.FindNode(id) == null);
             SelMembers.RemoveWhere(id => Editor.Design.FindMember(id) == null);
             _renderer.Rebuild(Editor.Design);
@@ -155,6 +159,56 @@ namespace BridgeArchitect3D.Building
             Recolor(); SelectionChanged?.Invoke();
         }
 
+        private Node3D _diagnosticOverlay;
+        private readonly List<Vector3> _diagnosticPositions=new();
+        public IEnumerable<Vector3> DiagnosticPositions => _diagnosticPositions;
+
+        public void ClearDiagnostic()
+        {
+            if(_diagnosticOverlay!=null) { _diagnosticOverlay.Visible=false; _diagnosticOverlay.QueueFree(); _diagnosticOverlay=null; }
+            _diagnosticPositions.Clear();
+        }
+
+        /// <summary>Non-selectable overlays preserve editing selection and remain visible through the structure.</summary>
+        public void ShowDiagnostic(DiagnosticTargets targets)
+        {
+            ClearDiagnostic();
+            _diagnosticOverlay=new Node3D(); AddChild(_diagnosticOverlay);
+            void Member(int id,Color color,string role)
+            {
+                var member=Editor.Design.FindMember(id); if(member==null) return;
+                var a=Editor.Design.FindNode(member.StartNodeId);var b=Editor.Design.FindNode(member.EndNodeId);
+                if(a==null || b==null) return;
+                var av=BridgeRenderer.ToV(a.Position);var bv=BridgeRenderer.ToV(b.Position);
+                _diagnosticPositions.Add(av);_diagnosticPositions.Add(bv);
+                var material=new StandardMaterial3D {AlbedoColor=new Color(color.R,color.G,color.B,0.55f),
+                    Transparency=BaseMaterial3D.TransparencyEnum.Alpha,ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,NoDepthTest=true};
+                float thickness=(float)System.Math.Max(0.25,(Editor.Db.GetMaterial(member.MaterialId)?.VisualThickness ?? 0.2)*1.5);
+                foreach(float side in new[]{-BuildPlane.TrussOffset,BuildPlane.TrussOffset})
+                {
+                    var overlay=new MeshInstance3D {Mesh=new BoxMesh {Size=Vector3.One},MaterialOverride=material};
+                    _diagnosticOverlay.AddChild(overlay);
+                    BridgeRenderer.SetBeam(overlay,av+new Vector3(0,0,side),bv+new Vector3(0,0,side),thickness,thickness);
+                }
+
+            }
+            var affectedColor=targets.Kind==MechanismDiagnosticKind.DeadPoint ? new Color(0.85f,0.35f,1f) :
+                targets.Kind==MechanismDiagnosticKind.ConstraintConflict ? new Color(1,0.2f,0.15f) : new Color(1,0.65f,0.1f);
+            foreach(int id in targets.Members)
+                Member(id,targets.BlockingMembers.Contains(id)?new Color(1,0.2f,0.15f):affectedColor,
+                    targets.BlockingMembers.Contains(id)?"阻挡支撑":"涉及构件");
+            foreach(int id in targets.Nodes)
+            {
+                var node=Editor.Design.FindNode(id);if(node==null) continue;
+                var point=BridgeRenderer.ToV(node.Position);_diagnosticPositions.Add(point);
+                var material=new StandardMaterial3D {AlbedoColor=affectedColor,ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded,NoDepthTest=true};
+                foreach(float side in new[]{-BuildPlane.TrussOffset,BuildPlane.TrussOffset})
+                    _diagnosticOverlay.AddChild(new MeshInstance3D {Mesh=new SphereMesh {Radius=0.33f,Height=0.66f},MaterialOverride=material,Position=point+new Vector3(0,0,side)});
+
+            }
+            Member(targets.SourceMember,new Color(0.1f,0.95f,1),"当前液压杆");
+        }
+
         // ---------------- 多选 / 框选 ----------------
         /// <summary>框选得到的节点与构件集合。</summary>
         public readonly HashSet<int> SelNodes = new(), SelMembers = new();
@@ -194,7 +248,7 @@ namespace BridgeArchitect3D.Building
         {
             var from = _camera.ProjectRayOrigin(_lastMouse);
             var dir = _camera.ProjectRayNormal(_lastMouse);
-            nodeId = _renderer.PickNode(from, dir);
+            nodeId = _renderer.PickNode(from, dir, NodeSnapRadius);
             memberId = nodeId >= 0 ? -1 : _renderer.PickMember(from, dir);
         }
 
@@ -213,9 +267,15 @@ namespace BridgeArchitect3D.Building
                 if (mb.Pressed) OnLeftPress();
                 else OnLeftRelease();
             }
-            else if (e is InputEventMouseButton rb && rb.ButtonIndex == MouseButton.Right && rb.Pressed && _chainStart >= 0)
+            else if (e is InputEventMouseButton rb && rb.ButtonIndex == MouseButton.Right && rb.Pressed)
             {
-                CancelChain();   // 右键取消当前连接（同时仍可拖动旋转相机）
+                if (_chainStart >= 0) CancelChain();   // right click cancels the current connection (drag still orbits)
+                // Double right click in build / delete mode returns to the select / drag tool
+                if (rb.DoubleClick && (Tool == BuildTool.Build || Tool == BuildTool.Delete))
+                {
+                    SetTool(BuildTool.Select);
+                    Message?.Invoke("已回到选择 / 拖动模式", false);
+                }
             }
             else if (e is InputEventKey k && k.Pressed && !k.Echo)
             {
@@ -223,14 +283,20 @@ namespace BridgeArchitect3D.Building
                 else if (k.CtrlPressed && (k.Keycode == Key.Y || (k.ShiftPressed && k.Keycode == Key.Z))) { if (Editor.Redo()) Message?.Invoke("已重做", false); }
                 else if (k.Keycode == Key.Escape) { CancelChain(); ClearSelection(); }
                 else if (k.Keycode == Key.Delete || k.Keycode == Key.Backspace) DeleteSelected();
-                else if (k.Keycode == Key.Key1) SetTool(BuildTool.Select);
-                else if (k.Keycode == Key.X) SetTool(BuildTool.Delete);
-                else if ((k.Keycode >= Key.Key2 && k.Keycode <= Key.Key9) || k.Keycode == Key.Key0)
+                else if (k.Keycode == Key.X)
                 {
-                    // 数字键 2~9、0 依次对应本关可用材料
-                    int idx = k.Keycode == Key.Key0 ? 8 : (int)(k.Keycode - Key.Key2);
-                    var mats = MaterialOrder;
-                    if (idx < mats.Count) SetTool(BuildTool.Build, mats[idx]);
+                    // With a multi-selection, X deletes it directly instead of switching to the delete tool
+                    if (MultiSelectionCount > 0) DeleteSelected();
+                    else SetTool(BuildTool.Delete);
+                }
+                else if (k.Keycode >= Key.Key0 && k.Keycode <= Key.Key9)
+                {
+                    // Number keys follow the (customizable) material hotkeys; 1 = select unless a material uses it
+                    string digit = ((int)(k.Keycode - Key.Key0)).ToString();
+                    var keys = (Core.GameManager.Instance?.Settings ?? new Core.GameSettings()).ResolveKeys(MaterialOrder);
+                    var mat = keys.FirstOrDefault(p => p.Value == digit).Key;
+                    if (mat != null) SetTool(BuildTool.Build, mat);
+                    else if (digit == "1") SetTool(BuildTool.Select);
                 }
             }
         }
@@ -248,9 +314,10 @@ namespace BridgeArchitect3D.Building
         }
 
         /// <summary>吸附：优先吸附到附近已有节点，否则吸附到网格。</summary>
-        private Vector2 SnapPoint(Vector2 p, out BridgeNode snappedNode)
+        private Vector2 SnapPoint(Vector2 p, out BridgeNode snappedNode, int ignoreNodeId = -1)
         {
-            snappedNode = Editor.NodeAt(p.X, p.Y, NodeSnapRadius);
+            // Default: snap to the nearest node within the radius; holding Ctrl places on the grid only
+            snappedNode = Input.IsKeyPressed(Key.Ctrl) ? null : Editor.NodeAt(p.X, p.Y, NodeSnapRadius,ignoreNodeId>=0?ignoreNodeId:_dragNode);
             if (snappedNode != null) return new Vector2((float)snappedNode.Position.X, (float)snappedNode.Position.Y);
             return new Vector2((float)DesignEditor.Snap(p.X), (float)DesignEditor.Snap(p.Y));
         }
@@ -287,7 +354,7 @@ namespace BridgeArchitect3D.Building
                 ok = reason == null;
                 _cursor.Visible = true; _cursor.MaterialOverride = ok ? _mm.PreviewOk : _mm.PreviewBad;
                 _cursor.Position = new Vector3(snapped.X, snapped.Y, BuildPlane.FrontZ);
-                text = ok ? $"移动到 ({snapped.X:0.0}, {snapped.Y:0.0})" : reason;
+                text = ok ? $"移动到 ({snapped.X:0.00}, {snapped.Y:0.00})" : reason;
             }
             else if (mat != null && Editor.Db.GetMaterial(mat).IsPier)
             {
@@ -373,7 +440,7 @@ namespace BridgeArchitect3D.Building
                     if (mid >= 0)
                     {
                         var m = Editor.Design.FindMember(mid);
-                        Report(Editor.DeleteMember(mid), $"已删除构件，退还 ${m?.Cost ?? 0:0}");
+                        Report(Editor.DeleteMember(mid), $"已删除构件，退还 ${m?.EffectiveCost() ?? 0:0}");
                         break;
                     }
                     SelNodes.Clear(); SelMembers.Clear();
@@ -482,7 +549,7 @@ namespace BridgeArchitect3D.Building
             if (MouseToPlane(out var p))
             {
                 var node = Editor.Design.FindNode(id);
-                var snapped = new Vector2((float)DesignEditor.Snap(p.X), (float)DesignEditor.Snap(p.Y));
+                var snapped = SnapPoint(p,out _,id);
                 if (node != null && (Math.Abs(node.Position.X - snapped.X) > 1e-3 || Math.Abs(node.Position.Y - snapped.Y) > 1e-3))
                 {
                     var r = Editor.MoveNode(id, snapped.X, snapped.Y);
@@ -534,8 +601,8 @@ namespace BridgeArchitect3D.Building
             float z = BuildPlane.FrontZ - 0.01f;
             float x0 = (float)-t.BuildMarginX, x1 = (float)(t.RiverWidth + t.BuildMarginX);
             float y0 = (float)t.BuildMinY, y1 = (float)t.BuildMaxY;
-            for (float x = Mathf.Ceil(x0); x <= x1 + 1e-3f; x += 1f) { im.SurfaceAddVertex(new Vector3(x, y0, z)); im.SurfaceAddVertex(new Vector3(x, y1, z)); }
-            for (float y = Mathf.Ceil(y0); y <= y1 + 1e-3f; y += 1f) { im.SurfaceAddVertex(new Vector3(x0, y, z)); im.SurfaceAddVertex(new Vector3(x1, y, z)); }
+            for (float x = Mathf.Ceil(x0/(float)DesignEditor.GridSize)*(float)DesignEditor.GridSize; x <= x1 + 1e-3f; x += (float)DesignEditor.GridSize) { im.SurfaceSetColor(new Color(0.30f,0.24f,0.15f,Mathf.IsEqualApprox(x,Mathf.Round(x))?0.3f:0.12f)); im.SurfaceAddVertex(new Vector3(x, y0, z)); im.SurfaceAddVertex(new Vector3(x, y1, z)); }
+            for (float y = Mathf.Ceil(y0/(float)DesignEditor.GridSize)*(float)DesignEditor.GridSize; y <= y1 + 1e-3f; y += (float)DesignEditor.GridSize) { im.SurfaceSetColor(new Color(0.30f,0.24f,0.15f,Mathf.IsEqualApprox(y,Mathf.Round(y))?0.3f:0.12f)); im.SurfaceAddVertex(new Vector3(x0, y, z)); im.SurfaceAddVertex(new Vector3(x1, y, z)); }
             im.SurfaceEnd();
             return im;
         }

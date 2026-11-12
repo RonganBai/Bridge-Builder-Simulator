@@ -18,6 +18,8 @@ namespace BridgeArchitect3D.Data
         VehicleBlocked,
         ProgressiveCollapse,
         OverBudget,
+        Derailed,
+        WrongSurface,
     }
 
     public class VehicleResult
@@ -58,6 +60,10 @@ namespace BridgeArchitect3D.Data
         public double DeckIntegrity { get; set; }
         /// <summary>预算分 = 1000 × 提供预算 / 使用预算（用得越少越高，不封顶）。</summary>
         public int BudgetScore { get; set; }
+        /// <summary>Time score: ideal finish time (every vehicle / ship at full speed, no waiting) / actual time.</summary>
+        public int TimeScore { get; set; }
+        /// <summary>Ideal finish time in s (0 = unknown, the time score is then full).</summary>
+        public double ReferenceTime { get; set; }
         /// <summary>完整度分 = 1000 × 桥面完整度。</summary>
         public int IntegrityScore { get; set; }
         /// <summary>受力分 = 1000 × 最大受力利用率（材料用得越充分越高）。</summary>

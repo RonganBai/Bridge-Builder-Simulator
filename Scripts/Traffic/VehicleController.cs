@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BridgeArchitect3D.Building;
 using BridgeArchitect3D.Data;
 using Godot;
+using BridgeArchitect3D.World;
 
 namespace BridgeArchitect3D.Traffic
 {
@@ -19,9 +20,37 @@ namespace BridgeArchitect3D.Traffic
         /// <summary>一个随路径摆放的部件：front/rear 为相对车头的偏移（m，向后为负）。</summary>
         private class Unit { public Node3D Node; public float Front, Rear; }
         private readonly List<Unit> _units = new();
+        private readonly List<StandardMaterial3D> _beacons=new();
+        private readonly List<OmniLight3D> _beaconLights=new();
         private bool _falling;
+        // Derailment: each car rolls off the track one after another (visual only)
+        private bool _derailing;
+        private float _derailTime;
+        private readonly List<Transform3D> _derailBase = new();
         private Vector3 _fallVel;
         private const float WheelR = 0.45f;
+
+        /// <summary>Copies an already built vehicle (its parts share meshes and materials with the template).</summary>
+        public void SetupFrom(VehicleController template)
+        {
+            Def = template.Def;
+            foreach (var u in template._units)
+            {
+                var n = (Node3D)u.Node.Duplicate();
+                AddChild(n);
+                _units.Add(new Unit { Node = n, Front = u.Front, Rear = u.Rear });
+            }
+            if (Def.Kind == "ambulance") CollectBeacons();
+        }
+
+        private void CollectBeacons()
+        {
+            foreach (var unit in _units) foreach (var child in unit.Node.GetChildren())
+            {
+                if (child is MeshInstance3D mesh && mesh.MaterialOverride is StandardMaterial3D mat && mat.ResourceName.StartsWith("AmbulanceBeacon") && !_beacons.Contains(mat)) _beacons.Add(mat);
+                if (child is OmniLight3D beacon) _beaconLights.Add(beacon);
+            }
+        }
 
         public void Setup(VehicleDefinition def)
         {
@@ -41,6 +70,13 @@ namespace BridgeArchitect3D.Traffic
             var tail = new StandardMaterial3D { AlbedoColor = new Color(0.9f, 0.1f, 0.1f), EmissionEnabled = true, Emission = new Color(0.9f, 0.1f, 0.1f), EmissionEnergyMultiplier = 0.6f };
             var trim = new StandardMaterial3D { AlbedoColor = color.Darkened(0.35f), Roughness = 0.6f };
 
+            if(SpecialVehicleFactory.Supports(def.Kind))
+            {
+                SpecialVehicleFactory.Build(def,NewUnit);
+                for(int i=0;i<_units.Count;i++)LowPolyDetails.DressVehicle(_units[i].Node,def,i);
+                if(def.Kind=="ambulance")CollectBeacons();
+                return;
+            }
             switch (def.Kind)
             {
                 case "train":
@@ -52,14 +88,20 @@ namespace BridgeArchitect3D.Traffic
                         var n = NewUnit(-i * ul, -(i + 1) * ul + 0.6f);
                         float cl = ul - 0.6f, baseY = WheelR + 0.25f;
                         bool loco = i == 0;
-                        AddBox(n, new Vector3(-cl / 2, baseY + h * 0.45f, 0), new Vector3(cl, h * 0.9f, w), loco ? body : light);
+                        if(loco)
+                        {
+                            var nose=new[]{new Vector2(-cl,baseY),new Vector2(0.1f,baseY),new Vector2(0.17f,baseY+h*0.24f),new Vector2(0.1f,baseY+h*0.52f),new Vector2(-0.18f,baseY+h*0.76f),new Vector2(-0.65f,baseY+h*0.9f),new Vector2(-cl,baseY+h*0.9f)};
+                            n.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(nose,w),MaterialOverride=body});
+                            CurvedMeshes.Windshield(n,0.11f,baseY+h*0.55f,-0.35f,baseY+h*0.83f,w*0.8f,0.06f,glass);
+                        }
+                        else AddBox(n, new Vector3(-cl / 2, baseY + h * 0.45f, 0), new Vector3(cl, h * 0.9f, w), light);
                         AddBox(n, new Vector3(-cl / 2, baseY + h * 0.92f, 0), new Vector3(cl - 0.4f, 0.12f, w * 0.85f), trim);          // 车顶
                         AddBox(n, new Vector3(-cl / 2, WheelR + 0.1f, 0), new Vector3(cl, 0.25f, w * 0.85f), dark);                       // 底架
                         if (loco)
                         {
                             AddBox(n, new Vector3(-1.1f, baseY + h * 0.68f, 0), new Vector3(1.6f, h * 0.28f, w * 1.01f), glass);          // 驾驶室窗
                             AddBox(n, new Vector3(0.05f, baseY + 0.35f, 0), new Vector3(0.3f, 0.5f, w * 0.9f), dark);                     // 排障器
-                            for (int s = -1; s <= 1; s += 2) AddBox(n, new Vector3(0.02f, baseY + h * 0.35f, s * (w / 2 - 0.35f)), new Vector3(0.06f, 0.22f, 0.3f), head);
+                            for (int s = -1; s <= 1; s += 2) AddBox(n, new Vector3(0.23f, baseY + h * 0.35f, s * (w / 2 - 0.35f)), new Vector3(0.06f, 0.22f, 0.3f), head);
                         }
                         else
                         {
@@ -68,9 +110,10 @@ namespace BridgeArchitect3D.Traffic
                         AddBox(n, new Vector3(-cl - 0.3f, baseY + 0.3f, 0), new Vector3(0.6f, 0.18f, 0.3f), dark);                       // 车钩
                         foreach (float bx in new[] { -2.5f, -cl + 2.5f })
                         {
-                            AddBox(n, new Vector3(bx, WheelR + 0.05f, 0), new Vector3(2.6f, 0.35f, w * 0.7f), dark);                       // 转向架
+                            AddBox(n, new Vector3(bx, WheelR + 0.05f, 0), new Vector3(2.6f, 0.35f, (float)RailTrack.Gauge - 0.3f), dark);   // 转向架（在两侧车轮之间）
                             for (int s = -1; s <= 1; s += 2)
-                                foreach (float wx in new[] { bx - 1f, bx + 1f }) AddWheel(n, new Vector3(wx, WheelR, s * (w / 2 - 0.15f)), dark, chrome, 0.25f);
+                                // Steel wheels stand on the rail heads: rail gauge apart, bottom of the tread at the unit origin
+                                foreach (float wx in new[] { bx - 1f, bx + 1f }) AddWheel(n, new Vector3(wx, WheelR, s * (float)(RailTrack.Gauge / 2)), dark, chrome, 0.14f);
                         }
                     }
                     break;
@@ -105,8 +148,7 @@ namespace BridgeArchitect3D.Traffic
                     for (int s = -1; s <= 1; s += 2)
                     {
                         float tz = s * (w / 2 - 0.4f);
-                        AddBox(n, new Vector3(-0.6f, 0.08f, tz), new Vector3(len * 0.82f, 0.16f, 0.8f), dark);       // 履带下段
-                        AddBox(n, new Vector3(-0.6f, 0.82f, tz), new Vector3(len * 0.85f, 0.16f, 0.8f), dark);       // 履带上段
+                        CurvedMeshes.Track(n,len*0.85f,tz,0.8f,dark,chrome);
                         for (int k = 0; k < 5; k++)
                             n.AddChild(new MeshInstance3D { Mesh = roadWheel, MaterialOverride = trim, Position = new Vector3(1.6f - k * 1.1f, 0.42f, tz + s * 0.25f), RotationDegrees = new Vector3(90, 0, 0) });
                         AddBox(n, new Vector3(-0.6f, 0.95f, s * (w / 2 - 0.35f)), new Vector3(len * 0.88f, 0.08f, 0.95f), body);  // 挡泥板
@@ -164,11 +206,12 @@ namespace BridgeArchitect3D.Traffic
                     {
                         // 轿车：下车身 + 收窄的车舱 + 倾斜挡风玻璃 + 保险杠、灯、后视镜
                         float cx = (front + back) / 2;
-                        AddBox(n, new Vector3(cx, WheelR + 0.3f, 0), new Vector3(len, 0.55f, w), body);
-                        AddBox(n, new Vector3(cx - 0.25f, WheelR + 0.82f, 0), new Vector3(len * 0.48f, 0.5f, w * 0.86f), body);
-                        AddBox(n, new Vector3(cx - 0.25f, WheelR + 0.84f, 0), new Vector3(len * 0.44f, 0.4f, w * 0.88f), glass);       // 侧窗
-                        n.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.75f, 0.05f, w * 0.82f) }, MaterialOverride = glass, Position = new Vector3(cx + len * 0.24f, WheelR + 0.8f, 0), RotationDegrees = new Vector3(0, 0, -38) });   // 前挡风
-                        n.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.6f, 0.05f, w * 0.82f) }, MaterialOverride = glass, Position = new Vector3(cx - len * 0.29f, WheelR + 0.82f, 0), RotationDegrees = new Vector3(0, 0, 42) });    // 后挡风
+                        n.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.RoundedBox(new Vector3(len,0.55f,w),0.22f),Position=new Vector3(cx,WheelR+0.3f,0),MaterialOverride=body});
+                        var cabin=new[]{new Vector2(cx-len*0.32f,1),new Vector2(cx+len*0.28f,1),new Vector2(cx+len*0.13f,1.45f),new Vector2(cx-len*0.2f,1.45f)};
+                        n.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(cabin,w*0.86f),MaterialOverride=body});
+                        foreach(int side in new[]{-1,1})AddBox(n,new Vector3(cx-0.15f,1.25f,side*w*0.435f),new Vector3(len*0.31f,0.3f,0.025f),glass);
+                        CurvedMeshes.Windshield(n,cx+len*0.28f,1.01f,cx+len*0.13f,1.43f,w*0.83f,0.09f,glass);
+                        CurvedMeshes.Windshield(n,cx-len*0.32f,1.01f,cx-len*0.2f,1.43f,w*0.83f,-0.07f,glass);
                         AddBox(n, new Vector3(front + 0.04f, WheelR + 0.15f, 0), new Vector3(0.12f, 0.2f, w * 1.01f), dark);
                         AddBox(n, new Vector3(back - 0.04f, WheelR + 0.15f, 0), new Vector3(0.12f, 0.2f, w * 1.01f), dark);
                         for (int s = -1; s <= 1; s += 2)
@@ -183,6 +226,7 @@ namespace BridgeArchitect3D.Traffic
                     break;
                 }
             }
+            for(int i=0;i<_units.Count;i++) LowPolyDetails.DressVehicle(_units[i].Node,def,i);
         }
         private Node3D NewUnit(float front, float rearOffset)
         {
@@ -210,7 +254,7 @@ namespace BridgeArchitect3D.Traffic
         /// <summary>按路径摆放每个部件：eval(弧长) 返回路面上的点，frontS 为车头轴所在弧长。</summary>
         public void PlaceAlongPath(Func<double, Vector3> eval, double frontS)
         {
-            if (_falling) return;
+            if (_falling || _derailing) return;
             Transform = Transform3D.Identity;
             foreach (var u in _units)
             {
@@ -218,6 +262,20 @@ namespace BridgeArchitect3D.Traffic
                 var r = eval(frontS + u.Rear);
                 var dir = f - r;
                 float ang = dir.LengthSquared() > 1e-6f ? Mathf.Atan2(dir.Y, dir.X) : 0;
+                // A rigid body rests on the road: where the road under it bulges above the front-rear chord
+                // (a sagging bridge meeting the bank), lift the body so it never sinks into the road or bank
+                if (dir.LengthSquared() > 1e-6f)
+                {
+                    var n = new Vector3(-dir.Y, dir.X, 0).Normalized();
+                    if (n.Y < 0) n = -n;
+                    float lift = 0;
+                    for (int i = 1; i < 12; i++)
+                    {
+                        double sv = frontS + u.Rear + (u.Front - u.Rear) * i / 12.0;
+                        lift = Mathf.Max(lift, (eval(sv) - r).Dot(n));
+                    }
+                    f += n * lift;
+                }
                 // 部件原点放在其前端，局部 -X 指向后方
                 u.Node.Transform = new Transform3D(new Basis(Vector3.Back, ang), f);
             }
@@ -239,10 +297,51 @@ namespace BridgeArchitect3D.Traffic
             _falling = true; _fallVel = new Vector3(1.5f, 0, 0);
         }
 
-        public void ResetState() { _falling = false; Position = Vector3.Zero; Rotation = Vector3.Zero; Visible = true; }
+        public void StartDerail()
+        {
+            if (_derailing || _falling) return;
+            _derailing = true; _derailTime = 0; _derailBase.Clear();
+            foreach (var u in _units) _derailBase.Add(u.Node.Transform);
+        }
+
+        public void ResetState() { _derailing = false; _derailBase.Clear(); _falling = false; Position = Vector3.Zero; Rotation = Vector3.Zero; Visible = true; }
+
+        public void SetEmergencyLights(bool active,double time)
+        {
+            double phase=time-Math.Floor(time);
+            foreach(var material in _beacons)
+            {
+                bool red=material.ResourceName=="AmbulanceBeaconRed";
+                double pulse=red?phase:(phase+0.5)%1;
+                bool lit=active && (pulse<0.08 || pulse>=0.16 && pulse<0.24);
+                var color=new Color(red?"ef5147":"418ff0");
+                material.AlbedoColor=lit?color:color.Darkened(0.4f);
+                material.EmissionEnabled=lit;material.Emission=color;material.EmissionEnergyMultiplier=lit?3:0;
+                material.ShadingMode=lit?BaseMaterial3D.ShadingModeEnum.Unshaded:BaseMaterial3D.ShadingModeEnum.PerPixel;
+            }
+            foreach(var light in _beaconLights)
+            {
+                double pulse=light.Name.ToString().Contains("Red")?phase:(phase+0.5)%1;
+                light.Visible=active && (pulse<0.08 || pulse>=0.16 && pulse<0.24);
+            }
+        }
 
         public override void _Process(double delta)
         {
+            if (_derailing)
+            {
+                _derailTime += (float)delta;
+                for (int i = 0; i < _units.Count && i < _derailBase.Count; i++)
+                {
+                    // Front car first; each car tips over sideways and slides off the track
+                    float k = Mathf.Clamp((_derailTime - i * 0.25f) / 1.4f, 0, 1);
+                    k = k * k * (3 - 2 * k);
+                    var t = _derailBase[i] * new Transform3D(new Basis(Vector3.Right, -1.25f * k), Vector3.Zero);
+                    t.Origin += new Vector3(0, -0.5f * k, 2.2f * k);
+                    _units[i].Node.Transform = t;
+                }
+                return;
+            }
             if (!_falling) return;
             float dt = (float)delta;
             _fallVel += new Vector3(0, -9.81f, 0) * dt;
@@ -252,3 +351,4 @@ namespace BridgeArchitect3D.Traffic
         }
     }
 }
+

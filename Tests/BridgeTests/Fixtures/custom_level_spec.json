@@ -1,0 +1,37 @@
+{
+  "Version": 1,
+  "Id": "custom_\u6211\u7684\u5173\u5361",
+  "Name": "\u6211\u7684\u5173\u5361",
+  "Description": "",
+  "RiverWidth": 18,
+  "LeftBankHeight": -2,
+  "RightBankHeight": 0,
+  "WaterDepth": 4,
+  "BedDepth": 6.5,
+  "Budget": 36000,
+  "NoPiers": false,
+  "Ship": true,
+  "ShipHeight": 6.5,
+  "Materials": [
+    "road",
+    "wood",
+    "steel",
+    "psc_box",
+    "deck_frp",
+    "pier_concrete",
+    "pier_wood",
+    "rc_beam",
+    "cable",
+    "concrete",
+    "deck_wood",
+    "hydraulic",
+    "rc_column",
+    "deck_steel",
+    "glulam",
+    "psc_i"
+  ],
+  "Vehicles": [
+    "car"
+  ],
+  "Anchors": []
+}

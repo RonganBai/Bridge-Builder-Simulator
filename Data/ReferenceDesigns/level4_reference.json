@@ -1,6 +1,7 @@
 {
-  "Version": 1,
+  "Version": 3,
   "LevelId": "level4",
+  "Name": null,
   "Nodes": [
     {
       "Id": 1,
@@ -11,7 +12,15 @@
       },
       "IsAnchor": true,
       "AnchorId": "L1",
-      "SupportType": "Pinned"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 2,
@@ -22,7 +31,15 @@
       },
       "IsAnchor": true,
       "AnchorId": "R1",
-      "SupportType": "Pinned"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 3,
@@ -33,7 +50,15 @@
       },
       "IsAnchor": true,
       "AnchorId": "L2",
-      "SupportType": "Pinned"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 4,
@@ -44,7 +69,15 @@
       },
       "IsAnchor": true,
       "AnchorId": "R2",
-      "SupportType": "Pinned"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 5,
@@ -55,7 +88,15 @@
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 6,
@@ -66,18 +107,34 @@
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 7,
       "Position": {
-        "X": 10.0,
-        "Y": 1.0,
+        "X": 10,
+        "Y": 1,
         "Z": 0
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 8,
@@ -88,7 +145,15 @@
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 9,
@@ -99,7 +164,15 @@
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 10,
@@ -110,7 +183,15 @@
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 11,
@@ -121,18 +202,34 @@
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 12,
       "Position": {
-        "X": 10.0,
-        "Y": 5.0,
+        "X": 10,
+        "Y": 5,
         "Z": 0
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 13,
@@ -143,7 +240,15 @@
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     },
     {
       "Id": 14,
@@ -154,7 +259,72 @@
       },
       "IsAnchor": false,
       "AnchorId": null,
-      "SupportType": "None"
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 15,
+      "Position": {
+        "X": 1.66665,
+        "Y": 2.16665,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 16,
+      "Position": {
+        "X": 11.66665,
+        "Y": 3.16665,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
+    },
+    {
+      "Id": 17,
+      "Position": {
+        "X": 15,
+        "Y": 3.5,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None"
     }
   ],
   "Members": [
@@ -165,7 +335,11 @@
       "MaterialId": "road",
       "Length": 3.3499,
       "Cost": 837.48,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 2,
@@ -174,7 +348,11 @@
       "MaterialId": "road",
       "Length": 3.35,
       "Cost": 837.51,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 3,
@@ -183,7 +361,11 @@
       "MaterialId": "road",
       "Length": 3.3499,
       "Cost": 837.48,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 4,
@@ -192,7 +374,11 @@
       "MaterialId": "road",
       "Length": 3.3499,
       "Cost": 837.48,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 5,
@@ -201,7 +387,11 @@
       "MaterialId": "road",
       "Length": 3.35,
       "Cost": 837.51,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 6,
@@ -210,7 +400,11 @@
       "MaterialId": "road",
       "Length": 3.3499,
       "Cost": 837.48,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 7,
@@ -219,7 +413,11 @@
       "MaterialId": "steel",
       "Length": 3.35,
       "Cost": 1005.01,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 8,
@@ -228,7 +426,11 @@
       "MaterialId": "steel",
       "Length": 3.3499,
       "Cost": 1004.98,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 9,
@@ -237,7 +439,11 @@
       "MaterialId": "steel",
       "Length": 3.3499,
       "Cost": 1004.98,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 10,
@@ -246,16 +452,24 @@
       "MaterialId": "steel",
       "Length": 3.35,
       "Cost": 1005.01,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 11,
       "StartNodeId": 1,
-      "EndNodeId": 10,
+      "EndNodeId": 15,
       "MaterialId": "steel",
-      "Length": 5.467,
-      "Cost": 1640.11,
-      "DamageState": "Intact"
+      "Length": 2.7335,
+      "Cost": 820.05,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 12,
@@ -264,52 +478,76 @@
       "MaterialId": "steel",
       "Length": 4.9554,
       "Cost": 1486.61,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 13,
       "StartNodeId": 5,
       "EndNodeId": 10,
       "MaterialId": "steel",
-      "Length": 4.0,
-      "Cost": 1200.0,
-      "DamageState": "Intact"
+      "Length": 4,
+      "Cost": 1200,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 14,
       "StartNodeId": 6,
       "EndNodeId": 11,
       "MaterialId": "steel",
-      "Length": 4.0,
-      "Cost": 1200.0,
-      "DamageState": "Intact"
+      "Length": 4,
+      "Cost": 1200,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 15,
       "StartNodeId": 7,
       "EndNodeId": 12,
       "MaterialId": "steel",
-      "Length": 4.0,
-      "Cost": 1200.0,
-      "DamageState": "Intact"
+      "Length": 4,
+      "Cost": 1200,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 16,
       "StartNodeId": 8,
       "EndNodeId": 13,
       "MaterialId": "steel",
-      "Length": 4.0,
-      "Cost": 1200.0,
-      "DamageState": "Intact"
+      "Length": 4,
+      "Cost": 1200,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 17,
       "StartNodeId": 9,
       "EndNodeId": 14,
       "MaterialId": "steel",
-      "Length": 4.0,
-      "Cost": 1200.0,
-      "DamageState": "Intact"
+      "Length": 4,
+      "Cost": 1200,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 18,
@@ -318,7 +556,11 @@
       "MaterialId": "steel",
       "Length": 4.9554,
       "Cost": 1486.61,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 19,
@@ -327,25 +569,37 @@
       "MaterialId": "steel",
       "Length": 4.9554,
       "Cost": 1486.61,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 20,
       "StartNodeId": 13,
-      "EndNodeId": 7,
+      "EndNodeId": 16,
       "MaterialId": "steel",
-      "Length": 5.467,
-      "Cost": 1640.11,
-      "DamageState": "Intact"
+      "Length": 2.7335,
+      "Cost": 820.05,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 21,
       "StartNodeId": 14,
-      "EndNodeId": 8,
+      "EndNodeId": 17,
       "MaterialId": "steel",
-      "Length": 5.4672,
-      "Cost": 1640.15,
-      "DamageState": "Intact"
+      "Length": 2.7336,
+      "Cost": 820.08,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 22,
@@ -354,7 +608,11 @@
       "MaterialId": "steel",
       "Length": 4.714,
       "Cost": 1414.2,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     },
     {
       "Id": 23,
@@ -363,10 +621,65 @@
       "MaterialId": "steel",
       "Length": 4.2687,
       "Cost": 1280.62,
-      "DamageState": "Intact"
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
+    },
+    {
+      "Id": 24,
+      "StartNodeId": 15,
+      "EndNodeId": 10,
+      "MaterialId": "steel",
+      "Length": 2.7335,
+      "Cost": 820.05,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
+    },
+    {
+      "Id": 25,
+      "StartNodeId": 16,
+      "EndNodeId": 7,
+      "MaterialId": "steel",
+      "Length": 2.7335,
+      "Cost": 820.05,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
+    },
+    {
+      "Id": 26,
+      "StartNodeId": 17,
+      "EndNodeId": 8,
+      "MaterialId": "steel",
+      "Length": 2.7336,
+      "Cost": 820.08,
+      "DamageState": "Intact",
+      "Existing": false,
+      "Condition": 1,
+      "Stroke": null,
+      "CostStroke": null
     }
   ],
-  "NextNodeId": 15,
-  "NextMemberId": 24,
-  "SavedTotalCost": 27119.94
+  "NextNodeId": 18,
+  "NextMemberId": 27,
+  "SavedTotalCost": 27119.930000000004,
+  "DemolishedCount": 0,
+  "DemolitionCost": 0,
+  "RepairCost": 0,
+  "Mechanisms": {
+    "Leaves": [],
+    "Locks": [],
+    "Linkage": {
+      "Duration": 4,
+      "Drivers": []
+    },
+    "NextId": 1
+  }
 }

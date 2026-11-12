@@ -6,3 +6,6 @@ obj/
 *.old
 .vs/
 export/
+Media/
+.hydraulic-fix-backups/
+work/

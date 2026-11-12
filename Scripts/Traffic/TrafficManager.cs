@@ -38,6 +38,31 @@ namespace BridgeArchitect3D.Traffic
 
         public void Init(BridgeRenderer renderer) { _renderer = renderer; }
 
+        // Building a procedural vehicle model takes tens of milliseconds, which used to stall the frame in which
+        // the vehicle entered. Each vehicle type is now built once (ideally while the level loads, see Prewarm)
+        // and later vehicles copy it; the copies share meshes and materials.
+        private readonly Dictionary<string, VehicleController> _templates = new();
+
+        private VehicleController Template(VehicleDefinition def)
+        {
+            if (!_templates.TryGetValue(def.Id, out var t))
+            {
+                t = new VehicleController();
+                t.Setup(def);
+                _templates[def.Id] = t;
+            }
+            return t;
+        }
+
+        /// <summary>Builds the vehicle models of a level up front so no vehicle is built during a test.</summary>
+        public void Prewarm(IEnumerable<VehicleDefinition> defs) { foreach (var d in defs) Template(d); }
+
+        public override void _ExitTree()
+        {
+            foreach (var t in _templates.Values) if (IsInstanceValid(t)) t.Free();
+            _templates.Clear();
+        }
+
         /// <summary>开始（或重新开始）测试。使用方案副本，不修改原始方案。</summary>
         public void Begin(BridgeDesign design, LevelDefinition level, GameDatabase db)
         {
@@ -51,7 +76,7 @@ namespace BridgeArchitect3D.Traffic
             Sim.Initialize();
             _util = new float[Sim.Model.MemberCount];
             _shipZ = new double[Sim.Ships.Count];
-            Paused = false; _acc = 0; _finishedRaised = false; _replayMode = ReplayMode.None;
+            Paused = false; _acc = 0; _finishedRaised = false; _replayMode = ReplayMode.None; _seeking = false;
             FlushBreaks();
             UpdateVisuals();
         }
@@ -63,7 +88,7 @@ namespace BridgeArchitect3D.Traffic
             foreach (var sh in _ships) sh.QueueFree();
             _ships.Clear();
             _vehicles.Clear();
-            _debris?.QueueFree(); _debris = null;
+            _debris?.QueueFree(); _debris = null; _floating.Clear();
             _pendingBreaks.Clear();
             Sim = null;
             _replayMode = ReplayMode.None;
@@ -72,6 +97,7 @@ namespace BridgeArchitect3D.Traffic
         public override void _Process(double delta)
         {
             if (Sim == null) return;
+            UpdateFloodDebris((float)delta);
             if (_replayMode != ReplayMode.None) { ProcessReplay(delta); return; }
             if (Sim.State == SimState.Running && !Paused)
             {
@@ -103,7 +129,8 @@ namespace BridgeArchitect3D.Traffic
             while (_pendingBreaks.Count > 0)
             {
                 var e = _pendingBreaks.Dequeue();
-                SpawnDebris(e.MemberId);
+                if (e.Mode == FailureReason.FloodScour && e.MemberId >= 0) SpawnFloodDebris(e.MemberId);
+                else SpawnDebris(e.MemberId);
                 MemberBrokenVisual?.Invoke(e);
             }
         }
@@ -115,7 +142,7 @@ namespace BridgeArchitect3D.Traffic
             for (int k = 0; k < m.MemberCount; k++) _util[k] = (float)Sim.Status[k].Utilization;
             for (int i = 0; i < Sim.Ships.Count && i < _shipZ.Length; i++)
                 _shipZ[i] = Sim.Ships[i].Spawned && !Sim.Ships[i].Done ? Sim.Ships[i].Z : double.NaN;
-            ApplyState(Sim.Output.Displacement, Sim.KinematicDisplacement, m.Broken, _util, Sim.Vehicles.Count, i => Sim.Vehicles[i].FrontS, i => !Sim.Vehicles[i].Finished, _shipZ);
+            ApplyState(Sim.DisplayDisplacement, Sim.KinematicDisplacement, m.Broken, _util, Sim.Vehicles.Count, i => Sim.Vehicles[i].FrontS, i => !Sim.Vehicles[i].Finished, _shipZ);
         }
 
         private double[] _display = Array.Empty<double>();
@@ -125,13 +152,9 @@ namespace BridgeArchitect3D.Traffic
         private void ApplyState(double[] disp, double[] kin, bool[] broken, float[] util, int vehicleCount, Func<int, double> frontS, Func<int, bool> active, double[] shipZ)
         {
             var m = Sim.Model;
-            // 显示位移 = 液压杆伸缩位移（真实比例）+ 弹性变形 × 放大系数
+            // Preserve true geometry for mechanisms; apply optional elastic magnification to static bridges.
             if (_display.Length != disp.Length) _display = new double[disp.Length];
-            for (int i = 0; i < disp.Length; i++)
-            {
-                double kv = kin != null && i < kin.Length ? kin[i] : 0;
-                _display[i] = kv + (disp[i] - kv) * DeformationScale;
-            }
+            Sim.ComposeDisplayFrame(disp, kin, DeformationScale, _display);
             disp = _display;
             _renderer.UpdateTransforms(m, disp, 1f);
             UpdateShips(shipZ);
@@ -141,7 +164,7 @@ namespace BridgeArchitect3D.Traffic
             {
                 var vc = new VehicleController();
                 AddChild(vc);
-                vc.Setup(Sim.Vehicles[_vehicles.Count].Def);
+                vc.SetupFrom(Template(Sim.Vehicles[_vehicles.Count].Def));
                 _vehicles.Add(vc);
             }
             for (int i = 0; i < _vehicles.Count; i++)
@@ -152,7 +175,8 @@ namespace BridgeArchitect3D.Traffic
                 if (!act) continue;
                 double s = frontS(i);
                 var path = Sim.Vehicles[i].Path ?? Sim.Path;
-                float off = BridgeRenderer.DeckSurfaceOffset;
+                // Trains ride on the rail heads, which stand RailTrack.Height above the road surface
+                float off = BridgeRenderer.DeckSurfaceOffset + (RailTrack.IsTrain(Sim.Vehicles[i].Def) ? (float)RailTrack.Height : 0);
                 var d2 = disp;
                 // 多节车辆（火车）与行人队伍：每一节 / 每个人分别沿路径摆放
                 vc.PlaceAlongPath(sv => { path.Evaluate(sv, d2, 1, out double x, out double y); return new Vector3((float)x, (float)y + off, 0); }, s);
@@ -166,7 +190,7 @@ namespace BridgeArchitect3D.Traffic
             {
                 var sc = new ShipController();
                 AddChild(sc);
-                sc.Setup(Sim.Ships[_ships.Count].Ev, Sim.Level.Terrain.WaterLevel);
+                sc.Setup(Sim.Ships[_ships.Count].Ev, Sim.Level.Terrain.WaterLevel, Sim.Level.Terrain.RiverWidth, Sim.Level.Terrain.RiverBedDepth);
                 _ships.Add(sc);
             }
             for (int i = 0; i < _ships.Count; i++)
@@ -181,6 +205,46 @@ namespace BridgeArchitect3D.Traffic
         {
             for (int i = 0; i < _vehicles.Count && i < Sim.Vehicles.Count; i++)
                 if (Sim.Vehicles[i].Fallen) _vehicles[i].StartFalling();
+                else if (Sim.Vehicles[i].Derailed) _vehicles[i].StartDerail();
+        }
+
+        // Washed-away pieces float up to the flood surface and drift downstream (+Z), slowly turning. Visual only.
+        private readonly List<(Node3D node, float spin, float age)> _floating = new();
+        private const float DriftSpeed = 2.5f, DriftLife = 22f;
+
+        private void SpawnFloodDebris(int memberId)
+        {
+            if (_debris == null) return;
+            int i = 0;
+            foreach (var (xf, mat) in _renderer.MemberParts(memberId))
+            {
+                var scale = xf.Basis.Scale;
+                var size = new Vector3(Mathf.Max(scale.X, 0.05f), Mathf.Max(scale.Y, 0.05f), Mathf.Max(scale.Z, 0.05f));
+                var node = new Node3D { Transform = new Transform3D(xf.Basis.Orthonormalized(), xf.Origin) };
+                node.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size }, MaterialOverride = mat });
+                _debris.AddChild(node);
+                _floating.Add((node, (i++ % 2 == 0 ? 0.35f : -0.25f), 0f));
+            }
+        }
+
+        private void UpdateFloodDebris(float dt)
+        {
+            if (_floating.Count == 0 || Sim == null) return;
+            float surface = (float)(Sim.Level.Terrain.WaterLevel + Sim.FloodRise);
+            for (int i = _floating.Count - 1; i >= 0; i--)
+            {
+                var (node, spin, age) = _floating[i];
+                age += dt;
+                if (!IsInstanceValid(node) || age > DriftLife) { if (IsInstanceValid(node)) node.QueueFree(); _floating.RemoveAt(i); continue; }
+                var p = node.Position;
+                // Rise to the surface, then float with the current; the piece tips over to lie flat on the water
+                p.Y = Mathf.Lerp(p.Y, surface, 1f - Mathf.Exp(-dt * 1.5f));
+                p.Z += DriftSpeed * Mathf.Min(1f, age / 1.5f) * dt;
+                node.Position = p;
+                var target = new Basis(Vector3.Up, spin * age) * new Basis(Vector3.Back, Mathf.Pi / 2);
+                node.Basis = node.Basis.Orthonormalized().Slerp(target.Orthonormalized(), 1f - Mathf.Exp(-dt * 0.8f));
+                _floating[i] = (node, spin, age);
+            }
         }
 
         private void SpawnDebris(int memberId)
@@ -214,21 +278,36 @@ namespace BridgeArchitect3D.Traffic
         public void StartReplay()
         {
             if (!CanReplay) return;
-            _replayMode = ReplayMode.Replay; _replayTime = 0;
+            _replayMode = ReplayMode.Replay; _replayTime = 0; _seeking = false;
             foreach (var v in _vehicles) v.ResetState();
         }
 
         public void ShowFailureSnapshot()
         {
             if (Sim?.FailureSnapshot == null || Sim.State != SimState.Failed) return;
-            _replayMode = ReplayMode.Snapshot;
+            _replayMode = ReplayMode.Snapshot; _seeking = false;
             foreach (var v in _vehicles) v.ResetState();
             ApplyFrame(Sim.FailureSnapshot);
         }
 
+        private bool _seeking; private double _seekTime;
+        public double TimelineEnd => Sim != null && Sim.TimelineCount > 0 ? Sim.GetTimelineFrame(Sim.TimelineCount - 1).Time : 0;
+
+        /// <summary>Shows the recorded state at a time (progress bar drag); the live test waits until "continue".</summary>
+        public void Seek(double time)
+        {
+            if (Sim == null || Sim.TimelineCount == 0) return;
+            int lo = 0, hi = Sim.TimelineCount - 1;
+            while (lo < hi) { int mid = (lo + hi + 1) / 2; if (Sim.GetTimelineFrame(mid).Time <= time) lo = mid; else hi = mid - 1; }
+            var f = Sim.GetTimelineFrame(lo);
+            if (_replayMode == ReplayMode.None) foreach (var v in _vehicles) v.ResetState();
+            _replayMode = ReplayMode.Snapshot; _seeking = true; _seekTime = f.Time;
+            ApplyFrame(f);
+        }
+
         public void StopReplay()
         {
-            _replayMode = ReplayMode.None;
+            _replayMode = ReplayMode.None; _seeking = false;
             UpdateVisuals();
         }
 
@@ -246,6 +325,6 @@ namespace BridgeArchitect3D.Traffic
             ApplyState(f.Displacement, f.Kinematic, f.Broken, f.Utilization, f.VehicleS.Length, i => f.VehicleS[i], i => f.VehicleActive[i], f.ShipZ);
         }
 
-        public double ReplayFrameTime => Sim != null && Sim.HistoryCount > 0 ? Sim.GetHistoryFrame(Math.Min((int)(_replayTime / 0.1), Sim.HistoryCount - 1)).Time : 0;
+        public double ReplayFrameTime => _seeking ? _seekTime : Sim != null && Sim.HistoryCount > 0 ? Sim.GetHistoryFrame(Math.Min((int)(_replayTime / 0.1), Sim.HistoryCount - 1)).Time : 0;
     }
 }

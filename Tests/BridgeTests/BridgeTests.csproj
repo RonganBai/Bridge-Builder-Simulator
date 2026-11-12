@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <!-- 独立的无界面验收测试：直接编译游戏中不依赖 Godot 的数据、建造规则与结构模拟代码 -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -8,11 +8,15 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Program.cs" />
+    <Compile Include="Program.cs" /><Compile Include="SuvTests.cs" /><Compile Include="HarborTests.cs" /><Compile Include="IndependentFrameTests.cs" /><Compile Include="LinkageTests.cs" /><Compile Include="MotionRegressionTests.cs" /><Compile Include="ShipRigidTests.cs" /><Compile Include="CoupledTests.cs" /><Compile Include="SceneJointTests.cs" /><Compile Include="CrossBeamFixtures.cs" />
     <Compile Include="../../Scripts/Data/**/*.cs" />
     <Compile Include="../../Scripts/Physics/**/*.cs" />
     <Compile Include="../../Scripts/Traffic/RoadPath.cs" />
     <Compile Include="../../Scripts/Traffic/TrafficEventSystem.cs" />
     <Compile Include="../../Scripts/Building/DesignEditor.cs" />
+    <Compile Include="../../Scripts/Building/IBridgeMechanism.cs" />
   </ItemGroup>
 </Project>
+
+
+

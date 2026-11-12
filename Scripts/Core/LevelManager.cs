@@ -27,14 +27,14 @@ namespace BridgeArchitect3D.Core
         private GameHUD _hud;
         private bool _testing;
         private double _propTimer;
-        private Node3D _decorations;
+        private Node3D _decorations, _overlays;
 
         public override void _Ready()
         {
             _gm = GameManager.Instance;
             if (_gm?.Db == null) { ShowFatal(_gm?.LoadError ?? "游戏数据未加载"); return; }
             _db = _gm.Db;
-            _level = _db.GetLevel(_gm.CurrentLevelId) ?? _db.Levels[0];
+            _level = _gm.ResolveLevel(_gm.CurrentLevelId) ?? _db.Levels[0];
 
             _decorations = TerrainBuilder.Build(this, _level);
             foreach (var a in _level.Anchors.Where(a => a.Enabled))
@@ -64,7 +64,7 @@ namespace BridgeArchitect3D.Core
             _camera.Sensitivity = (float)_gm.Settings.CameraSensitivity;
 
             var mm = new MaterialManager(_db);
-            _renderer = new BridgeRenderer { Name = "Bridge" };
+            _renderer = new BridgeRenderer { Name = "Bridge", Level = _level };
             AddChild(_renderer);
             _renderer.Init(mm);
 
@@ -82,7 +82,10 @@ namespace BridgeArchitect3D.Core
             AddChild(canvas);
             _hud = new GameHUD();
             canvas.AddChild(_hud);
-            _hud.Init(this, _level.Name, GoalText(), _level.AllowedMaterials.Select(id => _db.GetMaterial(id)).Where(x => x != null).ToList());
+            var levelVehicles = _level.TrafficEvents.Where(e => e.VehicleId != null).Select(e => e.VehicleId).Distinct()
+                .Select(id => _db.Vehicles.TryGetValue(id, out var v) ? v : null).Where(v => v != null).ToList();
+            _hud.Init(this, _level.Name, GoalText(), _level.AllowedMaterials.Select(id => _db.GetMaterial(id)).Where(x => x != null).ToList(),
+                _db.Materials.Values.ToList(), levelVehicles);
 
             _building = new BuildingManager { Name = "Building" };
             AddChild(_building);
@@ -97,6 +100,7 @@ namespace BridgeArchitect3D.Core
             _traffic = new TrafficManager { Name = "Traffic" };
             AddChild(_traffic);
             _traffic.Init(_renderer);
+            _traffic.Prewarm(levelVehicles);
             _traffic.DeformationScale = (float)_gm.Settings.DeformationScale;
             _traffic.Finished += OnTestFinished;
             _traffic.MemberBrokenVisual += e => _hud.ShowToast(e.Text, true);
@@ -174,18 +178,43 @@ namespace BridgeArchitect3D.Core
         {
             // 建造时的正交侧视隐藏远景装饰，减少干扰；3D 视角与测试时恢复
             if (_decorations != null && _camera != null) _decorations.Visible = _testing || !_camera.IsOrtho;
+            _overlays ??= FindChild(TerrainBuilder.OverlayName, true, false) as Node3D;
+            if (_overlays != null) _overlays.Visible = !_testing;
             UpdateFloodWater();
             if (_hud == null || !_testing || _traffic.Sim == null) return;
             var sim = _traffic.Sim;
+            // The status line is rebuilt 20 times a second (string building + label relayout every frame was waste)
+            _hudTimer -= delta;
+            if (_hudTimer <= 0) { _hudTimer = 0.05; UpdateTestHud(sim); }
+
+            _propTimer -= delta;
+            if (_propTimer <= 0 && _traffic.SelectedMember >= 0)
+            {
+                _propTimer = 0.1;
+                var m = _traffic.Sim.Design.FindMember(_traffic.SelectedMember);
+                if (m != null) _hud.ShowProperties(GameHUD.MemberProperties(m, _db, sim.Model, sim.Status, sim.Output.Stable || sim.State != SimState.Failed, $"测试工况 t={sim.Time:0.0}s"));
+            }
+        }
+
+        private double _hudTimer;
+
+        private void UpdateTestHud(BridgeSimulation sim)
+        {
             string vehicles = string.Join("、", sim.Vehicles.Where(v => !v.Finished).Select(v => v.Def.Name));
             if (string.IsNullOrEmpty(vehicles)) vehicles = "—";
             vehicles += $"（已通过 {sim.FinishedVehicles}/{sim.TotalVehicles}）";
+            if (sim.Vehicles.Any(v => v.WaitingForBridge && !v.Finished)) vehicles += " · 开启桥动作中，车辆在活动桥面前停车等候";
             if (sim.Ships.Count > 0)
             {
                 var sailing = sim.Ships.Where(s => s.Spawned && !s.Done).Select(s => s.Ev.Name).ToList();
                 vehicles += $"  船只 {sim.Ships.Count(s => s.Done)}/{sim.Ships.Count}" + (sailing.Count > 0 ? $"（{string.Join("、", sailing)}航行中）" : "");
+                if (sim.Ships.Any(s => s.Waiting)) vehicles += " · 船只等候开桥";
                 if (sim.HydraulicFactor > 0) vehicles += $"  液压杆收缩 {sim.HydraulicFactor * 100:0}%";
             }
+            // Movable bridge state and faults (stroke / force / alignment / configuration)
+            if (sim.Bascule.Leaves.Count > 0) vehicles += "  " + sim.Bascule.StatusText;
+            if (sim.Bascule.Fault != null) vehicles += "  ⚠ " + sim.Bascule.Fault;
+            if (sim.Bascule.ConfigNote != null) vehicles += "  ⚠ " + sim.Bascule.ConfigNote;
             if (sim.FloodRise > 0.01) vehicles += $"  🌊 洪水 +{sim.FloodRise:0.0} m";
             string status; Color col;
             if (_traffic.IsReplaying) { status = $"回放中 t={_traffic.ReplayFrameTime:0.0}s（按“继续”退出回放）"; col = UiTheme.Warn; }
@@ -197,15 +226,8 @@ namespace BridgeArchitect3D.Core
                 status = $"{(u > 0.9 ? "接近极限" : "安全")}  当前最大利用率 {u * 100:0}%  断裂 {sim.BrokenCount}";
                 col = u > 0.9 ? UiTheme.Warn : UiTheme.Good;
             }
-            _hud.UpdateTest(sim.Progress, vehicles, status, col, _traffic.Paused || _traffic.IsReplaying, sim.Time);
-
-            _propTimer -= delta;
-            if (_propTimer <= 0 && _traffic.SelectedMember >= 0)
-            {
-                _propTimer = 0.1;
-                var m = _traffic.Sim.Design.FindMember(_traffic.SelectedMember);
-                if (m != null) _hud.ShowProperties(GameHUD.MemberProperties(m, _db, sim.Model, sim.Status, sim.Output.Stable || sim.State != SimState.Failed, $"测试工况 t={sim.Time:0.0}s"));
-            }
+            _hud.SetLoad(sim.CurrentMaxUtilization);
+            _hud.UpdateTest(sim.Progress, vehicles, status, col, _traffic.Paused || _traffic.IsReplaying, _traffic.IsReplaying ? _traffic.ReplayFrameTime : sim.Time, _traffic.TimelineEnd, sim.State is SimState.Succeeded or SimState.Failed);
         }
 
         public override void _UnhandledInput(InputEvent e)
@@ -245,9 +267,10 @@ namespace BridgeArchitect3D.Core
         private string StaticStatusText(out Color c)
         {
             var s = _building?.StaticSim;
-            if (s == null || s.Model == null || s.Model.MemberCount == 0) { c = UiTheme.Muted; return "尚未建造构件"; }
-            if (!s.Output.Stable) { c = UiTheme.Bad; return "自重下不稳定：" + s.Output.Message; }
+            if (s == null || s.Model == null || s.Model.MemberCount == 0) { c = UiTheme.Muted; _hud.SetLoad(0, false); return "尚未建造构件"; }
+            if (!s.Output.Stable) { c = UiTheme.Bad; _hud.SetLoad(1); return "自重下不稳定：" + s.Output.Message; }
             double u = s.CurrentMaxUtilization;
+            _hud.SetLoad(u);
             c = u > 1 ? UiTheme.Bad : u > 0.8 ? UiTheme.Warn : UiTheme.Good;
             return $"自重下稳定，最大利用率 {u * 100:0}%";
         }
@@ -263,12 +286,25 @@ namespace BridgeArchitect3D.Core
                 _hud.ShowProperties(GameHUD.MemberProperties(m, _db, stat?.Model, stat?.Status, stat?.Output.Stable ?? false, "自重工况（无车辆）"));
             else _hud.ShowProperties(null);
             var selMat = _building.SelectedMemberId >= 0 ? _db.GetMaterial(d.FindMember(_building.SelectedMemberId)?.MaterialId) : null;
-            _hud.SetResizeVisible(!_testing && selMat != null && selMat.Extendable);
             var selMem = _building.SelectedMemberId >= 0 ? d.FindMember(_building.SelectedMemberId) : null;
             bool canRepair = !_testing && selMem != null && selMem.Existing && selMem.Condition < 1 - 1e-9;
             _hud.SetRepair(canRepair, canRepair ? _editor.RepairCostOf(selMem) : 0);
             var selNode = _building.SelectedNodeId >= 0 ? d.FindNode(_building.SelectedNodeId) : null;
-            _hud.SetFoundationRow(!_testing && selNode != null && selNode.PierBase, selNode?.Foundation ?? FoundationType.None);
+            // Foundation buttons for any pier node or pier member (the base node sits on the riverbed, hard to pick)
+            BridgeNode pierBase = selNode != null ? _editor.PierBaseOf(selNode.Id)
+                : selMem != null && selMat?.IsPier == true ? (_editor.PierBaseOf(selMem.StartNodeId) ?? _editor.PierBaseOf(selMem.EndNodeId)) : null;
+            _pierBaseId = pierBase?.Id ?? -1;
+            _hud.SetFoundationRow(!_testing && pierBase != null, pierBase?.Foundation ?? FoundationType.None);
+            var mech = d.EnsureMechanisms();
+            bool isLock = selNode != null && mech.LockOf(selNode.Id) != null;
+            bool lockable = !_testing && selNode != null && !selNode.IsAnchor && !selNode.PierBase && !selNode.PierPart;
+            bool hyd = !_testing && selMat != null && selMat.Extendable;
+            bool isLeaf = selMem != null && mech.Leaves.Any(l => l.ActuatorMemberId == selMem.Id);
+            bool split = !_testing && selMem != null && selMat != null && !selMat.Extendable && !selMat.IsPier && !selMem.Existing;
+            var driver=mech.Linkage?.Drivers.FirstOrDefault(v=>v.MemberId==selMem?.Id);
+            _hud.SetMechanismRow(lockable, !_testing && isLock, hyd, isLeaf, split, (mech.Linkage?.Drivers.Count ?? 0)>0, driver!=null, driver?.Ratio ?? 0, !_testing && selNode?.IsRigidSplit==true);
+            if (hyd) { var hr = _editor.GetHydraulicRange(selMem.Id); _hud.SetHydraulicRange(hr.Valid, hr.BuiltLength, hr.MinPct, hr.MaxPct, hr.CurrentPct, hr.Leaf); }
+            else _hud.SetHydraulicRange(false, 1, 0, 0, 0, false);
             RefreshBudget();
         }
 
@@ -289,6 +325,23 @@ namespace BridgeArchitect3D.Core
         {
             if (SaveManager.SaveDesign(_editor.Design, out var err)) _hud.ShowToast("方案已保存", false);
             else _hud.ShowToast("保存失败：" + err, true);
+        }
+
+        public void SaveDesignAs(string name)
+        {
+            if (SaveManager.SaveNamedDesign(_editor.Design, name, out var err)) _hud.ShowToast($"方案“{name.Trim()}”已保存", false);
+            else _hud.ShowToast("保存失败：" + err, true);
+        }
+
+        public System.Collections.Generic.IReadOnlyList<string> NamedDesigns() => SaveManager.ListNamedDesigns(_level.Id);
+
+        public void LoadNamedDesign(string name)
+        {
+            if (_testing) return;
+            var d = SaveManager.LoadNamedDesign(_level.Id, name, out var err);
+            if (d == null) { _hud.ShowToast(err, true); return; }
+            _editor.ReplaceDesign(d);
+            _hud.ShowToast($"已加载方案“{name}”：{d.Members.Count} 根构件，已用 ${_editor.UsedCost:N0}（可撤销）", false);
         }
 
         public void LoadDesign()
@@ -342,13 +395,79 @@ namespace BridgeArchitect3D.Core
             BackToMenu();
         }
 
-        public void SelectTool(BuildTool tool, string materialId) { if (!_testing) _building.SetTool(tool, materialId); }
-        public void ResizeSelected(double delta) { if (!_testing) _building.ResizeSelected(delta); }
+        public void SelectTool(BuildTool tool, string materialId)
+        {
+            if (_testing) return;
+            // The delete button with a multi-selection deletes it directly (same as the X key)
+            if (tool == BuildTool.Delete && _building.MultiSelectionCount > 0) { _building.DeleteSelected(); _hud.SetTool(_building.Tool, _building.ToolMaterial); return; }
+            _building.SetTool(tool, materialId);
+        }
+
+        // Scrubbing only after the test has ended; a running test is never frozen by the bar
+        public void SeekTest(double time) { if (_testing && _traffic.Sim?.State is SimState.Succeeded or SimState.Failed) _traffic.Seek(time); }
         public void SetFoundationSelected(FoundationType type)
         {
-            if (_testing || _building.SelectedNodeId < 0) return;
-            var r = _editor.SetFoundation(_building.SelectedNodeId, type);
+            if (_testing || _pierBaseId < 0) return;
+            var r = _editor.SetFoundation(_pierBaseId, type);
             _hud.ShowToast(r.Ok ? (r.Message ?? "") : r.Message, !r.Ok);
+        }
+
+        private bool _strokeDragUndo;
+        private int _pierBaseId = -1;
+
+        private BuildResult CommitStroke(int mem, double pct)
+        {
+            bool undo = !_strokeDragUndo; _strokeDragUndo = false;
+            return _editor.SetHydraulicTarget(mem, pct, undo);
+        }
+
+        public void MechanismAction(string action)
+        {
+            if (_testing) return;
+            if (action.StartsWith("preview:"))
+            {
+                // Slider drag: update the design (and the yellow sleeve) live; one undo step for the whole drag
+                int pm = _building.SelectedMemberId;
+                if (pm >= 0 && double.TryParse(action.Substring(8), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double pv))
+                {
+                    _editor.SetHydraulicTarget(pm, pv / 100, !_strokeDragUndo);
+                    _strokeDragUndo = true;
+                }
+                return;
+            }
+            int node = _building.SelectedNodeId, mem = _building.SelectedMemberId;
+            var leaf = mem >= 0 ? _editor.Design.EnsureMechanisms().Leaves.FirstOrDefault(l => l.ActuatorMemberId == mem) : null;
+            BuildResult r = action switch
+            {
+                "lock" when node >= 0 => _editor.CreateDeckLock(node),
+                "unlock" when node >= 0 => _editor.RemoveDeckLock(node),
+                _ when mem >= 0 && action.StartsWith("target:") && double.TryParse(action.Substring(7), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double tp) => CommitStroke(mem, tp / 100),
+                _ when mem >= 0 && action.StartsWith("stroke:") && double.TryParse(action.Substring(7), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double pct) => _editor.SetHydraulicStroke(mem, pct / 100),
+                "retract" when mem >= 0 => _editor.SetHydraulicDirection(mem,false),
+                "extend" when mem >= 0 => _editor.SetHydraulicDirection(mem,true),
+                "describe" when mem >= 0 => BuildResult.Success(0, _editor.DescribeActuator(mem)),
+                "leaf" when mem >= 0 => _editor.SetLeafActuator(mem),
+                "unleaf" when mem >= 0 => _editor.RemoveLeaf(mem),
+                "split" when mem >= 0 => _editor.SplitMember(mem,false),
+                "rigidSplit" when mem >= 0 => _editor.SplitMember(mem,true),
+                "convertSplit" when node >= 0 => _editor.ConvertRigidToSplit(node),
+                _ => BuildResult.Fail("请先选中节点或构件"),
+            };
+            var targets=DiagnosticTargets.Parse(r.Message,mem);
+            _building.ShowDiagnostic(targets);
+            _hud.ShowToast(r.Message ?? "", !r.Ok, hasSceneTargets:_building.DiagnosticPositions.Any());
+        }
+
+        public void ClearDiagnostic() { _building.ClearDiagnostic(); }
+        public void LocateDiagnostic()
+        {
+            if(_testing) { LocateProblem(); return; }
+            var points=_building.DiagnosticPositions.ToList();
+            if(points.Count==0) return;
+            var lo=points.Aggregate((a,b)=>new Vector3(Mathf.Min(a.X,b.X),Mathf.Min(a.Y,b.Y),0));
+            var hi=points.Aggregate((a,b)=>new Vector3(Mathf.Max(a.X,b.X),Mathf.Max(a.Y,b.Y),0));
+            _camera.FrameDiagnostic((lo+hi)*0.5f,hi-lo);
+            _hud.SetViewButtons(true);
         }
 
         public void RepairSelected()
@@ -365,6 +484,16 @@ namespace BridgeArchitect3D.Core
         }
 
         public void DeleteSelected() { if (!_testing) _building.DeleteSelected(); }
+
+        /// <summary>Benchmark only: full reference design, 3D view, then run the traffic test.</summary>
+        public double BenchSimTime => _traffic?.Sim?.Time ?? -1;
+        public void BenchmarkStart()
+        {
+            var d = SaveManager.LoadReference(_level.Id);
+            if (d != null) _editor.ReplaceDesign(d);
+            SetView(false);
+            StartTest();
+        }
 
         public void StartTest()
         {

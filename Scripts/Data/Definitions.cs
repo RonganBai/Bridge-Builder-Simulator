@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace BridgeArchitect3D.Data
@@ -50,6 +50,10 @@ namespace BridgeArchitect3D.Data
         public bool Extendable { get; set; }
         /// <summary>船只通行时液压杆自动收缩的比例（相对原长），船通过后自动恢复。</summary>
         public double RetractRatio { get; set; }
+        /// <summary>Hydraulic: how far the actuator can extend beyond its built length (fraction of built length).</summary>
+        public double ExtendRatio { get; set; }
+        /// <summary>Hydraulic: maximum push / pull force of the actuator, N. The actuator stalls above it.</summary>
+        public double ActuatorForce { get; set; }
         /// <summary>说明文字（工具提示）。</summary>
         public string Description { get; set; }
         /// <summary>桥墩材料：用“桥墩工具”从河床立起，自动生成墩底基础、中部和顶部两个支点。</summary>
@@ -62,8 +66,14 @@ namespace BridgeArchitect3D.Data
         public double PrestressLoad { get; set; }
         /// <summary>外观：layered（层板纹理）、igirder（I 形梁）等，只影响显示。</summary>
         public string Look { get; set; }
+        /// <summary>Side-truss-only member (cable, hydraulic): its nodes need no cross beam over the road.</summary>
+        public bool SideOnly { get; set; }
 
         public bool IsColumn => ComponentType == ComponentType.Column;
+        /// <summary>Deck running surface: "road" (road vehicles only, default), "rail" (trains only) or "both".</summary>
+        public string Surface { get; set; } = "road";
+        public bool CarriesCars => IsDeck && Surface != "rail";
+        public bool CarriesTrains => IsDeck && Surface != "road";
 
         public bool IsDeck => ComponentType == ComponentType.Deck;
         public bool IsCable => ComponentType == ComponentType.Cable;
@@ -89,6 +99,20 @@ namespace BridgeArchitect3D.Data
         public double Offset { get; set; }
         /// <summary>该轴承担的整车质量比例。</summary>
         public double LoadFraction { get; set; }
+    }
+
+    /// <summary>Track geometry shared by the rail deck renderer, approach rails and the train model.</summary>
+    public static class RailTrack
+    {
+        public const double Gauge = 1.435;        // m between rail centres
+        public const double Height = 0.16;        // rail head above the deck surface, m
+        public const double Width = 0.08;
+        /// <summary>Derailment limits: elastic drop of the rail under a wheel, and vertical speed of a wheel.</summary>
+        public const double MaxSag = 0.12, MaxBounce = 0.25;
+
+        public static bool IsTrain(VehicleDefinition v) => v?.Kind == "train";
+        /// <summary>Trains run only on rail decks, every other vehicle only on road decks.</summary>
+        public static bool Allows(MaterialDefinition deck, VehicleDefinition v) => IsTrain(v) ? deck.CarriesTrains : deck.CarriesCars;
     }
 
     public class VehicleDefinition
@@ -118,7 +142,7 @@ namespace BridgeArchitect3D.Data
     {
         public string Id { get; set; }
         public Vec3d Position { get; set; }
-        /// <summary>最大允许支反力 N。</summary>
+        /// <summary>最大允许支反力 N；0 或负数表示无限（不检查过载）。</summary>
         public double MaxLoad { get; set; }
         public bool Enabled { get; set; } = true;
         public SupportType SupportType { get; set; } = SupportType.Pinned;
@@ -151,6 +175,26 @@ namespace BridgeArchitect3D.Data
         /// <summary>河床地基分区（软土 / 岩石，可带冲刷）。未覆盖的河床按 DefaultSoil 处理。</summary>
         public List<FoundationZone> FoundationZones { get; set; } = new();
         public string DefaultSoil { get; set; } = "rock";
+        /// <summary>Bank wall angle from horizontal, degrees (90 = vertical wall). The bank top edge stays at
+        /// x = 0 / x = RiverWidth; a sloped wall reaches into the river toward its toe at the bed.</summary>
+        public double BankSlopeDeg { get; set; } = 90;
+        /// <summary>False = dry gully: no water body (WaterLevel equals the bed).</summary>
+        public bool HasWater { get; set; } = true;
+
+        /// <summary>Horizontal run of a bank wall per metre of drop (0 for a vertical wall).</summary>
+        public double WallRun => BankSlopeDeg >= 89.999 ? 0 : 1.0 / Math.Tan(Math.Clamp(BankSlopeDeg, 10, 90) * Math.PI / 180);
+
+        /// <summary>Ground surface height at x inside the river span: bed, or the sloped bank wall where it is higher.</summary>
+        public double GroundYInRiver(double x)
+        {
+            double y = RiverBedDepth, run = WallRun;
+            if (run > 0)
+            {
+                y = Math.Max(y, LeftBankHeight - x / run);
+                y = Math.Max(y, RightBankHeight - (RiverWidth - x) / run);
+            }
+            return y;
+        }
 
         public FoundationZone ZoneAt(double x)
         {
@@ -211,6 +255,8 @@ namespace BridgeArchitect3D.Data
         /// <summary>航速 m/s。</summary>
         public double Speed { get; set; } = 4;
         public string Name { get; set; } = "货船";
+        /// <summary>Shared ship model and collision profile; legacy events remain cargo ships.</summary>
+        public string ShipKind { get; set; } = "cargo";
         // ---- 洪水事件参数（Type = Environment）：Height 为水位上涨高度，Duration 为持续时间 ----
         public double Duration { get; set; } = 10;
     }
@@ -261,6 +307,7 @@ namespace BridgeArchitect3D.Data
             const double eps = 0.05;
             if (x <= eps && y <= Terrain.LeftBankHeight + eps) return true;
             if (x >= Terrain.RiverWidth - eps && y <= Terrain.RightBankHeight + eps) return true;
+            if (Terrain.WallRun > 0 && x > 0 && x < Terrain.RiverWidth && y <= Terrain.GroundYInRiver(x) + eps) return true;
             foreach (var p in Terrain.Pillars)
                 if (Math.Abs(x - p.X) <= p.Width / 2 + eps && y <= p.TopY + eps) return true;
             return false;
@@ -272,6 +319,7 @@ namespace BridgeArchitect3D.Data
             const double eps = 0.01;
             if (x < -eps && y < Terrain.LeftBankHeight - eps) return true;
             if (x > Terrain.RiverWidth + eps && y < Terrain.RightBankHeight - eps) return true;
+            if (Terrain.WallRun > 0 && x > 0 && x < Terrain.RiverWidth && y < Terrain.GroundYInRiver(x) - eps && y > Terrain.RiverBedDepth + eps) return true;
             foreach (var p in Terrain.Pillars)
                 if (x > p.X - p.Width / 2 + eps && x < p.X + p.Width / 2 - eps && y < p.TopY - eps) return true;
             return false;
