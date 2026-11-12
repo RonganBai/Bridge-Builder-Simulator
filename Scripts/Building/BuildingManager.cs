@@ -196,7 +196,7 @@ namespace BridgeArchitect3D.Building
                 targets.Kind==MechanismDiagnosticKind.ConstraintConflict ? new Color(1,0.2f,0.15f) : new Color(1,0.65f,0.1f);
             foreach(int id in targets.Members)
                 Member(id,targets.BlockingMembers.Contains(id)?new Color(1,0.2f,0.15f):affectedColor,
-                    targets.BlockingMembers.Contains(id)?"阻挡支撑":"涉及构件");
+                    targets.BlockingMembers.Contains(id)?Loc.T("阻挡支撑"):Loc.T("涉及构件"));
             foreach(int id in targets.Nodes)
             {
                 var node=Editor.Design.FindNode(id);if(node==null) continue;
@@ -206,7 +206,7 @@ namespace BridgeArchitect3D.Building
                     _diagnosticOverlay.AddChild(new MeshInstance3D {Mesh=new SphereMesh {Radius=0.33f,Height=0.66f},MaterialOverride=material,Position=point+new Vector3(0,0,side)});
 
             }
-            Member(targets.SourceMember,new Color(0.1f,0.95f,1),"当前液压杆");
+            Member(targets.SourceMember,new Color(0.1f,0.95f,1),Loc.T("当前液压杆"));
         }
 
         // ---------------- 多选 / 框选 ----------------
@@ -240,7 +240,7 @@ namespace BridgeArchitect3D.Building
             SelectedNodeId = -1; SelectedMemberId = -1;
             Recolor(); SelectionChanged?.Invoke();
             if (MultiSelectionCount > 0)
-                Message?.Invoke($"已框选 {SelMembers.Count} 根构件、{SelNodes.Count} 个节点，点击“删除所选”或按 Delete 删除", false);
+                Message?.Invoke(Loc.F("已框选 {0} 根构件、{1} 个节点，点击“删除所选”或按 Delete 删除", (SelMembers.Count), (SelNodes.Count)), false);
         }
 
         /// <summary>用鼠标射线拾取：优先节点，其次构件实体。</summary>
@@ -274,13 +274,13 @@ namespace BridgeArchitect3D.Building
                 if (rb.DoubleClick && (Tool == BuildTool.Build || Tool == BuildTool.Delete))
                 {
                     SetTool(BuildTool.Select);
-                    Message?.Invoke("已回到选择 / 拖动模式", false);
+                    Message?.Invoke(Loc.T("已回到选择 / 拖动模式"), false);
                 }
             }
             else if (e is InputEventKey k && k.Pressed && !k.Echo)
             {
-                if (k.CtrlPressed && k.Keycode == Key.Z) { if (Editor.Undo()) Message?.Invoke("已撤销", false); }
-                else if (k.CtrlPressed && (k.Keycode == Key.Y || (k.ShiftPressed && k.Keycode == Key.Z))) { if (Editor.Redo()) Message?.Invoke("已重做", false); }
+                if (k.CtrlPressed && k.Keycode == Key.Z) { if (Editor.Undo()) Message?.Invoke(Loc.T("已撤销"), false); }
+                else if (k.CtrlPressed && (k.Keycode == Key.Y || (k.ShiftPressed && k.Keycode == Key.Z))) { if (Editor.Redo()) Message?.Invoke(Loc.T("已重做"), false); }
                 else if (k.Keycode == Key.Escape) { CancelChain(); ClearSelection(); }
                 else if (k.Keycode == Key.Delete || k.Keycode == Key.Backspace) DeleteSelected();
                 else if (k.Keycode == Key.X)
@@ -354,7 +354,7 @@ namespace BridgeArchitect3D.Building
                 ok = reason == null;
                 _cursor.Visible = true; _cursor.MaterialOverride = ok ? _mm.PreviewOk : _mm.PreviewBad;
                 _cursor.Position = new Vector3(snapped.X, snapped.Y, BuildPlane.FrontZ);
-                text = ok ? $"移动到 ({snapped.X:0.00}, {snapped.Y:0.00})" : reason;
+                text = ok ? Loc.F("移动到 ({0:0.00}, {1:0.00})", (snapped.X), (snapped.Y)) : reason;
             }
             else if (mat != null && Editor.Db.GetMaterial(mat).IsPier)
             {
@@ -365,7 +365,7 @@ namespace BridgeArchitect3D.Building
                 _cursor.Visible = true; _cursor.MaterialOverride = ok ? _mm.PreviewOk : _mm.PreviewBad;
                 _cursor.Position = new Vector3((float)px, (float)py, BuildPlane.FrontZ);
                 var zone = Editor.Level.Terrain.ZoneAt(px);
-                text = ok ? $"桥墩 高 {ph:0.0} m · ${pc:0}（{zone.Name}，浅基础）" + (sn != null ? "\n墩顶直接顶住这个节点" : "") : $"✗ {why}";
+                text = ok ? Loc.F("桥墩 高 {0:0.0} m · ${1:0}（{2}，浅基础）", (ph), (pc), (zone.Name)) + (sn != null ? Loc.T("\n墩顶直接顶住这个节点") : "") : $"✗ {why}";
             }
             else if (mat != null && _chainStart >= 0)
             {
@@ -386,10 +386,10 @@ namespace BridgeArchitect3D.Building
                 if (Editor.Db.GetMaterial(mat).IsDeck && Math.Abs(b.X - a.X) > 0.05)
                 {
                     double sl = Math.Abs((b.Y - a.Y) / (b.X - a.X)), lim = Editor.Level.Objectives.MaxDeckSlope;
-                    slopeTxt = $" · 坡度 {sl * 100:0}%" + (sl > lim * 2 + 0.005 ? "（太陡，车辆爬不上去）" : sl > lim + 0.005 ? $"（超过建议 {lim * 100:0}%，车辆会减速）" : "");
+                    slopeTxt = Loc.F(" · 坡度 {0:0}%", (sl * 100)) + (sl > lim * 2 + 0.005 ? Loc.T("（太陡，车辆爬不上去）") : sl > lim + 0.005 ? Loc.F("（超过建议 {0:0}%，车辆会减速）", (lim * 100)) : "");
                 }
                 text = ok ? $"{pv.Length:0.0} m · ${pv.Cost:0}" + slopeTxt
-                            + (pv.Cost > Editor.Remaining + 1e-6 ? " · 将超预算" : "")
+                            + (pv.Cost > Editor.Remaining + 1e-6 ? Loc.T(" · 将超预算") : "")
                             + (pv.Warning != null ? $"\n⚠ {pv.Warning}" : "")
                           : $"✗ {pv.Reason}";
             }
@@ -399,7 +399,7 @@ namespace BridgeArchitect3D.Building
                 ok = sn != null;
                 _cursor.Visible = true; _cursor.MaterialOverride = ok ? _mm.PreviewOk : _mm.PreviewBad;
                 _cursor.Position = new Vector3(snapped.X, snapped.Y, BuildPlane.FrontZ);
-                text = ok ? $"起点：节点 #{sn.Id}" : "请从已有节点（锚点或已建节点）开始建造";
+                text = ok ? Loc.F("起点：节点 #{0}", (sn.Id)) : Loc.T("请从已有节点（锚点或已建节点）开始建造");
             }
             Preview?.Invoke(text, _lastMouse, ok);
             if (oldN != _hoverNode || oldM != _hoverMember) Recolor();
@@ -436,11 +436,11 @@ namespace BridgeArchitect3D.Building
                 {
                     // 直接点击构件 / 节点实体即删除；点在空白处拖动可框选
                     PickAtMouse(out int nid, out int mid);
-                    if (nid >= 0) { Report(Editor.DeleteNode(nid), "已删除节点及其相连构件"); break; }
+                    if (nid >= 0) { Report(Editor.DeleteNode(nid), Loc.T("已删除节点及其相连构件")); break; }
                     if (mid >= 0)
                     {
                         var m = Editor.Design.FindMember(mid);
-                        Report(Editor.DeleteMember(mid), $"已删除构件，退还 ${m?.EffectiveCost() ?? 0:0}");
+                        Report(Editor.DeleteMember(mid), Loc.F("已删除构件，退还 ${0:0}", (m?.EffectiveCost() ?? 0)));
                         break;
                     }
                     SelNodes.Clear(); SelMembers.Clear();
@@ -478,7 +478,7 @@ namespace BridgeArchitect3D.Building
             if (_pressTime >= LongPressTime || _lastMouse.DistanceTo(_pressMouse) > DragStartPixels)
             {
                 _dragNode = _pressNode; _pressNode = -1;
-                Message?.Invoke("拖动节点：松开左键放下（连接的构件会自动更新长度和费用）", false);
+                Message?.Invoke(Loc.T("拖动节点：松开左键放下（连接的构件会自动更新长度和费用）"), false);
                 UpdateHover();
             }
         }
@@ -490,7 +490,7 @@ namespace BridgeArchitect3D.Building
             {
                 double px = sn != null ? sn.Position.X : snapped.X, py = sn != null ? sn.Position.Y : snapped.Y;
                 var pr = Editor.AddPier(px, py, mat);
-                Message?.Invoke(pr.Ok ? pr.Message + "。选中墩底节点可改为桩基础" : pr.Message, !pr.Ok);
+                Message?.Invoke(pr.Ok ? pr.Message + Loc.T("。选中墩底节点可改为桩基础") : pr.Message, !pr.Ok);
                 return;
             }
             {
@@ -498,7 +498,7 @@ namespace BridgeArchitect3D.Building
                     if (_chainStart < 0)
                     {
                         // 选择起点：只能是已有节点（不允许凭空创建孤立节点）
-                        if (sn == null) { Message?.Invoke("构件必须从已有节点（锚点或已建节点）开始", true); return; }
+                        if (sn == null) { Message?.Invoke(Loc.T("构件必须从已有节点（锚点或已建节点）开始"), true); return; }
                         _chainStart = sn.Id;
                         Recolor();
                     }
@@ -522,7 +522,7 @@ namespace BridgeArchitect3D.Building
                             _chainStart = endNode;
                             var built = Editor.Design.FindMember(r.CreatedId);
                             var w = built == null ? null : Editor.PreviewMember(built.StartNodeId, built.EndNodeId, built.MaterialId).Warning;
-                            Message?.Invoke(w != null ? $"已建造 {Editor.Db.GetMaterial(mat).Name}，注意：{w}" : $"已建造 {Editor.Db.GetMaterial(mat).Name}", w != null);
+                            Message?.Invoke(w != null ? Loc.F("已建造 {0}，注意：{1}", (Editor.Db.GetMaterial(mat).Name), (w)) : Loc.F("已建造 {0}", (Editor.Db.GetMaterial(mat).Name)), w != null);
                             Recolor();
                         }
                         else Message?.Invoke(r.Message, true);
@@ -553,7 +553,7 @@ namespace BridgeArchitect3D.Building
                 if (node != null && (Math.Abs(node.Position.X - snapped.X) > 1e-3 || Math.Abs(node.Position.Y - snapped.Y) > 1e-3))
                 {
                     var r = Editor.MoveNode(id, snapped.X, snapped.Y);
-                    Report(r, "节点已移动，构件长度与费用已更新");
+                    Report(r, Loc.T("节点已移动，构件长度与费用已更新"));
                 }
             }
             UpdateHover();
@@ -563,7 +563,7 @@ namespace BridgeArchitect3D.Building
         public void ResizeSelected(double delta)
         {
             if (SelectedMemberId < 0) return;
-            Report(Editor.ResizeMember(SelectedMemberId, delta), delta > 0 ? "液压杆已伸长" : "液压杆已缩短");
+            Report(Editor.ResizeMember(SelectedMemberId, delta), delta > 0 ? Loc.T("液压杆已伸长") : Loc.T("液压杆已缩短"));
         }
 
         public void DeleteSelected()
@@ -575,8 +575,8 @@ namespace BridgeArchitect3D.Building
                 Report(r, r.Message);
                 return;
             }
-            if (SelectedMemberId >= 0) Report(Editor.DeleteMember(SelectedMemberId), "已删除构件");
-            else if (SelectedNodeId >= 0) Report(Editor.DeleteNode(SelectedNodeId), "已删除节点");
+            if (SelectedMemberId >= 0) Report(Editor.DeleteMember(SelectedMemberId), Loc.T("已删除构件"));
+            else if (SelectedNodeId >= 0) Report(Editor.DeleteNode(SelectedNodeId), Loc.T("已删除节点"));
         }
 
         private void CancelChain()

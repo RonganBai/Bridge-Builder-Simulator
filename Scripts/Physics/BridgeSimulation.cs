@@ -255,7 +255,7 @@ namespace BridgeArchitect3D.Physics
                         double lo = Math.Min(Model.Y[Model.A[k]], Model.Y[Model.B[k]]), hi = Math.Max(Model.Y[Model.A[k]], Model.Y[Model.B[k]]);
                         if (lo > floodY) continue;
                         if (waterNow < Math.Min(hi, floodY) - 1e-9) continue;
-                        string text = $"构件 #{Model.MemberIds[k]}（{Model.Mat[k].Name}）被洪水冲毁";
+                        string text = Loc.F("构件 #{0}（{1}）被洪水冲毁", (Model.MemberIds[k]), (Model.Mat[k].Name));
                         if (_pendingBreakText == null && _issueReason == FailureReason.None) { _pendingBreakText = text; _pendingBreakMode = FailureReason.FloodScour; _pendingBreakId = Model.MemberIds[k]; }
                         RemoveMember(k, FailureReason.FloodScour, text, countsAsBreak: false);
                     }
@@ -267,7 +267,7 @@ namespace BridgeArchitect3D.Physics
                     {
                         if (!Model.ScourZone[i] || Model.PierFoundation[i] != FoundationType.Shallow) continue;
                         Model.FixX[i] = false; Model.FixY[i] = false; Model.FixRot[i] = false; Model.AnchorMaxLoad[i] = 0;
-                        string text = $"冲刷掏空了{Model.AnchorIds[i]}，桥墩失去支撑";
+                        string text = Loc.F("冲刷掏空了{0}，桥墩失去支撑", (Model.AnchorIds[i]));
                         if (_pendingBreakText == null && _issueReason == FailureReason.None) { _pendingBreakText = text; _pendingBreakMode = FailureReason.FloodScour; _pendingBreakId = -1; }
                         var ev = new StructureEvent { Time = Time, MemberId = -1, Mode = FailureReason.FloodScour, Text = text };
                         Events.Add(ev); MemberBroken?.Invoke(ev);
@@ -327,13 +327,13 @@ namespace BridgeArchitect3D.Physics
                 if (reason != FailureReason.None) RecordIssue(reason, err, involved);
             }
             Path = Paths.FirstOrDefault();
-            if (Path == null) { Fail(FailureReason.RoadNotConnected, "关卡缺少道路锚点", null); return; }
+            if (Path == null) { Fail(FailureReason.RoadNotConnected, Loc.T("关卡缺少道路锚点"), null); return; }
 
             // 倾角过大的立柱在测试开始时倒塌
             foreach (int k in Model.TiltCollapsed)
             {
                 var a = Design.FindNode(Model.NodeIds[Model.A[k]]); var b = Design.FindNode(Model.NodeIds[Model.B[k]]);
-                string text = $"构件 #{Model.MemberIds[k]}（{Model.Mat[k].Name}）倾角 {ColumnRules.TiltDegrees(a.Position, b.Position):0}° 超过 {Model.Mat[k].MaxTiltDegrees:0}°，倒塌";
+                string text = Loc.F("构件 #{0}（{1}）倾角 {2:0}° 超过 {3:0}°，倒塌", (Model.MemberIds[k]), (Model.Mat[k].Name), (ColumnRules.TiltDegrees(a.Position, b.Position)), (Model.Mat[k].MaxTiltDegrees));
                 Model.Broken[k] = false;   // 交给 RemoveMember 统一记录
                 if (_pendingBreakText == null) { _pendingBreakText = text; _pendingBreakMode = FailureReason.StructureUnstable; _pendingBreakId = Model.MemberIds[k]; }
                 RemoveMember(k, FailureReason.StructureUnstable, text, countsAsBreak: false);
@@ -342,7 +342,7 @@ namespace BridgeArchitect3D.Physics
             // Movable bridge: leaves, pivots and deck locks come from the saved mechanism data.
             Bascule.Initialize(Paths);
             if (Bascule.Errors.Count > 0)
-                Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = "开启桥设置有误，桥保持闭合：" + string.Join("；", Bascule.Errors) });
+                Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = Loc.T("开启桥设置有误，桥保持闭合：") + string.Join(Loc.T("；"), Bascule.Errors) });
             Bascule.ApplyGeometry(_mechKin);
             if (Bascule.Active)
             {
@@ -355,12 +355,12 @@ namespace BridgeArchitect3D.Physics
                 Bascule.TrialRelease(false);
                 if (!stable)
                 {
-                    Bascule.Disable($"解除接缝后结构不稳定（节点 #{Math.Abs(Output.UnstableNodeId)} 附近缺少约束），开启桥不会动作。请让每片桥叶只通过一个转轴节点连着岸上结构，并用液压杆从固定结构拉住桥叶");
-                    Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = "开启桥设置有误，桥保持闭合：" + Bascule.Fault });
+                    Bascule.Disable(Loc.F("解除接缝后结构不稳定（节点 #{0} 附近缺少约束），开启桥不会动作。请让每片桥叶只通过一个转轴节点连着岸上结构，并用液压杆从固定结构拉住桥叶", (Math.Abs(Output.UnstableNodeId))));
+                    Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = Loc.T("开启桥设置有误，桥保持闭合：") + Bascule.Fault });
                 }
             }
             if (Ships.Count > 0 && !Bascule.Active && Bascule.Linkage == null && Bascule.Plan.Hint() is { } hint)
-                Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = "提示：" + hint });
+                Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = Loc.T("提示：") + hint });
             SolveAndCheck();   // t=0：仅自重（不稳定的部分会在这里垮塌）
             RecordFrame(true);
         }
@@ -379,13 +379,13 @@ namespace BridgeArchitect3D.Physics
             {
                 // 根因是之前的构件断裂，当前问题是其后果
                 _issueReason = _pendingBreakMode;
-                _issueText = $"{_pendingBreakText}，随后{text}（t={Time:0.00}s）";
+                _issueText = Loc.F("{0}，随后{1}（t={2:0.00}s）", (_pendingBreakText), (text), (Time));
                 if (_pendingBreakId >= 0) _issueMembers.Add(_pendingBreakId);
             }
             else
             {
                 _issueReason = reason;
-                _issueText = $"{text}（t={Time:0.00}s）";
+                _issueText = Loc.F("{0}（t={1:0.00}s）", (text), (Time));
             }
             if (members != null) foreach (var id in members) if (!_issueMembers.Contains(id)) _issueMembers.Add(id);
             Result.FailureTime = Time;
@@ -397,7 +397,7 @@ namespace BridgeArchitect3D.Physics
             v.Fallen = true; _failVehicle = v;
             double t = Time;
             if (_issueReason == FailureReason.None) RecordIssue(FailureReason.VehicleBlocked, $"{v.Def.Name}{where}", null);
-            Fail(_issueReason, $"{_issueText}\n结果：{v.Def.Name} 在 t={t:0.00}s {where}，坠落", _issueMembers, FailureReason.VehicleBlocked);
+            Fail(_issueReason, Loc.F("{0}\n结果：{1} 在 t={2:0.00}s {3}，坠落", (_issueText), (v.Def.Name), (t), (where)), _issueMembers, FailureReason.VehicleBlocked);
             Result.FailureTime = t;
         }
 
@@ -510,8 +510,8 @@ namespace BridgeArchitect3D.Physics
                     {
                         _failVehicle = v;
                         string why = RailTrack.IsTrain(v.Def)
-                            ? $"{v.Def.Name}只能在铁轨上行驶：桥面 #{Model.MemberIds[dk]}（{Model.Mat[dk].Name}）没有铁轨，请改用铁轨桥面或铁轨公路复合桥面"
-                            : $"{v.Def.Name}只能在公路路面上行驶：桥面 #{Model.MemberIds[dk]}（{Model.Mat[dk].Name}）是铁路专用，请改用公路桥面或铁轨公路复合桥面";
+                            ? Loc.F("{0}只能在铁轨上行驶：桥面 #{1}（{2}）没有铁轨，请改用铁轨桥面或铁轨公路复合桥面", (v.Def.Name), (Model.MemberIds[dk]), (Model.Mat[dk].Name))
+                            : Loc.F("{0}只能在公路路面上行驶：桥面 #{1}（{2}）是铁路专用，请改用公路桥面或铁轨公路复合桥面", (v.Def.Name), (Model.MemberIds[dk]), (Model.Mat[dk].Name));
                         Fail(FailureReason.WrongSurface, why, new List<int> { Model.MemberIds[dk] });
                         return;
                     }
@@ -519,7 +519,7 @@ namespace BridgeArchitect3D.Physics
                 if (HitsCrossBeam(v, v.FrontS, next, out int beam, out double beamClear))
                 {
                     _failVehicle = v;
-                    Fail(FailureReason.VehicleBlocked, $"{v.Def.Name}（高 {v.Def.Height:0.0} m）撞上构件 #{beam} 的横梁：横梁离路面只有 {beamClear:0.0} m（普通构件 ≥ {CrossBeams.MinLength:0} m 在中点加横梁，柱每 {CrossBeams.ColumnSpacing:0} m 加一根横杆），请缩短这根构件或把它移出车辆通行高度", new List<int> { beam });
+                    Fail(FailureReason.VehicleBlocked, Loc.F("{0}（高 {1:0.0} m）撞上构件 #{2} 的横梁：横梁离路面只有 {3:0.0} m（普通构件 ≥ {4:0} m 在中点加横梁，柱每 {5:0} m 加一根横杆），请缩短这根构件或把它移出车辆通行高度", (v.Def.Name), (v.Def.Height), (beam), (beamClear), (CrossBeams.MinLength), (CrossBeams.ColumnSpacing)), new List<int> { beam });
                     return;
                 }
                 v.FrontS = next;
@@ -531,8 +531,8 @@ namespace BridgeArchitect3D.Physics
                     if (v.StuckTime >= StuckLimit)
                     {
                         _failVehicle = v;
-                        if (_issueReason == FailureReason.None) RecordIssue(FailureReason.VehicleBlocked, $"{v.Def.Name}无法继续行驶", null);
-                        Fail(_issueReason, $"{_issueText}\n结果：{v.Def.Name} 在 X={Path.PointX[^1]:0.0} m 处被卡住 {StuckLimit:0} 秒，无法到达出口", _issueMembers, FailureReason.VehicleBlocked);
+                        if (_issueReason == FailureReason.None) RecordIssue(FailureReason.VehicleBlocked, Loc.F("{0}无法继续行驶", (v.Def.Name)), null);
+                        Fail(_issueReason, Loc.F("{0}\n结果：{1} 在 X={2:0.0} m 处被卡住 {3:0} 秒，无法到达出口", (_issueText), (v.Def.Name), (Path.PointX[^1]), (StuckLimit)), _issueMembers, FailureReason.VehicleBlocked);
                         return;
                     }
                 }
@@ -563,11 +563,11 @@ namespace BridgeArchitect3D.Physics
                 && Ships.All(s => s.Done) && HydraulicFactor <= 0 && Bascule.ClosedAndLocked)
             {
                 // 车辆都通过了，但期间出现过致命结构问题（如桥面下沉超限）时仍判定失败
-                if (HasFatalIssue) Fail(_issueReason, _issueText + "\n车辆虽已通过，但结构出现了致命问题", _issueMembers);
+                if (HasFatalIssue) Fail(_issueReason, _issueText + Loc.T("\n车辆虽已通过，但结构出现了致命问题"), _issueMembers);
                 else Succeed();
             }
-            else if (Time > MaxTestTime) Fail(FailureReason.VehicleBlocked, "测试超时，车辆或船只未能通过" +
-                (Bascule.Fault == null ? "" : "\n开启桥：" + Bascule.Fault), null);
+            else if (Time > MaxTestTime) Fail(FailureReason.VehicleBlocked, Loc.T("测试超时，车辆或船只未能通过") +
+                (Bascule.Fault == null ? "" : Loc.T("\n开启桥：") + Bascule.Fault), null);
         }
 
         /// <summary>收集所有车轴荷载。若车轴位于路径的桥面段，则把荷载交给对应构件。</summary>
@@ -597,7 +597,7 @@ namespace BridgeArchitect3D.Physics
         {
             if (!CollectAxles(out int blocked, out var blockedVehicle))
             {
-                VehicleFell(blockedVehicle, $"驶上已断裂的桥面 #{Model.MemberIds[blocked]}");
+                VehicleFell(blockedVehicle, Loc.F("驶上已断裂的桥面 #{0}", (Model.MemberIds[blocked])));
                 return;
             }
 
@@ -651,14 +651,14 @@ namespace BridgeArchitect3D.Physics
                     _cracked.Add(ck);
                     Result.CrackedMembers++;
                     MemberCracked?.Invoke(new StructureEvent { Time = Time, MemberId = Model.MemberIds[ck], Mode = FailureReason.None,
-                        Text = $"构件 #{Model.MemberIds[ck]}（{Model.Mat[ck].Name}）出现裂缝（利用率 {Status[ck].Utilization * 100:0}%）" });
+                        Text = Loc.F("构件 #{0}（{1}）出现裂缝（利用率 {2:0}%）", (Model.MemberIds[ck]), (Model.Mat[ck].Name), (Status[ck].Utilization * 100)) });
                 }
 
                 // 锚点过载：锚点失效（失去约束），随后结构重新求解，可能继续垮塌
                 int an = FailureDetector.OverloadedAnchor(Model, Output, out double reaction, out _);
                 if (an >= 0)
                 {
-                    RecordIssue(FailureReason.AnchorOverload, $"锚点 {Model.AnchorIds[an]} 支反力 {reaction / 1000:0} kN 超过承载上限 {Model.AnchorMaxLoad[an] / 1000:0} kN", null);
+                    RecordIssue(FailureReason.AnchorOverload, Loc.F("锚点 {0} 支反力 {1:0} kN 超过承载上限 {2:0} kN", (Model.AnchorIds[an]), (reaction / 1000), (Model.AnchorMaxLoad[an] / 1000)), null);
                     Model.FixX[an] = false; Model.FixY[an] = false; Model.AnchorMaxLoad[an] = 0;
                     continue;
                 }
@@ -679,7 +679,7 @@ namespace BridgeArchitect3D.Physics
                 if (sag > Level.Objectives.MaxDeckDeflection)
                 {
                     _deflectionRecorded = true;
-                    RecordIssue(FailureReason.DeckDeflectionExceeded, $"桥面节点 #{Model.NodeIds[sagNode]} 下沉 {sag:0.00} m，超过限制 {Level.Objectives.MaxDeckDeflection:0.00} m", null);
+                    RecordIssue(FailureReason.DeckDeflectionExceeded, Loc.F("桥面节点 #{0} 下沉 {1:0.00} m，超过限制 {2:0.00} m", (Model.NodeIds[sagNode]), (sag), (Level.Objectives.MaxDeckDeflection)), null);
                 }
             }
         }
@@ -736,9 +736,9 @@ namespace BridgeArchitect3D.Physics
                     v.Derailed = true; _failVehicle = v;
                     int id = Model.MemberIds[v.Path.SegmentMember[seg]];
                     string what = sag > RailTrack.MaxSag
-                        ? $"车轮下的铁轨下沉 {sag:0.00} m（上限 {RailTrack.MaxSag:0.00} m）"
-                        : $"车轮上下晃动速度 {bounce:0.00} m/s（上限 {RailTrack.MaxBounce:0.00} m/s）";
-                    Fail(FailureReason.Derailed, $"{v.Def.Name}在桥面 #{id} 上脱轨：{what}，铁路桥需要更刚、起伏更小", new List<int> { id });
+                        ? Loc.F("车轮下的铁轨下沉 {0:0.00} m（上限 {1:0.00} m）", (sag), (RailTrack.MaxSag))
+                        : Loc.F("车轮上下晃动速度 {0:0.00} m/s（上限 {1:0.00} m/s）", (bounce), (RailTrack.MaxBounce));
+                    Fail(FailureReason.Derailed, Loc.F("{0}在桥面 #{1} 上脱轨：{2}，铁路桥需要更刚、起伏更小", (v.Def.Name), (id), (what)), new List<int> { id });
                     return;
                 }
             }
@@ -764,9 +764,9 @@ namespace BridgeArchitect3D.Physics
                     bool Hit(double z, double depth) => ShipGeometry.Intersects(s.Ev, Level.Terrain.WaterLevel, s.Z, ax, ay + offset, bx, by + offset, z, mat.VisualThickness, depth);
                     if (mat.IsDeck ? Hit(0, mat.DeckWidth) : Hit(-2.2, mat.VisualThickness) || Hit(2.2, mat.VisualThickness))
                     {
-                        string why = Bascule.Fault != null || Bascule.ConfigNote != null ? "\n开启桥：" + string.Join("；", new[] { Bascule.Fault, Bascule.ConfigNote }.Where(x => x != null))
-                            : !Bascule.Active && Model.Mat[k].IsDeck ? "\n提示：桥面净空不足，需要开启桥。" + (Bascule.Plan.Hint() ?? "让每片桥叶只通过一个转轴节点连着岸上结构，液压杆一端接桥叶、一端接固定结构") : "";
-                        RecordIssue(FailureReason.ShipCollision, $"{s.Ev.Name}（高 {s.Ev.Height:0.#} m）撞上构件 #{Model.MemberIds[k]}（{Model.Mat[k].Name}）{why}", new[] { Model.MemberIds[k] });
+                        string why = Bascule.Fault != null || Bascule.ConfigNote != null ? Loc.T("\n开启桥：") + string.Join(Loc.T("；"), new[] { Bascule.Fault, Bascule.ConfigNote }.Where(x => x != null))
+                            : !Bascule.Active && Model.Mat[k].IsDeck ? Loc.T("\n提示：桥面净空不足，需要开启桥。") + (Bascule.Plan.Hint() ?? Loc.T("让每片桥叶只通过一个转轴节点连着岸上结构，液压杆一端接桥叶、一端接固定结构")) : "";
+                        RecordIssue(FailureReason.ShipCollision, Loc.F("{0}（高 {1:0.#} m）撞上构件 #{2}（{3}）{4}", (s.Ev.Name), (s.Ev.Height), (Model.MemberIds[k]), (Model.Mat[k].Name), (why)), new[] { Model.MemberIds[k] });
                         Fail(_issueReason, _issueText, _issueMembers);
                         return;
                     }
@@ -810,10 +810,10 @@ namespace BridgeArchitect3D.Physics
             if (_pendingBreakText == null && _issueReason == FailureReason.None && ids.Count > 0)
             {
                 bool deck = removed.Any(k => Model.Mat[k].IsDeck);
-                _pendingBreakText = message + (deck ? "，桥面随之垮塌" : "（局部构件垮塌）");
+                _pendingBreakText = message + (deck ? Loc.T("，桥面随之垮塌") : Loc.T("（局部构件垮塌）"));
                 _pendingBreakMode = FailureReason.StructureUnstable; _pendingBreakId = ids[0];
             }
-            foreach (int k in removed) RemoveMember(k, FailureReason.StructureUnstable, $"构件 #{Model.MemberIds[k]}（{Model.Mat[k].Name}）失去支撑而垮塌", countsAsBreak: false);
+            foreach (int k in removed) RemoveMember(k, FailureReason.StructureUnstable, Loc.F("构件 #{0}（{1}）失去支撑而垮塌", (Model.MemberIds[k]), (Model.Mat[k].Name)), countsAsBreak: false);
             if (removed.Count == 0) Fail(FailureReason.StructureUnstable, message, null);
         }
 
@@ -833,7 +833,7 @@ namespace BridgeArchitect3D.Physics
             if (!_collapseRecorded && _overstressBreaks > Level.Objectives.MaxBrokenMembers)
             {
                 _collapseRecorded = true;
-                RecordIssue(FailureReason.ProgressiveCollapse, $"已有 {BrokenCount} 根构件相继失效（首个：{_firstBreak.Value.Text}）", Events.Select(x => x.MemberId));
+                RecordIssue(FailureReason.ProgressiveCollapse, Loc.F("已有 {0} 根构件相继失效（首个：{1}）", (BrokenCount), (_firstBreak.Value.Text)), Events.Select(x => x.MemberId));
             }
         }
 
@@ -842,16 +842,16 @@ namespace BridgeArchitect3D.Physics
             var st = Status[k];
             string modeText = st.Governing switch
             {
-                FailureReason.TensionFailure => "拉伸破坏",
-                FailureReason.CompressionFailure => "压缩破坏/屈曲",
-                FailureReason.DeckBendingFailure => "弯曲破坏",
-                _ => "破坏",
+                FailureReason.TensionFailure => Loc.T("拉伸破坏"),
+                FailureReason.CompressionFailure => Loc.T("压缩破坏/屈曲"),
+                FailureReason.DeckBendingFailure => Loc.T("弯曲破坏"),
+                _ => Loc.T("破坏"),
             };
-            string text = $"构件 #{Model.MemberIds[k]}（{Model.Mat[k].Name}）{modeText}，利用率 {st.Utilization * 100:0}%";
+            string text = Loc.F("构件 #{0}（{1}）{2}，利用率 {3:0}%", (Model.MemberIds[k]), (Model.Mat[k].Name), (modeText), (st.Utilization * 100));
             // 断裂本身不立即判负：车辆能否通过由实际行驶决定（驶上断裂桥面会坠落）；
             // 首次断裂作为候选根因，若随后出现致命后果，失败报告会追溯到它。桥面断裂会降低完整度评分。
             if (_issueReason == FailureReason.None && _pendingBreakText == null)
-            { _pendingBreakText = text + (Model.Mat[k].IsDeck ? "，道路断裂" : ""); _pendingBreakMode = st.Governing; _pendingBreakId = Model.MemberIds[k]; }
+            { _pendingBreakText = text + (Model.Mat[k].IsDeck ? Loc.T("，道路断裂") : ""); _pendingBreakMode = st.Governing; _pendingBreakId = Model.MemberIds[k]; }
             RemoveMember(k, st.Governing, text);
         }
 
@@ -896,50 +896,50 @@ namespace BridgeArchitect3D.Physics
             var r = Result;
             int k = -1;
             if (r.InvolvedMemberIds.Count > 0 && Model != null) Model.MemberIndex.TryGetValue(r.InvolvedMemberIds[0], out k);
-            string where = "", what = "构件";
+            string where = "", what = Loc.T("构件");
             if (k >= 0)
             {
                 double x = (Model.X[Model.A[k]] + Model.X[Model.B[k]]) / 2;
                 r.ProblemX = x;
                 double w = Level.Terrain.RiverWidth;
-                where = x < w * 0.33 ? "靠左岸处" : x > w * 0.67 ? "靠右岸处" : "桥中间";
+                where = x < w * 0.33 ? Loc.T("靠左岸处") : x > w * 0.67 ? Loc.T("靠右岸处") : Loc.T("桥中间");
                 what = Model.Mat[k].Name;
             }
-            string who = (_failVehicle ?? Vehicles.LastOrDefault(v => !v.Finished))?.Def.Name ?? "车辆";
+            string who = (_failVehicle ?? Vehicles.LastOrDefault(v => !v.Finished))?.Def.Name ?? Loc.T("车辆");
             switch (r.FailureReason)
             {
                 case FailureReason.DeckBendingFailure:
-                    r.Headline = $"{who}在{where}压弯折断了{what}";
+                    r.Headline = Loc.F("{0}在{1}压弯折断了{2}", (who), (where), (what));
                     r.TopSuggestion = Model != null && k >= 0 && Model.Mat[k].IsDeck
-                        ? "给这段桥面的中点加一根斜撑，或从上方用钢索 / 吊杆拉住它" : "这根构件主要在受弯：加斜杆组成三角形，让它主要承受拉压";
+                        ? Loc.T("给这段桥面的中点加一根斜撑，或从上方用钢索 / 吊杆拉住它") : Loc.T("这根构件主要在受弯：加斜杆组成三角形，让它主要承受拉压");
                     break;
                 case FailureReason.TensionFailure:
-                    r.Headline = $"{where}的{what}被拉断了"; r.TopSuggestion = "把它换成钢梁或钢索，或把桁架加高以减小拉力"; break;
+                    r.Headline = Loc.F("{0}的{1}被拉断了", (where), (what)); r.TopSuggestion = Loc.T("把它换成钢梁或钢索，或把桁架加高以减小拉力"); break;
                 case FailureReason.CompressionFailure:
-                    r.Headline = $"{where}的{what}被压弯（屈曲）了"; r.TopSuggestion = "缩短这根受压杆：在它中间加一个节点并连一根斜撑，或改用钢梁"; break;
+                    r.Headline = Loc.F("{0}的{1}被压弯（屈曲）了", (where), (what)); r.TopSuggestion = Loc.T("缩短这根受压杆：在它中间加一个节点并连一根斜撑，或改用钢梁"); break;
                 case FailureReason.StructureUnstable:
-                    r.Headline = $"{where}的结构缺少支撑而垮塌"; r.TopSuggestion = "给这里的节点再连一根不同方向的构件，组成三角形"; break;
+                    r.Headline = Loc.F("{0}的结构缺少支撑而垮塌", (where)); r.TopSuggestion = Loc.T("给这里的节点再连一根不同方向的构件，组成三角形"); break;
                 case FailureReason.RoadNotConnected:
-                    r.Headline = $"{who}开到桥面尽头过不去了"; r.TopSuggestion = "把桥面一直铺到右岸的“终点”锚点，中间不要留断口"; break;
+                    r.Headline = Loc.F("{0}开到桥面尽头过不去了", (who)); r.TopSuggestion = Loc.T("把桥面一直铺到右岸的“终点”锚点，中间不要留断口"); break;
                 case FailureReason.Derailed:
-                    r.Headline = $"{who}在{where}脱轨了"; r.TopSuggestion = "铁路桥要更刚：加高桁架、加密桥面下的支点，减小列车经过时铁轨的下沉与起伏"; break;
+                    r.Headline = Loc.F("{0}在{1}脱轨了", (who), (where)); r.TopSuggestion = Loc.T("铁路桥要更刚：加高桁架、加密桥面下的支点，减小列车经过时铁轨的下沉与起伏"); break;
                 case FailureReason.WrongSurface:
-                    r.Headline = $"{who}驶上了不能通行的路面"; r.TopSuggestion = "火车走铁轨桥面，汽车走公路桥面；两种都要过就用铁轨公路复合桥面"; break;
+                    r.Headline = Loc.F("{0}驶上了不能通行的路面", (who)); r.TopSuggestion = Loc.T("火车走铁轨桥面，汽车走公路桥面；两种都要过就用铁轨公路复合桥面"); break;
                 case FailureReason.VehicleBlocked:
-                    r.Headline = $"{who}无法继续行驶"; r.TopSuggestion = "检查桥面是否连续、坡度是否过大"; break;
+                    r.Headline = Loc.F("{0}无法继续行驶", (who)); r.TopSuggestion = Loc.T("检查桥面是否连续、坡度是否过大"); break;
                 case FailureReason.ShipCollision:
-                    r.Headline = $"船撞上了{where}的{what}"; r.TopSuggestion = "把航道（橙色框）里的构件移走或抬高到船高以上，或改用液压杆让路"; break;
+                    r.Headline = Loc.F("船撞上了{0}的{1}", (where), (what)); r.TopSuggestion = Loc.T("把航道（橙色框）里的构件移走或抬高到船高以上，或改用液压杆让路"); break;
                 case FailureReason.AnchorOverload:
-                    if (r.FailureMessage.Contains("桥墩"))
-                    { r.Headline = "桥墩下的地基承受不住，基础失效了"; r.TopSuggestion = "软土上的桥墩改用桩基础，或把桥墩建在岩石区"; }
-                    else { r.Headline = "一个锚点承受不住，被拉脱了"; r.TopSuggestion = "把载荷分给更多锚点，或减轻桥的自重"; }
+                    if (r.FailureMessage.Contains(Loc.T("桥墩")))
+                    { r.Headline = Loc.T("桥墩下的地基承受不住，基础失效了"); r.TopSuggestion = Loc.T("软土上的桥墩改用桩基础，或把桥墩建在岩石区"); }
+                    else { r.Headline = Loc.T("一个锚点承受不住，被拉脱了"); r.TopSuggestion = Loc.T("把载荷分给更多锚点，或减轻桥的自重"); }
                     break;
                 case FailureReason.FloodScour:
-                    r.Headline = "洪水冲坏了桥墩"; r.TopSuggestion = "冲刷区的桥墩改用桩基础或移到岩石区；洪水关不要用木桥墩"; break;
+                    r.Headline = Loc.T("洪水冲坏了桥墩"); r.TopSuggestion = Loc.T("冲刷区的桥墩改用桩基础或移到岩石区；洪水关不要用木桥墩"); break;
                 case FailureReason.DeckDeflectionExceeded:
-                    r.Headline = $"桥面{where}下沉太多"; r.TopSuggestion = "加高桁架或增加支点，提高桥的刚度"; break;
+                    r.Headline = Loc.F("桥面{0}下沉太多", (where)); r.TopSuggestion = Loc.T("加高桁架或增加支点，提高桥的刚度"); break;
                 case FailureReason.ProgressiveCollapse:
-                    r.Headline = $"{where}的构件接连断裂"; r.TopSuggestion = "先加强最先断裂的那根构件，并增加冗余斜撑"; break;
+                    r.Headline = Loc.F("{0}的构件接连断裂", (where)); r.TopSuggestion = Loc.T("先加强最先断裂的那根构件，并增加冗余斜撑"); break;
                 default:
                     r.Headline = FailureDetector.ReasonText(r.FailureReason); r.TopSuggestion = r.Suggestions.FirstOrDefault() ?? ""; break;
             }

@@ -146,28 +146,28 @@ namespace BridgeArchitect3D.Building
             if (pierPart)
             {
                 // 桥墩上的支点：可以在水面以下，但必须在河道内、河床以上
-                if (x <= 0.3 || x >= t.RiverWidth - 0.3) return "桥墩只能建在河道内";
-                if (y < PierBedY(x) + 0.5) return "支点太低（已到河床）";
+                if (x <= 0.3 || x >= t.RiverWidth - 0.3) return Loc.T("桥墩只能建在河道内");
+                if (y < PierBedY(x) + 0.5) return Loc.T("支点太低（已到河床）");
                 foreach (var n in Design.Nodes)
                 {
                     if (n.Id == ignoreNodeId) continue;
                     double ddx = n.Position.X - x, ddy = n.Position.Y - y;
-                    if (ddx * ddx + ddy * ddy < MinNodeSpacing * MinNodeSpacing) return "该位置已有节点";
+                    if (ddx * ddx + ddy * ddy < MinNodeSpacing * MinNodeSpacing) return Loc.T("该位置已有节点");
                 }
                 return null;
             }
-            if (x < -t.BuildMarginX || x > t.RiverWidth + t.BuildMarginX) return "超出可建造区域（水平方向）";
-            if (y < t.BuildMinY || y > t.BuildMaxY) return "超出可建造区域（竖直方向）";
+            if (x < -t.BuildMarginX || x > t.RiverWidth + t.BuildMarginX) return Loc.T("超出可建造区域（水平方向）");
+            if (y < t.BuildMinY || y > t.BuildMaxY) return Loc.T("超出可建造区域（竖直方向）");
             // 河道内不能在水面以下建造；两岸土体内允许放置节点——普通节点永远不是支座，
             // 只有关卡锚点提供支撑，因此不会获得“免费地面支撑”
-            if (x > 0 && x < t.RiverWidth && y < t.WaterLevel + 0.01) return "不能在水面以下建造";
+            if (x > 0 && x < t.RiverWidth && y < t.WaterLevel + 0.01) return Loc.T("不能在水面以下建造");
             foreach (var z in t.NoBuildZones)
-                if (x > z.X0 + 0.01 && x < z.X1 - 0.01 && y < z.BelowY - 0.01) return $"{z.Name}：只能利用两岸，不能在这里建桥墩或下部支撑";
+                if (x > z.X0 + 0.01 && x < z.X1 - 0.01 && y < z.BelowY - 0.01) return Loc.F("{0}：只能利用两岸，不能在这里建桥墩或下部支撑", (z.Name));
             foreach (var n in Design.Nodes)
             {
                 if (n.Id == ignoreNodeId || n.Id == ignoreNodeId2) continue;
                 double dx = n.Position.X - x, dy = n.Position.Y - y;
-                if (dx * dx + dy * dy < MinNodeSpacing * MinNodeSpacing) return "该位置已有节点";
+                if (dx * dx + dy * dy < MinNodeSpacing * MinNodeSpacing) return Loc.T("该位置已有节点");
             }
             return null;
         }
@@ -178,8 +178,8 @@ namespace BridgeArchitect3D.Building
             var mat = Db.GetMaterial(materialId);
             var a = Design.FindNode(startId); var b = Design.FindNode(endId);
             p.MaterialName = mat?.Name ?? "?";
-            if (mat == null) { p.Reason = "未知材料"; return p; }
-            if (a == null || b == null) { p.Reason = "节点不存在"; return p; }
+            if (mat == null) { p.Reason = Loc.T("未知材料"); return p; }
+            if (a == null || b == null) { p.Reason = Loc.T("节点不存在"); return p; }
             p.Length = Vec3d.Distance(a.Position, b.Position);
             p.Cost = p.Length * mat.CostPerMeter * StrokeFactor(mat);
             p.Reason = CheckMember(a, b, mat, p.Cost);
@@ -200,7 +200,7 @@ namespace BridgeArchitect3D.Building
         private static string ColumnWarning(MaterialDefinition mat, Vec3d a, Vec3d b)
         {
             if (!mat.IsColumn || !ColumnRules.TiltExceeded(mat, a, b)) return null;
-            return $"倾角 {ColumnRules.TiltDegrees(a, b):0}° 超过 {mat.MaxTiltDegrees:0}°，测试时会倒塌";
+            return Loc.F("倾角 {0:0}° 超过 {1:0}°，测试时会倒塌", (ColumnRules.TiltDegrees(a, b)), (mat.MaxTiltDegrees));
         }
 
         /// <summary>预览从节点到任意点的构件（终点尚未有节点时）。</summary>
@@ -210,14 +210,14 @@ namespace BridgeArchitect3D.Building
             var mat = Db.GetMaterial(materialId);
             var a = Design.FindNode(startId);
             p.MaterialName = mat?.Name ?? "?";
-            if (mat == null || a == null) { p.Reason = "无效起点"; return p; }
+            if (mat == null || a == null) { p.Reason = Loc.T("无效起点"); return p; }
             p.Length = Vec3d.Distance(a.Position, new Vec3d(x, y));
             p.Cost = p.Length * mat.CostPerMeter * StrokeFactor(mat);
             string reason = CheckNodePosition(x, y);
-            if (reason == null && p.Length < MinMemberLength) reason = $"太短（至少 {MinMemberLength:0.#} m）";
-            if (reason == null && p.Length > mat.MaximumLength) reason = $"超长 {p.Length - mat.MaximumLength:0.0} m（{mat.Name}最长 {mat.MaximumLength:0.#} m）";
-            if (reason == null && mat.IsDeck && Math.Abs(x - a.Position.X) < 0.3) reason = "桥面不能竖直铺设";
-            if (reason == null && LimitReached(mat)) reason = $"本关{mat.Name}限量 {Level.MaterialLimits[mat.MaterialId]} 根，已用完";
+            if (reason == null && p.Length < MinMemberLength) reason = Loc.F("太短（至少 {0:0.#} m）", (MinMemberLength));
+            if (reason == null && p.Length > mat.MaximumLength) reason = Loc.F("超长 {0:0.0} m（{1}最长 {2:0.#} m）", (p.Length - mat.MaximumLength), (mat.Name), (mat.MaximumLength));
+            if (reason == null && mat.IsDeck && Math.Abs(x - a.Position.X) < 0.3) reason = Loc.T("桥面不能竖直铺设");
+            if (reason == null && LimitReached(mat)) reason = Loc.F("本关{0}限量 {1} 根，已用完", (mat.Name), (Level.MaterialLimits[mat.MaterialId]));
             if (reason == null && mat.IsColumn)
                 ColumnRules.FindBase(mat, a, new BridgeNode { Id = -1, Position = new Vec3d(x, y) }, Level, out reason);
             // 预算允许超支（超支会降低最终评分），因此不阻止建造
@@ -228,14 +228,14 @@ namespace BridgeArchitect3D.Building
 
         private string CheckMember(BridgeNode a, BridgeNode b, MaterialDefinition mat, double cost)
         {
-            if (!Level.AllowedMaterials.Contains(mat.MaterialId)) return "本关不允许使用该材料";
-            if (LimitReached(mat)) return $"本关{mat.Name}限量 {Level.MaterialLimits[mat.MaterialId]} 根，已用完";
-            if (a.Id == b.Id) return "不能连接同一个节点";
+            if (!Level.AllowedMaterials.Contains(mat.MaterialId)) return Loc.T("本关不允许使用该材料");
+            if (LimitReached(mat)) return Loc.F("本关{0}限量 {1} 根，已用完", (mat.Name), (Level.MaterialLimits[mat.MaterialId]));
+            if (a.Id == b.Id) return Loc.T("不能连接同一个节点");
             double len = Vec3d.Distance(a.Position, b.Position);
-            if (len < MinMemberLength) return "构件长度过短";
-            if (len > mat.MaximumLength + 1e-9) return $"超长 {len - mat.MaximumLength:0.0} m（{mat.Name}最长 {mat.MaximumLength:0.#} m）";
-            if (Design.Members.Any(m => m.Connects(a.Id, b.Id))) return "两节点之间已有构件";
-            if (mat.IsDeck && Math.Abs(b.Position.X - a.Position.X) < 0.3) return "桥面不能竖直铺设";
+            if (len < MinMemberLength) return Loc.T("构件长度过短");
+            if (len > mat.MaximumLength + 1e-9) return Loc.F("超长 {0:0.0} m（{1}最长 {2:0.#} m）", (len - mat.MaximumLength), (mat.Name), (mat.MaximumLength));
+            if (Design.Members.Any(m => m.Connects(a.Id, b.Id))) return Loc.T("两节点之间已有构件");
+            if (mat.IsDeck && Math.Abs(b.Position.X - a.Position.X) < 0.3) return Loc.T("桥面不能竖直铺设");
             if (mat.IsColumn)
             {
                 ColumnRules.FindBase(mat, a, b, Level, out var why);
@@ -250,16 +250,16 @@ namespace BridgeArchitect3D.Building
         public BuildResult ResizeMember(int memberId, double delta)
         {
             var m = Design.FindMember(memberId);
-            if (m == null) return BuildResult.Fail("构件不存在");
+            if (m == null) return BuildResult.Fail(Loc.T("构件不存在"));
             var mat = Db.GetMaterial(m.MaterialId);
-            if (mat == null || !mat.Extendable) return BuildResult.Fail("该构件不能伸缩");
+            if (mat == null || !mat.Extendable) return BuildResult.Fail(Loc.T("该构件不能伸缩"));
             var a = Design.FindNode(m.StartNodeId); var b = Design.FindNode(m.EndNodeId);
             var moving = !b.IsAnchor ? b : !a.IsAnchor ? a : null;
-            if (moving == null) return BuildResult.Fail("两端都是锚点，无法伸缩");
+            if (moving == null) return BuildResult.Fail(Loc.T("两端都是锚点，无法伸缩"));
             var fixedEnd = moving == b ? a : b;
             double len = Vec3d.Distance(a.Position, b.Position), newLen = len + delta;
-            if (newLen < MinMemberLength * 2) return BuildResult.Fail("已缩到最短");
-            if (newLen > mat.MaximumLength + 1e-9) return BuildResult.Fail($"已伸到最长 {mat.MaximumLength:0.#} m");
+            if (newLen < MinMemberLength * 2) return BuildResult.Fail(Loc.T("已缩到最短"));
+            if (newLen > mat.MaximumLength + 1e-9) return BuildResult.Fail(Loc.F("已伸到最长 {0:0.#} m", (mat.MaximumLength)));
             var dir = (moving.Position - fixedEnd.Position) * (1.0 / len);
             var p = fixedEnd.Position + dir * newLen;
             // 伸缩不吸附网格，保持轴线方向
@@ -282,8 +282,8 @@ namespace BridgeArchitect3D.Building
         {
             var mat = Db.GetMaterial(materialId);
             var a = Design.FindNode(startId); var b = Design.FindNode(endId);
-            if (mat == null) return BuildResult.Fail("未知材料");
-            if (a == null || b == null) return BuildResult.Fail("节点不存在");
+            if (mat == null) return BuildResult.Fail(Loc.T("未知材料"));
+            if (a == null || b == null) return BuildResult.Fail(Loc.T("节点不存在"));
             double len = Vec3d.Distance(a.Position, b.Position);
             double cost = len * mat.CostPerMeter;
             string r = CheckMember(a, b, mat, cost * StrokeFactor(mat));
@@ -301,9 +301,9 @@ namespace BridgeArchitect3D.Building
             var p = PreviewMemberToPoint(startId, x, y, materialId);
             if (!p.Allowed) return BuildResult.Fail(p.Reason);
             var mat = Db.GetMaterial(materialId);
-            if (!Level.AllowedMaterials.Contains(materialId)) return BuildResult.Fail("本关不允许使用该材料");
+            if (!Level.AllowedMaterials.Contains(materialId)) return BuildResult.Fail(Loc.T("本关不允许使用该材料"));
             var a = Design.FindNode(startId);
-            if (mat.IsDeck && Math.Abs(x - a.Position.X) < 0.3) return BuildResult.Fail("桥面不能竖直铺设");
+            if (mat.IsDeck && Math.Abs(x - a.Position.X) < 0.3) return BuildResult.Fail(Loc.T("桥面不能竖直铺设"));
             PushUndo();
             var n = new BridgeNode { Id = Design.NextNodeId++, Position = new Vec3d(x, y, 0) };
             Design.Nodes.Add(n);
@@ -317,13 +317,13 @@ namespace BridgeArchitect3D.Building
         public BuildResult MoveNode(int nodeId, double x, double y, bool recordUndo = true)
         {
             var n = Design.FindNode(nodeId);
-            if (n == null) return BuildResult.Fail("节点不存在");
-            if (n.IsAnchor) return BuildResult.Fail("固定锚点不能移动");
-            if (n.IsRigidSplit) return BuildResult.Fail("刚性拆分点不可独立移动或折叠；请移动原构件端点");
-            if (n.PierBase) return BuildResult.Fail("桥墩基础不能移动（可以删除桥墩后重建）");
+            if (n == null) return BuildResult.Fail(Loc.T("节点不存在"));
+            if (n.IsAnchor) return BuildResult.Fail(Loc.T("固定锚点不能移动"));
+            if (n.IsRigidSplit) return BuildResult.Fail(Loc.T("刚性拆分点不可独立移动或折叠；请移动原构件端点"));
+            if (n.PierBase) return BuildResult.Fail(Loc.T("桥墩基础不能移动（可以删除桥墩后重建）"));
             if (n.PierPart && Math.Abs(x - n.Position.X) > 1e-6) x = n.Position.X;   // 桥墩支点只能上下移动
             if (Design.Members.Any(m => m.Existing && (m.StartNodeId == nodeId || m.EndNodeId == nodeId)))
-                return BuildResult.Fail("旧桥节点不能移动（可以拆除、修复或加固相连的旧构件）");
+                return BuildResult.Fail(Loc.T("旧桥节点不能移动（可以拆除、修复或加固相连的旧构件）"));
             // The two nodes of a deck lock always stay together
             var lockOf = Design.EnsureMechanisms().LockOf(nodeId);
             var partner = lockOf == null ? null : Design.FindNode(lockOf.NodeA == nodeId ? lockOf.NodeB : lockOf.NodeA);
@@ -333,20 +333,20 @@ namespace BridgeArchitect3D.Building
             double deltaCost = 0;
             foreach (var m in Design.Members.Where(m => m.StartNodeId == nodeId || m.EndNodeId == nodeId || (partner != null && (m.StartNodeId == partner.Id || m.EndNodeId == partner.Id))))
             {
-                if (partner != null && (m.StartNodeId == partner.Id || m.EndNodeId == partner.Id) && m.Existing) return BuildResult.Fail("旧桥节点不能移动");
+                if (partner != null && (m.StartNodeId == partner.Id || m.EndNodeId == partner.Id) && m.Existing) return BuildResult.Fail(Loc.T("旧桥节点不能移动"));
                 int movedEnd = m.StartNodeId == nodeId || m.EndNodeId == nodeId ? nodeId : partner.Id;
                 var mat = Db.GetMaterial(m.MaterialId);
                 var other = Design.FindNode(m.Other(movedEnd));
                 double len = Vec3d.Distance(newPos, other.Position);
-                if (len > mat.MaximumLength + 1e-9) return BuildResult.Fail($"构件 #{m.Id} 将超过最大长度");
-                if (len < MinMemberLength) return BuildResult.Fail($"构件 #{m.Id} 将过短");
-                if (mat.IsDeck && Math.Abs(other.Position.X - x) < 0.3) return BuildResult.Fail("桥面不能竖直");
+                if (len > mat.MaximumLength + 1e-9) return BuildResult.Fail(Loc.F("构件 #{0} 将超过最大长度", (m.Id)));
+                if (len < MinMemberLength) return BuildResult.Fail(Loc.F("构件 #{0} 将过短", (m.Id)));
+                if (mat.IsDeck && Math.Abs(other.Position.X - x) < 0.3) return BuildResult.Fail(Loc.T("桥面不能竖直"));
                 if (mat.IsColumn)
                 {
                     var moved = new BridgeNode { Id = n.Id, Position = newPos, IsAnchor = false };
                     bool startIsMoved = m.StartNodeId == movedEnd;
                     ColumnRules.FindBase(mat, startIsMoved ? moved : other, startIsMoved ? other : moved, Level, out var why);
-                    if (why != null) return BuildResult.Fail($"构件 #{m.Id}：{why}");
+                    if (why != null) return BuildResult.Fail(Loc.F("构件 #{0}：{1}", (m.Id), (why)));
                 }
                 deltaCost += (len * mat.CostPerMeter - m.Cost) * (1 + BridgeMember.StrokeCostRate * System.Math.Abs(m.CostStroke ?? 0));
             }
@@ -362,8 +362,8 @@ namespace BridgeArchitect3D.Building
         public BuildResult DeleteNode(int nodeId)
         {
             var n = Design.FindNode(nodeId);
-            if (n == null) return BuildResult.Fail("节点不存在");
-            if (n.IsAnchor) return BuildResult.Fail("固定锚点不能删除");
+            if (n == null) return BuildResult.Fail(Loc.T("节点不存在"));
+            if (n.IsAnchor) return BuildResult.Fail(Loc.T("固定锚点不能删除"));
             if (n.PierBase)
             {
                 // 删除整座桥墩：墩身构件全部删除，中部支点若不再连接其他构件则一并删除
@@ -381,7 +381,7 @@ namespace BridgeArchitect3D.Building
                 Design.Nodes.RemoveAll(x => !x.IsAnchor && !Design.Members.Any(m => m.StartNodeId == x.Id || m.EndNodeId == x.Id));
                 foreach (var x in Design.Nodes) if (x.PierPart && !Design.Members.Any(m => (m.StartNodeId == x.Id || m.EndNodeId == x.Id) && Db.GetMaterial(m.MaterialId)?.IsPier == true)) x.PierPart = false;
                 Changed?.Invoke();
-                return BuildResult.Success(0, "已删除整座桥墩");
+                return BuildResult.Success(0, Loc.T("已删除整座桥墩"));
             }
             var removing = Design.Members.Where(m => m.StartNodeId == nodeId || m.EndNodeId == nodeId).ToList();
             var why = CheckDemolition(removing);
@@ -401,7 +401,7 @@ namespace BridgeArchitect3D.Building
             var nodes = new HashSet<int>(nodeIds.Where(id => Design.FindNode(id) is { IsAnchor: false }));
             var mems = new HashSet<int>(memberIds.Where(id => Design.FindMember(id) != null));
             foreach (var m in Design.Members) if (nodes.Contains(m.StartNodeId) || nodes.Contains(m.EndNodeId)) mems.Add(m.Id);
-            if (nodes.Count == 0 && mems.Count == 0) return BuildResult.Fail("没有可删除的对象（锚点不能删除）");
+            if (nodes.Count == 0 && mems.Count == 0) return BuildResult.Fail(Loc.T("没有可删除的对象（锚点不能删除）"));
             double refund = Design.Members.Where(m => mems.Contains(m.Id)).Sum(m => m.EffectiveCost());
             var removing = Design.Members.Where(m => mems.Contains(m.Id)).ToList();
             var why = CheckDemolition(removing);
@@ -414,13 +414,13 @@ namespace BridgeArchitect3D.Building
             Design.Nodes.RemoveAll(n => !n.IsAnchor && !Design.Members.Any(m => m.StartNodeId == n.Id || m.EndNodeId == n.Id));
             PruneMechanisms();
             Changed?.Invoke();
-            return BuildResult.Success(0, $"已删除 {mems.Count} 根构件，退还 ${refund:0}");
+            return BuildResult.Success(0, Loc.F("已删除 {0} 根构件，退还 ${1:0}", (mems.Count), (refund)));
         }
 
         public BuildResult DeleteMember(int memberId)
         {
             var m = Design.FindMember(memberId);
-            if (m == null) return BuildResult.Fail("构件不存在");
+            if (m == null) return BuildResult.Fail(Loc.T("构件不存在"));
             var why = CheckDemolition(new[] { m });
             if (why != null) return BuildResult.Fail(why);
             PushUndo();
@@ -453,19 +453,19 @@ namespace BridgeArchitect3D.Building
         public BuildResult CreateDeckLock(int nodeId)
         {
             var n = Design.FindNode(nodeId);
-            if (n == null) return BuildResult.Fail("节点不存在");
-            if (n.IsRigidSplit) return BuildResult.Fail("刚性拆分点不可作为开合锁扣");
-            if (n.IsAnchor || n.PierBase || n.PierPart) return BuildResult.Fail("锚点和桥墩节点不能做成锁扣");
+            if (n == null) return BuildResult.Fail(Loc.T("节点不存在"));
+            if (n.IsRigidSplit) return BuildResult.Fail(Loc.T("刚性拆分点不可作为开合锁扣"));
+            if (n.IsAnchor || n.PierBase || n.PierPart) return BuildResult.Fail(Loc.T("锚点和桥墩节点不能做成锁扣"));
             var mech = Design.EnsureMechanisms();
-            if (mech.LockOf(nodeId) != null) return BuildResult.Fail("这个节点已经是锁扣");
+            if (mech.LockOf(nodeId) != null) return BuildResult.Fail(Loc.T("这个节点已经是锁扣"));
             var mems = Design.Members.Where(m => m.StartNodeId == nodeId || m.EndNodeId == nodeId).ToList();
-            if (mems.Any(m => m.Existing)) return BuildResult.Fail("旧桥节点不能做成锁扣");
+            if (mems.Any(m => m.Existing)) return BuildResult.Fail(Loc.T("旧桥节点不能做成锁扣"));
             bool IsDeck(BridgeMember m) => Db.GetMaterial(m.MaterialId)?.IsDeck == true;
             double x = n.Position.X;
             var right = mems.Where(m => Design.FindNode(m.Other(nodeId)).Position.X > x + 1e-6).ToList();
             var left = mems.Where(m => Design.FindNode(m.Other(nodeId)).Position.X < x - 1e-6).ToList();
-            if (!right.Any(IsDeck) || !left.Any(IsDeck)) return BuildResult.Fail("锁扣要放在左右两侧都有桥面的节点上（例如开启桥中央的桥面接缝）");
-            if (mems.Count != left.Count + right.Count) return BuildResult.Fail("节点上有竖直构件，无法判断它属于哪一侧");
+            if (!right.Any(IsDeck) || !left.Any(IsDeck)) return BuildResult.Fail(Loc.T("锁扣要放在左右两侧都有桥面的节点上（例如开启桥中央的桥面接缝）"));
+            if (mems.Count != left.Count + right.Count) return BuildResult.Fail(Loc.T("节点上有竖直构件，无法判断它属于哪一侧"));
             PushUndo();
             var twin = new BridgeNode { Id = Design.NextNodeId++, Position = n.Position };
             Design.Nodes.Add(twin);
@@ -476,7 +476,7 @@ namespace BridgeArchitect3D.Building
             var lk = new DeckLockData { Id = mech.NextId++, NodeA = nodeId, NodeB = twin.Id };
             mech.Locks.Add(lk);
             Changed?.Invoke();
-            return BuildResult.Success(lk.Id, $"已设置中央锁扣：节点 #{nodeId}（左侧）与 #{twin.Id}（右侧）闭合时刚性锁定，解锁后可完全分开");
+            return BuildResult.Success(lk.Id, Loc.F("已设置中央锁扣：节点 #{0}（左侧）与 #{1}（右侧）闭合时刚性锁定，解锁后可完全分开", (nodeId), (twin.Id)));
         }
 
         /// <summary>Removes a deck lock and joins its two nodes back into one rigid node.</summary>
@@ -484,7 +484,7 @@ namespace BridgeArchitect3D.Building
         {
             var mech = Design.EnsureMechanisms();
             var lk = mech.LockOf(nodeId);
-            if (lk == null) return BuildResult.Fail("这个节点不是锁扣");
+            if (lk == null) return BuildResult.Fail(Loc.T("这个节点不是锁扣"));
             PushUndo();
             foreach (var m in Design.Members)
             {
@@ -495,7 +495,7 @@ namespace BridgeArchitect3D.Building
             mech.Locks.Remove(lk);
             PruneMechanisms();
             Changed?.Invoke();
-            return BuildResult.Success(0, "已取消锁扣，两侧重新刚接");
+            return BuildResult.Success(0, Loc.T("已取消锁扣，两侧重新刚接"));
         }
 
         /// <summary>Automatic movable-bridge analysis of the current design (no changes).</summary>
@@ -506,7 +506,7 @@ namespace BridgeArchitect3D.Building
         public BuildResult SetHydraulicDirection(int memberId,bool extend)
         {
             var member=Design.FindMember(memberId);
-            if(member==null || Db.GetMaterial(member.MaterialId)?.Extendable!=true) return BuildResult.Fail("请先选中液压杆");
+            if(member==null || Db.GetMaterial(member.MaterialId)?.Extendable!=true) return BuildResult.Fail(Loc.T("请先选中液压杆"));
             var settings=Design.EnsureMechanisms().Linkage ??= new LinkageData();
             var driver=settings.Drivers.FirstOrDefault(d=>d.MemberId==memberId);
             double mag=driver!=null?System.Math.Abs(driver.Ratio):LinkageDriverData.StrokeFraction;
@@ -526,8 +526,8 @@ namespace BridgeArchitect3D.Building
         public BuildResult SetHydraulicStroke(int memberId,double stroke)
         {
             var member=Design.FindMember(memberId);
-            if(member==null || Db.GetMaterial(member.MaterialId)?.Extendable!=true) return BuildResult.Fail("请先选中液压杆");
-            if(!double.IsFinite(stroke)) return BuildResult.Fail("行程必须是数字");
+            if(member==null || Db.GetMaterial(member.MaterialId)?.Extendable!=true) return BuildResult.Fail(Loc.T("请先选中液压杆"));
+            if(!double.IsFinite(stroke)) return BuildResult.Fail(Loc.T("行程必须是数字"));
             stroke=System.Math.Clamp(System.Math.Round(stroke,4),LinkageDriverData.MinStroke,LinkageDriverData.MaxStroke);
             var settings=Design.EnsureMechanisms().Linkage ??= new LinkageData();
             var driver=settings.Drivers.FirstOrDefault(d=>d.MemberId==memberId);
@@ -537,18 +537,18 @@ namespace BridgeArchitect3D.Building
             if(driver==null) settings.Drivers.Add(new LinkageDriverData { MemberId=memberId,Ratio=target });
             else driver.Ratio=target;
             Changed?.Invoke();
-            string range=target<0?$"最短 {member.Length*(1-stroke):0.00} m（黄色外筒长度）":$"最长 {member.Length*(1+stroke):0.00} m";
-            return BuildResult.Success(0,$"行程 {stroke:P0}：{range}。"+DescribeActuator(memberId));
+            string range=target<0?Loc.F("最短 {0:0.00} m（黄色外筒长度）", (member.Length*(1-stroke))):Loc.F("最长 {0:0.00} m", (member.Length*(1+stroke)));
+            return BuildResult.Success(0,Loc.F("行程 {0:P0}：{1}。", (stroke), (range))+DescribeActuator(memberId));
         }
 
         public BuildResult ConfigureLinkage(int memberId, bool toggle, double delta=0)
         {
             var member=Design.FindMember(memberId);
             var material=member==null?null:Db.GetMaterial(member.MaterialId);
-            if(material?.Extendable!=true) return BuildResult.Fail("请先选中液压杆");
+            if(material?.Extendable!=true) return BuildResult.Fail(Loc.T("请先选中液压杆"));
             var settings=Design.EnsureMechanisms().Linkage ??= new LinkageData();
             var driver=settings.Drivers.FirstOrDefault(d=>d.MemberId==memberId);
-            if(!toggle && driver==null) return BuildResult.Fail("请先启用此杆的通用联动驱动");
+            if(!toggle && driver==null) return BuildResult.Fail(Loc.T("请先启用此杆的通用联动驱动"));
             PushUndo();
             if(toggle && driver!=null) settings.Drivers.Remove(driver);
             else if(driver==null) settings.Drivers.Add(new LinkageDriverData { MemberId=memberId, Ratio=-material.RetractRatio });
@@ -566,25 +566,25 @@ namespace BridgeArchitect3D.Building
                 var model=StructuralModel.Build(Design,Level,Db);
                 var controller=new BasculeSystem(); controller.Prepare(model,Design,Db,Level);
                 bool available=controller.Linkage?.Ready==true && controller.Linkage.Drivers.Any(k=>model.MemberIds[k]==actuatorMemberId);
-                if(available) return $"通用驱动 #{actuatorMemberId} 预检可动作：目标长度变化 {driver.Ratio:P0}。等待船只和交通条件后执行；同一机构中未选择的液压杆保持原长。";
-                string reason=controller.ConfigurationWarning ?? controller.Fault ?? "驱动与其他机构的运动约束冲突";
+                if(available) return Loc.F("通用驱动 #{0} 预检可动作：目标长度变化 {1:P0}。等待船只和交通条件后执行；同一机构中未选择的液压杆保持原长。", (actuatorMemberId), (driver.Ratio));
+                string reason=controller.ConfigurationWarning ?? controller.Fault ?? Loc.T("驱动与其他机构的运动约束冲突");
                 var automatic=BasculePlanner.Plan(Design,Db,Level);
-                if(automatic.Rejected.TryGetValue(actuatorMemberId,out var brace) && brace.Contains("锁死")) reason+="\n"+brace;
-                return $"已保存液压杆 #{actuatorMemberId} 的目标，但此杆当前暂不动作：{reason}";
+                if(automatic.Rejected.TryGetValue(actuatorMemberId,out var brace) && brace.Contains(Loc.T("锁死"))) reason+="\n"+brace;
+                return Loc.F("已保存液压杆 #{0} 的目标，但此杆当前暂不动作：{1}", (actuatorMemberId), (reason));
             }
             if ((Design.Mechanisms?.Linkage?.Drivers.Count ?? 0)>0)
-                return "此杆未设置主动行程；若属于所选联动机构，将保持原长作为从动杆。独立且不冲突的桥叶仍可自动运行。";
+                return Loc.T("此杆未设置主动行程；若属于所选联动机构，将保持原长作为从动杆。独立且不冲突的桥叶仍可自动运行。");
             var plan = PlanMechanism();
             var runtimeModel=StructuralModel.Build(Design,Level,Db);
             var runtime=new BasculeSystem();runtime.Prepare(runtimeModel,Design,Db,Level);
             if(runtime.Linkage?.Ready==true && runtime.Linkage.Drivers.Any(k=>runtimeModel.MemberIds[k]==actuatorMemberId))
-                return $"液压杆 #{actuatorMemberId} 已参与联合长度求解：主桥叶、从动桥段及液压杆两端共同运动；内部支撑随桥叶保持形状，不作为固定阻挡。";
-            if(runtime.ConfigurationWarning?.StartsWith("联合机构预检未通过") == true)
+                return Loc.F("液压杆 #{0} 已参与联合长度求解：主桥叶、从动桥段及液压杆两端共同运动；内部支撑随桥叶保持形状，不作为固定阻挡。", (actuatorMemberId));
+            if(runtime.ConfigurationWarning?.StartsWith(Loc.T("联合机构预检未通过")) == true)
                 return runtime.ConfigurationWarning;
             var g = plan.GroupOf(actuatorMemberId);
-            if (g == null) return plan.Rejected.TryGetValue(actuatorMemberId, out var why) ? $"不驱动桥叶：{why}" : "不驱动桥叶";
-            string mates = g.Actuators.Count > 1 ? $"，与液压杆 #{string.Join("、#", g.Actuators.Where(a => a.MemberId != actuatorMemberId).Select(a => a.MemberId))} 共同驱动" : "";
-            return $"驱动桥叶 #{g.Id}：转轴节点 #{Math.Abs(g.PivotKey)}，{g.LeafKeys.Count} 个节点随桥叶转动{mates}，开桥时分离 {plan.CutSeams.Count} 处接缝，目标开启 {g.OpenAngleDeg:0}°";
+            if (g == null) return plan.Rejected.TryGetValue(actuatorMemberId, out var why) ? Loc.F("不驱动桥叶：{0}", (why)) : Loc.T("不驱动桥叶");
+            string mates = g.Actuators.Count > 1 ? Loc.F("，与液压杆 #{0} 共同驱动", (string.Join(Loc.T("、#"), g.Actuators.Where(a => a.MemberId != actuatorMemberId).Select(a => a.MemberId)))) : "";
+            return Loc.F("驱动桥叶 #{0}：转轴节点 #{1}，{2} 个节点随桥叶转动{3}，开桥时分离 {4} 处接缝，目标开启 {5:0}°", (g.Id), (Math.Abs(g.PivotKey)), (g.LeafKeys.Count), (mates), (plan.CutSeams.Count), (g.OpenAngleDeg));
         }
 
         /// <summary>Stores the opening angle of the leaf this hydraulic drives (leaves themselves are found automatically).</summary>
@@ -594,7 +594,7 @@ namespace BridgeArchitect3D.Building
         {
             var plan = PlanMechanism();
             var g = plan.GroupOf(actuatorMemberId);
-            if (g == null) return BuildResult.Fail(plan.Rejected.TryGetValue(actuatorMemberId, out var why) ? why : "这根液压杆不驱动桥叶");
+            if (g == null) return BuildResult.Fail(plan.Rejected.TryGetValue(actuatorMemberId, out var why) ? why : Loc.T("这根液压杆不驱动桥叶"));
             var mech = Design.EnsureMechanisms();
             var old = mech.Leaves.FirstOrDefault(l => l.ActuatorMemberId == actuatorMemberId);
             if (old != null && old.PivotNodeId == Math.Abs(g.PivotKey) && Math.Abs(old.OpenAngleDeg - Math.Clamp(openAngleDeg, 5, 85)) < 1e-9)
@@ -611,11 +611,11 @@ namespace BridgeArchitect3D.Building
         {
             var mech = Design.EnsureMechanisms();
             var leaf = mech.Leaves.FirstOrDefault(l => l.ActuatorMemberId == actuatorMemberId);
-            if (leaf == null) return BuildResult.Fail("这根液压杆没有单独设置开启角");
+            if (leaf == null) return BuildResult.Fail(Loc.T("这根液压杆没有单独设置开启角"));
             PushUndo();
             mech.Leaves.Remove(leaf);
             Changed?.Invoke();
-            return BuildResult.Success(0, "已恢复默认开启角 70°");
+            return BuildResult.Success(0, Loc.T("已恢复默认开启角 70°"));
         }
 
         /// <summary>Length range a hydraulic can really reach in the current structure (fractions of its built length).</summary>
@@ -684,8 +684,8 @@ namespace BridgeArchitect3D.Building
         public BuildResult SetHydraulicTarget(int memberId, double pct, bool recordUndo)
         {
             var member = Design.FindMember(memberId);
-            if (member == null || Db.GetMaterial(member.MaterialId)?.Extendable != true) return BuildResult.Fail("请先选中液压杆");
-            if (!double.IsFinite(pct)) return BuildResult.Fail("目标必须是数字");
+            if (member == null || Db.GetMaterial(member.MaterialId)?.Extendable != true) return BuildResult.Fail(Loc.T("请先选中液压杆"));
+            if (!double.IsFinite(pct)) return BuildResult.Fail(Loc.T("目标必须是数字"));
             if (LeafActuator(memberId, out var sys, out var lr, out var ar, out _))
             {
                 double best = LeafAngleMin, err = double.MaxValue;
@@ -704,7 +704,7 @@ namespace BridgeArchitect3D.Building
                 if (!res.Ok) return res;
                 member.CostStroke = travel;
                 Changed?.Invoke();
-                return BuildResult.Success(res.CreatedId, $"目标长度 {got:0.00} m（{got / ar.L0 - 1:+0%;-0%;0%}），桥叶开启 {best:0.#}°，费用 ${leafCost:0}。" + DescribeActuator(memberId));
+                return BuildResult.Success(res.CreatedId, Loc.F("目标长度 {0:0.00} m（{1:+0%;-0%;0%}），桥叶开启 {2:0.#}°，费用 ${3:0}。", (got), (got / ar.L0 - 1), (best), (leafCost)) + DescribeActuator(memberId));
             }
             var range = GetHydraulicRange(memberId);
             double target = System.Math.Clamp(pct, range.MinPct, range.MaxPct);
@@ -719,7 +719,7 @@ namespace BridgeArchitect3D.Building
                 if (recordUndo) PushUndo();
                 member.Stroke = target; member.CostStroke = System.Math.Abs(target);
                 Changed?.Invoke();
-                return BuildResult.Success(0, $"目标长度 {member.Length * (1 + target):0.00} m（{target:+0%;-0%;0%}），黄色外筒 = 最短 {member.Length * (1 + System.Math.Min(0, target)):0.00} m，费用 ${strokeCost:0}");
+                return BuildResult.Success(0, Loc.F("目标长度 {0:0.00} m（{1:+0%;-0%;0%}），黄色外筒 = 最短 {2:0.00} m，费用 ${3:0}", (member.Length * (1 + target)), (target), (member.Length * (1 + System.Math.Min(0, target))), (strokeCost)));
             }
             double mag = System.Math.Clamp(System.Math.Abs(target), LinkageDriverData.MinStroke, LinkageDriverData.MaxStroke);
             target = target > 0 ? mag : -mag;
@@ -730,7 +730,7 @@ namespace BridgeArchitect3D.Building
             if (driver == null) settings.Drivers.Add(new LinkageDriverData { MemberId = memberId, Ratio = target });
             else driver.Ratio = target;
             Changed?.Invoke();
-            return BuildResult.Success(0, $"目标长度 {member.Length * (1 + target):0.00} m（{target:+0%;-0%}）。" + DescribeActuator(memberId));
+            return BuildResult.Success(0, Loc.F("目标长度 {0:0.00} m（{1:+0%;-0%}）。", (member.Length * (1 + target)), (target)) + DescribeActuator(memberId));
         }
 
         private bool LeafActuator(int memberId, out BasculeSystem sys, out LeafRuntime lr, out ActuatorRuntime ar, out LeafGroupPlan g)
@@ -788,7 +788,7 @@ namespace BridgeArchitect3D.Building
         {
             var plan = PlanMechanism();
             var g = plan.GroupOf(actuatorMemberId);
-            if (g == null) return BuildResult.Fail(plan.Rejected.TryGetValue(actuatorMemberId, out var why) ? why : "这根液压杆不驱动桥叶");
+            if (g == null) return BuildResult.Fail(plan.Rejected.TryGetValue(actuatorMemberId, out var why) ? why : Loc.T("这根液压杆不驱动桥叶"));
             return SetLeafActuator(actuatorMemberId, openAngleDeg);
         }
         /// <summary>
@@ -798,15 +798,15 @@ namespace BridgeArchitect3D.Building
         public BuildResult SplitMember(int memberId, bool rigid = true)
         {
             var m = Design.FindMember(memberId);
-            if (m == null) return BuildResult.Fail("构件不存在");
+            if (m == null) return BuildResult.Fail(Loc.T("构件不存在"));
             var mat = Db.GetMaterial(m.MaterialId);
-            if (mat == null) return BuildResult.Fail("材料不存在");
-            if (mat.Extendable) return BuildResult.Fail("液压杆不能拆分");
-            if (mat.IsPier) return BuildResult.Fail("桥墩不能拆分");
-            if (m.Existing) return BuildResult.Fail("旧桥构件不能拆分");
+            if (mat == null) return BuildResult.Fail(Loc.T("材料不存在"));
+            if (mat.Extendable) return BuildResult.Fail(Loc.T("液压杆不能拆分"));
+            if (mat.IsPier) return BuildResult.Fail(Loc.T("桥墩不能拆分"));
+            if (m.Existing) return BuildResult.Fail(Loc.T("旧桥构件不能拆分"));
             var a = Design.FindNode(m.StartNodeId); var b = Design.FindNode(m.EndNodeId);
             double len = Vec3d.Distance(a.Position, b.Position);
-            if (len / 2 < MinMemberLength) return BuildResult.Fail("构件太短，拆分后会短于最短构件长度");
+            if (len / 2 < MinMemberLength) return BuildResult.Fail(Loc.T("构件太短，拆分后会短于最短构件长度"));
             double mx = (a.Position.X + b.Position.X) / 2, my = (a.Position.Y + b.Position.Y) / 2;
             string why = CheckNodePosition(mx, my);
             if (why != null) return BuildResult.Fail(why);
@@ -833,7 +833,7 @@ namespace BridgeArchitect3D.Building
             Design.Members.Insert(at + 1, second);
             RecalculateAll();   // lengths and costs of both halves
             Changed?.Invoke();
-            return BuildResult.Success(mid.Id, rigid ? $"已添加刚性点 #{mid.Id}：原构件保持直线、不可折叠" : $"已拆为两根独立构件，新连接点 #{mid.Id} 为普通连接点");
+            return BuildResult.Success(mid.Id, rigid ? Loc.F("已添加刚性点 #{0}：原构件保持直线、不可折叠", (mid.Id)) : Loc.F("已拆为两根独立构件，新连接点 #{0} 为普通连接点", (mid.Id)));
         }
 
         private void ReleaseRigidSpanAt(BridgeNode cut)
@@ -848,10 +848,10 @@ namespace BridgeArchitect3D.Building
         public BuildResult ConvertRigidToSplit(int nodeId)
         {
             var node=Design.FindNode(nodeId);
-            if(node==null || !node.IsRigidSplit)return BuildResult.Fail("请选择刚性拆分点");
-            if(Design.Members.Any(m=>m.Existing && (m.StartNodeId==nodeId || m.EndNodeId==nodeId)))return BuildResult.Fail("旧桥节点不能改为普通连接点");
+            if(node==null || !node.IsRigidSplit)return BuildResult.Fail(Loc.T("请选择刚性拆分点"));
+            if(Design.Members.Any(m=>m.Existing && (m.StartNodeId==nodeId || m.EndNodeId==nodeId)))return BuildResult.Fail(Loc.T("旧桥节点不能改为普通连接点"));
             PushUndo();ReleaseRigidSpanAt(node);RecalculateAll();Changed?.Invoke();
-            return BuildResult.Success(nodeId,"已改为普通连接点：两侧构件独立，保留真实连接");
+            return BuildResult.Success(nodeId,Loc.T("已改为普通连接点：两侧构件独立，保留真实连接"));
         }
 
         // ---------------- 桥墩与基础 ----------------
@@ -868,17 +868,17 @@ namespace BridgeArchitect3D.Building
         {
             height = 0; cost = 0;
             var mat = Db.GetMaterial(materialId);
-            if (mat == null || !mat.IsPier) return "不是桥墩材料";
-            if (!Level.AllowedMaterials.Contains(materialId)) return "本关不允许使用该材料";
+            if (mat == null || !mat.IsPier) return Loc.T("不是桥墩材料");
+            if (!Level.AllowedMaterials.Contains(materialId)) return Loc.T("本关不允许使用该材料");
             var t = Level.Terrain;
-            if (x <= 0.3 || x >= t.RiverWidth - 0.3) return "桥墩只能建在河道内";
+            if (x <= 0.3 || x >= t.RiverWidth - 0.3) return Loc.T("桥墩只能建在河道内");
             foreach (var z in t.NoBuildZones)
-                if (x > z.X0 + 0.01 && x < z.X1 - 0.01) return $"{z.Name}：不能建桥墩";
+                if (x > z.X0 + 0.01 && x < z.X1 - 0.01) return Loc.F("{0}：不能建桥墩", (z.Name));
             double bed = PierBedY(x);
             height = topY - bed;
-            if (height < 1.5) return "桥墩太矮";
-            if (height > 2 * mat.MaximumLength + 1e-6) return $"桥墩太高（{height:0.0} m，最高 {2 * mat.MaximumLength:0} m）";
-            if (Design.Nodes.Any(n => n.PierBase && Math.Abs(n.Position.X - x) < 1.5)) return "这里已经有桥墩";
+            if (height < 1.5) return Loc.T("桥墩太矮");
+            if (height > 2 * mat.MaximumLength + 1e-6) return Loc.F("桥墩太高（{0:0.0} m，最高 {1:0} m）", (height), (2 * mat.MaximumLength));
+            if (Design.Nodes.Any(n => n.PierBase && Math.Abs(n.Position.X - x) < 1.5)) return Loc.T("这里已经有桥墩");
             cost = height * mat.CostPerMeter + FoundationRules.Cost(FoundationType.Shallow);
             return null;
         }
@@ -896,7 +896,7 @@ namespace BridgeArchitect3D.Building
             double midY = Snap(bed + h / 2);
             var topNode = NodeAt(x, topY, MinNodeSpacing);
             if (topNode == null && CheckNodePosition(x, topY, -1, true) != null && CheckNodePosition(x, topY) != null)
-                return BuildResult.Fail("顶部位置不能放置支点");
+                return BuildResult.Fail(Loc.T("顶部位置不能放置支点"));
             PushUndo();
             var baseN = new BridgeNode { Id = Design.NextNodeId++, Position = new Vec3d(x, bed), PierBase = true, Foundation = FoundationType.Shallow };
             Design.Nodes.Add(baseN);
@@ -910,19 +910,19 @@ namespace BridgeArchitect3D.Building
                 Design.Members.Add(new BridgeMember { Id = Design.NextMemberId++, StartNodeId = a.Id, EndNodeId = b.Id, MaterialId = materialId, Length = len, Cost = len * mat.CostPerMeter });
             }
             Changed?.Invoke();
-            return BuildResult.Success(baseN.Id, $"已建造{mat.Name}（高 {h:0.0} m，{FoundationRules.Name(FoundationType.Shallow)}）");
+            return BuildResult.Success(baseN.Id, Loc.F("已建造{0}（高 {1:0.0} m，{2}）", (mat.Name), (h), (FoundationRules.Name(FoundationType.Shallow))));
         }
 
         /// <summary>切换桥墩基础类型（浅基础 / 桩基础）。</summary>
         public BuildResult SetFoundation(int baseNodeId, FoundationType type)
         {
             var n = Design.FindNode(baseNodeId);
-            if (n == null || !n.PierBase) return BuildResult.Fail("不是桥墩基础");
+            if (n == null || !n.PierBase) return BuildResult.Fail(Loc.T("不是桥墩基础"));
             if (n.Foundation == type) return BuildResult.Success(n.Id);
             PushUndo();
             n.Foundation = type;
             Changed?.Invoke();
-            return BuildResult.Success(n.Id, $"已改为{FoundationRules.Name(type)}（${FoundationRules.Cost(type):0}）");
+            return BuildResult.Success(n.Id, Loc.F("已改为{0}（${1:0}）", (FoundationRules.Name(type)), (FoundationRules.Cost(type))));
         }
 
         /// <summary>找到桥墩的墩底节点（从墩身上任一节点向下追溯）。</summary>
@@ -946,7 +946,7 @@ namespace BridgeArchitect3D.Building
         {
             int c = removing.Count(m => m.Existing);
             if (c == 0 || Level.MaxDemolitions < 0) return null;
-            if (c > DemolitionsLeft) return $"旧构件最多只能拆除 {Level.MaxDemolitions} 根（剩余 {DemolitionsLeft} 根，这次要拆 {c} 根）";
+            if (c > DemolitionsLeft) return Loc.F("旧构件最多只能拆除 {0} 根（剩余 {1} 根，这次要拆 {2} 根）", (Level.MaxDemolitions), (DemolitionsLeft), (c));
             return null;
         }
 
@@ -970,14 +970,14 @@ namespace BridgeArchitect3D.Building
         public BuildResult RepairMember(int memberId)
         {
             var m = Design.FindMember(memberId);
-            if (m == null) return BuildResult.Fail("构件不存在");
-            if (!m.Existing || m.Condition >= 1 - 1e-9) return BuildResult.Fail("这根构件不需要修复");
+            if (m == null) return BuildResult.Fail(Loc.T("构件不存在"));
+            if (!m.Existing || m.Condition >= 1 - 1e-9) return BuildResult.Fail(Loc.T("这根构件不需要修复"));
             double cost = RepairCostOf(m);
             PushUndo();
             Design.RepairCost += cost;
             m.Condition = 1;
             Changed?.Invoke();
-            return BuildResult.Success(m.Id, $"已修复构件 #{m.Id}，花费 ${cost:0}");
+            return BuildResult.Success(m.Id, Loc.F("已修复构件 #{0}，花费 ${1:0}", (m.Id), (cost)));
         }
 
         /// <summary>按当前几何重新计算所有构件长度与费用，并清理悬空引用（用于加载存档后的校验）。</summary>

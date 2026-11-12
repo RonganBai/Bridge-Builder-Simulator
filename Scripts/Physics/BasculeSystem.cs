@@ -130,13 +130,13 @@ namespace BridgeArchitect3D.Physics
                         if(!TrySettings(candidate)) continue;
                         settings=candidate; valid=true;
                         var accepted=candidate.Drivers.Select(d=>d.MemberId).ToHashSet();
-                        _configurationWarning="部分所选驱动无法同时动作：#"+string.Join("、#",selected.Where(id=>!accepted.Contains(id)))+"；其余有效驱动继续工作。原因："+initialFailure;
+                        _configurationWarning=Loc.T("部分所选驱动无法同时动作：#")+string.Join(Loc.T("、#"),selected.Where(id=>!accepted.Contains(id)))+Loc.T("；其余有效驱动继续工作。原因：")+initialFailure;
                         break;
                     }
                 }
                 if(!valid)
                 {
-                    _configurationWarning="所选通用驱动暂不动作："+(Linkage.Fault ?? "联动时间无效")+"；其他有效液压杆继续自动开桥。";
+                    _configurationWarning=Loc.T("所选通用驱动暂不动作：")+(Linkage.Fault ?? Loc.T("联动时间无效"))+Loc.T("；其他有效液压杆继续自动开桥。");
                     Linkage.Deactivate(); Linkage=null;
                     PrepareWith(m,BasculePlanner.Plan(design,db,level,selected));
                     return;
@@ -158,7 +158,7 @@ namespace BridgeArchitect3D.Physics
                 Linkage=new LinkageSystem();
                 if(!Linkage.Initialize(m,settings) || !Linkage.RestrictToDrivenMotion())
                 {
-                    _configurationWarning="通用驱动无法与其他机构同时运动："+Linkage.Fault;
+                    _configurationWarning=Loc.T("通用驱动无法与其他机构同时运动：")+Linkage.Fault;
                     Linkage.Deactivate(); Linkage=null;
                 }
                 return;
@@ -180,7 +180,7 @@ namespace BridgeArchitect3D.Physics
                 if (seam.Explicit)
                 {
                     if (!m.NodeIndex.TryGetValue(seam.RightKey, out b)) continue;
-                    if (Math.Abs(m.X[a] - m.X[b]) > AlignTolerance || Math.Abs(m.Y[a] - m.Y[b]) > AlignTolerance) { Errors.Add($"接缝节点 #{seam.LeftKey} / #{seam.RightKey} 没有对齐"); continue; }
+                    if (Math.Abs(m.X[a] - m.X[b]) > AlignTolerance || Math.Abs(m.Y[a] - m.Y[b]) > AlignTolerance) { Errors.Add(Loc.F("接缝节点 #{0} / #{1} 没有对齐", (seam.LeftKey), (seam.RightKey))); continue; }
                 }
                 else
                 {
@@ -224,7 +224,7 @@ namespace BridgeArchitect3D.Physics
                 var lr = new LeafRuntime { Plan = g, Pivot = Idx(g.PivotKey), Tip = Idx(g.TipKey) };
                 lr.Nodes = g.LeafKeys.Select(Idx).Where(i => i >= 0).ToArray();
                 lr.Members = g.MemberIds.Where(m.MemberIndex.ContainsKey).Select(id => m.MemberIndex[id]).ToArray();
-                if (lr.Pivot < 0 || lr.Nodes.Length == 0) { Errors.Add($"桥叶 #{g.Id} 数据无效"); continue; }
+                if (lr.Pivot < 0 || lr.Nodes.Length == 0) { Errors.Add(Loc.F("桥叶 #{0} 数据无效", (g.Id))); continue; }
                 foreach (var ap in g.Actuators)
                 {
                     if (!m.MemberIndex.TryGetValue(ap.MemberId, out int k)) continue;
@@ -240,7 +240,7 @@ namespace BridgeArchitect3D.Physics
                     lr.Actuators.Add(ar);
                 }
                 string bad = VerifyLeaf(lr, g);
-                if (bad != null) { Errors.Add($"桥叶 #{g.Id}：{bad}"); continue; }
+                if (bad != null) { Errors.Add(Loc.F("桥叶 #{0}：{1}", (g.Id), (bad))); continue; }
                 foreach (int i in lr.Nodes) _leafNode[i] = true;
                 foreach (int k in lr.Members)
                 {
@@ -253,10 +253,10 @@ namespace BridgeArchitect3D.Physics
             }
             // A brace that locks a movable part: that hydraulic does not drive (named to the player); other valid
             // leaves still work.
-            var lockedBy = Plan.Rejected.Where(r => r.Value.Contains("锁死")).Select(r => $"液压杆 #{r.Key} 不驱动：{r.Value}").ToList();
-            ConfigNote = string.Join("；", lockedBy.Concat(NavigationNote == null ? Array.Empty<string>() : new[] { "净空提示（不阻止机构运动）：" + NavigationNote }).Concat(_configurationWarning==null?Array.Empty<string>():new[]{_configurationWarning}));
+            var lockedBy = Plan.Rejected.Where(r => r.Value.Contains(Loc.T("锁死"))).Select(r => Loc.F("液压杆 #{0} 不驱动：{1}", (r.Key), (r.Value))).ToList();
+            ConfigNote = string.Join(Loc.T("；"), lockedBy.Concat(NavigationNote == null ? Array.Empty<string>() : new[] { Loc.T("净空提示（不阻止机构运动）：") + NavigationNote }).Concat(_configurationWarning==null?Array.Empty<string>():new[]{_configurationWarning}));
             if (ConfigNote.Length == 0) ConfigNote = null;
-            if (Errors.Count > 0) { Fault = string.Join("；", Errors); Leaves.Clear(); }
+            if (Errors.Count > 0) { Fault = string.Join(Loc.T("；"), Errors); Leaves.Clear(); }
             ApplyLocks(true);
             foreach (var p in paths)
             {
@@ -287,24 +287,24 @@ namespace BridgeArchitect3D.Physics
         private string VerifyLeaf(LeafRuntime lr, LeafGroupPlan g)
         {
             var set = new HashSet<int>(lr.Nodes);
-            if (set.Count != lr.Nodes.Length || lr.Nodes.Length != g.LeafKeys.Count) return "桥叶节点映射重复或缺失";
-            if (set.Contains(lr.Pivot)) return $"节点 #{_m.NodeIds[lr.Pivot]} 同时是转轴和活动节点";
-            if (lr.Actuators.Count != g.Actuators.Count) return "驱动液压杆不存在";
+            if (set.Count != lr.Nodes.Length || lr.Nodes.Length != g.LeafKeys.Count) return Loc.T("桥叶节点映射重复或缺失");
+            if (set.Contains(lr.Pivot)) return Loc.F("节点 #{0} 同时是转轴和活动节点", (_m.NodeIds[lr.Pivot]));
+            if (lr.Actuators.Count != g.Actuators.Count) return Loc.T("驱动液压杆不存在");
             foreach (var ar in lr.Actuators)
             {
                 int k = ar.Member;
                 bool ends = (_m.A[k] == ar.LeafNode && _m.B[k] == ar.FixedNode) || (_m.B[k] == ar.LeafNode && _m.A[k] == ar.FixedNode);
-                if (!ends) return $"液压杆 #{ar.MemberId} 的端点与识别结果不一致";
-                if (!set.Contains(ar.LeafNode)) return $"液压杆 #{ar.MemberId} 的活动端不在桥叶上";
-                if (set.Contains(ar.FixedNode) || ar.FixedNode == lr.Pivot) return $"液压杆 #{ar.MemberId} 的固定端在桥叶或转轴上";
+                if (!ends) return Loc.F("液压杆 #{0} 的端点与识别结果不一致", (ar.MemberId));
+                if (!set.Contains(ar.LeafNode)) return Loc.F("液压杆 #{0} 的活动端不在桥叶上", (ar.MemberId));
+                if (set.Contains(ar.FixedNode) || ar.FixedNode == lr.Pivot) return Loc.F("液压杆 #{0} 的固定端在桥叶或转轴上", (ar.MemberId));
             }
             var own = new HashSet<int>(lr.Members); foreach (var ar in lr.Actuators) own.Add(ar.Member);
             for (int k = 0; k < _m.MemberCount; k++)
             {
                 if (own.Contains(k) || _m.Broken[k]) continue;
                 bool a = set.Contains(_m.A[k]), b = set.Contains(_m.B[k]);
-                if (a != b) return $"构件 #{_m.MemberIds[k]}（{_m.Mat[k].Name}）把桥叶连到桥叶外，会阻碍转动";
-                if (a && b) return $"构件 #{_m.MemberIds[k]} 在桥叶内部却没有随桥叶转动";
+                if (a != b) return Loc.F("构件 #{0}（{1}）把桥叶连到桥叶外，会阻碍转动", (_m.MemberIds[k]), (_m.Mat[k].Name));
+                if (a && b) return Loc.F("构件 #{0} 在桥叶内部却没有随桥叶转动", (_m.MemberIds[k]));
             }
             return null;
         }
@@ -331,7 +331,7 @@ namespace BridgeArchitect3D.Physics
             var sys = new BasculeSystem();
             sys.PrepareWith(m, plan);
             sys.Initialize(Array.Empty<RoadPath>());
-            if (sys.Leaves.Count == 0) { blocking = int.MaxValue; return "没有可开启的桥叶"; }
+            if (sys.Leaves.Count == 0) { blocking = int.MaxValue; return Loc.T("没有可开启的桥叶"); }
             foreach (var l in sys.Leaves) l.Angle = l.OpenAngleDeg;
             sys.ApplyGeometry(null);
             foreach (var s in ships)
@@ -345,7 +345,7 @@ namespace BridgeArchitect3D.Physics
                     if (ShipGeometry.Parts(s).Any(part=>ShipGeometry.Intersects(s,level.Terrain.WaterLevel,-part.Z,m.X[m.A[k]],m.Y[m.A[k]]+offset,m.X[m.B[k]],m.Y[m.B[k]]+offset,0,2*h,0)))
                     {
                         blocking++;
-                        first ??= $"桥叶开到目标角度后构件 #{m.MemberIds[k]}（{m.Mat[k].Name}）仍挡住航道";
+                        first ??= Loc.F("桥叶开到目标角度后构件 #{0}（{1}）仍挡住航道", (m.MemberIds[k]), (m.Mat[k].Name));
                     }
                 }
             }
@@ -377,7 +377,7 @@ namespace BridgeArchitect3D.Physics
             var sys = new BasculeSystem();
             sys.PrepareWith(m, plan);
             sys.Initialize(Array.Empty<RoadPath>());
-            if (sys.Errors.Count > 0 || sys.Leaves.Count != plan.Groups.Count) { why = string.Join("；", sys.Errors); return false; }
+            if (sys.Errors.Count > 0 || sys.Leaves.Count != plan.Groups.Count) { why = string.Join(Loc.T("；"), sys.Errors); return false; }
             reach = sys.Leaves.Count == 0 ? 0 : sys.Leaves.Min(l => Math.Min(1, l.ReachAngle / Math.Max(1e-6, l.OpenAngleDeg)));
             var solver = new StructureSolver();
             var o = new SolveOutput(); o.EnsureSize(m.NodeCount, m.MemberCount);
@@ -391,7 +391,7 @@ namespace BridgeArchitect3D.Physics
                 Array.Clear(loads, 0, loads.Length);
                 LoadCalculator.Compute(m, Array.Empty<AxleLoad>(), 0, loads);
                 solver.Solve(m, loads, o);
-                if (!o.Stable) { why = $"{(sample > 0 ? "开启途中" : "解除接缝")}后节点 #{Math.Abs(o.UnstableNodeId)} 附近缺少约束"; return false; }
+                if (!o.Stable) { why = Loc.F("{0}后节点 #{1} 附近缺少约束", ((sample > 0 ? Loc.T("开启途中") : Loc.T("解除接缝"))), (Math.Abs(o.UnstableNodeId))); return false; }
             }
             return true;
         }
@@ -405,7 +405,7 @@ namespace BridgeArchitect3D.Physics
             Linkage?.Deactivate();
             _automatic?.Disable(reason);
             Errors.Add(reason);
-            Fault = string.Join("；", Errors);
+            Fault = string.Join(Loc.T("；"), Errors);
             foreach (var l in Leaves)
                 foreach (int k in l.Members) { _m.ReleaseA[k] = false; _m.ReleaseB[k] = false; }
             Leaves.Clear();
@@ -512,7 +512,7 @@ namespace BridgeArchitect3D.Physics
                         foreach (var l in Leaves.Where(l => l.ReachAngle < l.OpenAngleDeg - 1e-6))
                         {
                             var ar = l.Actuators.OrderBy(a => a.ReachAngle).First();
-                            SetFault($"桥叶 #{l.Id} 液压杆 #{ar.MemberId} 行程不足：最多只能开到 {ar.ReachAngle:0}°（目标 {l.OpenAngleDeg:0}°，液压杆可在 {ar.LMin:0.00}~{ar.LMax:0.00} m 之间伸缩）");
+                            SetFault(Loc.F("桥叶 #{0} 液压杆 #{1} 行程不足：最多只能开到 {2:0}°（目标 {3:0}°，液压杆可在 {4:0.00}~{5:0.00} m 之间伸缩）", (l.Id), (ar.MemberId), (ar.ReachAngle), (l.OpenAngleDeg), (ar.LMin), (ar.LMax)));
                         }
                         Go(Leaves.Any(l => l.Stalled || l.Angle < l.OpenAngleDeg - 1e-6)
                             ? BridgeOpState.Blocked : BridgeOpState.Open);
@@ -556,7 +556,7 @@ namespace BridgeArchitect3D.Physics
             foreach (var (a, b) in Locks)
             {
                 double d = Math.Sqrt(Math.Pow(_m.X[a] - _m.X[b], 2) + Math.Pow(_m.Y[a] - _m.Y[b], 2));
-                if (d > AlignTolerance) return $"闭合偏差 {d:0.00} m：接缝两侧没有对齐，无法恢复连接";
+                if (d > AlignTolerance) return Loc.F("闭合偏差 {0:0.00} m：接缝两侧没有对齐，无法恢复连接", (d));
             }
             return null;
         }
@@ -585,7 +585,7 @@ namespace BridgeArchitect3D.Physics
                 // Restore the actual preceding angle, including a shortened last step.
                 l.Angle = l.PreviousAngle;
                 l.Stalled = true; changed = true;
-                SetFault($"桥叶 #{l.Id} 液压杆 #{over.MemberId} {(over.Force > 0 ? "拉力" : "推力")}不足：需要 {Math.Abs(over.Force) / 9810:0.0} 吨，最大 {over.ForceLimit / 9810:0.0} 吨（停在 {l.Angle:0}°）。可以减轻桥叶、加大力臂或增加一根共同驱动的液压杆");
+                SetFault(Loc.F("桥叶 #{0} 液压杆 #{1} {2}不足：需要 {3:0.0} 吨，最大 {4:0.0} 吨（停在 {5:0}°）。可以减轻桥叶、加大力臂或增加一根共同驱动的液压杆", (l.Id), (over.MemberId), ((over.Force > 0 ? Loc.T("拉力") : Loc.T("推力"))), (Math.Abs(over.Force) / 9810), (over.ForceLimit / 9810), (l.Angle)));
             }
             return changed || otherChanged;
         }
@@ -630,20 +630,20 @@ namespace BridgeArchitect3D.Physics
         {
             if(Linkage!=null || _automatic!=null)
             {
-                StatusText=$"通用铰接联动：{State}，行程 {Linkage?.Progress ?? 0:P0}"+(Fault==null?"":"；"+Fault)+(_automatic==null?"":"；"+_automatic.StatusText);
+                StatusText=Loc.F("通用铰接联动：{0}，行程 {1:P0}", (State), (Linkage?.Progress ?? 0))+(Fault==null?"":Loc.T("；")+Fault)+(_automatic==null?"":Loc.T("；")+_automatic.StatusText);
                 return;
             }
             double angle = Leaves.Count == 0 ? 0 : Leaves.Max(l => l.Angle);
             StatusText = State switch
             {
-                BridgeOpState.Closed => Locked ? "开启桥：闭合，接缝已连接" : "开启桥：闭合（接缝未连接）",
-                BridgeOpState.StoppingTraffic => "开启桥：车辆停车，等待活动桥面清空",
-                BridgeOpState.Unlocking => "开启桥：解除活动接缝",
-                BridgeOpState.Opening => $"开启桥：正在开启 {angle:0}°",
-                BridgeOpState.Open => $"开启桥：保持开启 {angle:0}°，船只通行",
-                BridgeOpState.Closing => $"开启桥：正在闭合 {angle:0}°",
-                BridgeOpState.Locking => "开启桥：对齐并恢复接缝连接",
-                BridgeOpState.Blocked => $"开启桥：动作受限，停在 {angle:0}°，保持禁止通行（{Fault}）",
+                BridgeOpState.Closed => Locked ? Loc.T("开启桥：闭合，接缝已连接") : Loc.T("开启桥：闭合（接缝未连接）"),
+                BridgeOpState.StoppingTraffic => Loc.T("开启桥：车辆停车，等待活动桥面清空"),
+                BridgeOpState.Unlocking => Loc.T("开启桥：解除活动接缝"),
+                BridgeOpState.Opening => Loc.F("开启桥：正在开启 {0:0}°", (angle)),
+                BridgeOpState.Open => Loc.F("开启桥：保持开启 {0:0}°，船只通行", (angle)),
+                BridgeOpState.Closing => Loc.F("开启桥：正在闭合 {0:0}°", (angle)),
+                BridgeOpState.Locking => Loc.T("开启桥：对齐并恢复接缝连接"),
+                BridgeOpState.Blocked => Loc.F("开启桥：动作受限，停在 {0:0}°，保持禁止通行（{1}）", (angle), (Fault)),
                 _ => "",
             };
         }

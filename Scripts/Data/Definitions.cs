@@ -211,7 +211,7 @@ namespace BridgeArchitect3D.Data
         public string Soil { get; set; } = "rock";
         public bool Scour { get; set; }
         public bool IsRock => Soil == "rock";
-        public string Name => (IsRock ? "岩石" : "软土") + (Scour ? "·冲刷区" : "");
+        public string Name => (IsRock ? Loc.T("岩石") : Loc.T("软土")) + (Scour ? Loc.T("·冲刷区") : "");
     }
 
     /// <summary>地基与基础参数（集中定义）：费用 $ / 座，承载力 N。</summary>
@@ -221,7 +221,7 @@ namespace BridgeArchitect3D.Data
         public static double Capacity(FoundationZone z, FoundationType f) =>
             f == FoundationType.Pile ? 4.0e6 : z.IsRock ? 3.0e6 : 4.0e5;
         public static double Cost(FoundationType f) => f == FoundationType.Pile ? PileCost : f == FoundationType.Shallow ? ShallowCost : 0;
-        public static string Name(FoundationType f) => f == FoundationType.Pile ? "桩基础" : "浅基础";
+        public static string Name(FoundationType f) => f == FoundationType.Pile ? Loc.T("桩基础") : Loc.T("浅基础");
     }
 
     public class NoBuildZone
@@ -230,7 +230,7 @@ namespace BridgeArchitect3D.Data
         public double X1 { get; set; }
         /// <summary>该高度以下禁止建造（通常为两岸道路标高）。</summary>
         public double BelowY { get; set; }
-        public string Name { get; set; } = "禁止建墩区";
+        public string Name { get; set; } = Loc.T("禁止建墩区");
     }
 
     /// <summary>交通事件类型。预留火车、船舶、环境事件扩展（TrafficEventSystem）。</summary>
@@ -254,7 +254,7 @@ namespace BridgeArchitect3D.Data
         public double Length { get; set; } = 10;
         /// <summary>航速 m/s。</summary>
         public double Speed { get; set; } = 4;
-        public string Name { get; set; } = "货船";
+        public string Name { get; set; } = Loc.T("货船");
         /// <summary>Shared ship model and collision profile; legacy events remain cargo ships.</summary>
         public string ShipKind { get; set; } = "cargo";
         // ---- 洪水事件参数（Type = Environment）：Height 为水位上涨高度，Duration 为持续时间 ----

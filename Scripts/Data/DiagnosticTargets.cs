@@ -17,14 +17,14 @@ namespace BridgeArchitect3D.Data
         {
             var result=new DiagnosticTargets {SourceMember=sourceMember};
             if(string.IsNullOrEmpty(message)) return result;
-            result.Kind=message.Contains("机构欠约束：") ? MechanismDiagnosticKind.Underconstrained :
-                message.Contains("几何死点：") ? MechanismDiagnosticKind.DeadPoint :
-                message.Contains("约束冲突：") ? MechanismDiagnosticKind.ConstraintConflict : MechanismDiagnosticKind.None;
-            foreach(Match m in Regex.Matches(message,@"(?:构件|液压杆|钢梁|桥面)\s*#\s*(\d+)"))
+            result.Kind=message.Contains(Loc.T("机构欠约束：")) ? MechanismDiagnosticKind.Underconstrained :
+                message.Contains(Loc.T("几何死点：")) ? MechanismDiagnosticKind.DeadPoint :
+                message.Contains(Loc.T("约束冲突：")) ? MechanismDiagnosticKind.ConstraintConflict : MechanismDiagnosticKind.None;
+            foreach(Match m in Regex.Matches(message,Loc.T(@"(?:构件|液压杆|钢梁|桥面)\s*#\s*(\d+)")))
                 if(int.TryParse(m.Groups[1].Value,out int id)) result.Members.Add(id);
-            foreach(Match m in Regex.Matches(message,@"(?:转轴节点|节点)\s*#\s*(\d+)"))
+            foreach(Match m in Regex.Matches(message,Loc.T(@"(?:转轴节点|节点)\s*#\s*(\d+)")))
                 if(int.TryParse(m.Groups[1].Value,out int id)) result.Nodes.Add(id);
-            foreach(Match m in Regex.Matches(message,@"构件\s*#\s*(\d+)[^\r\n]{0,70}(?:锁死|阻碍|阻挡)"))
+            foreach(Match m in Regex.Matches(message,Loc.T(@"构件\s*#\s*(\d+)[^\r\n]{0,70}(?:锁死|阻碍|阻挡)")))
                 if(int.TryParse(m.Groups[1].Value,out int id)) result.BlockingMembers.Add(id);
             result.Members.Remove(sourceMember);
             result.BlockingMembers.Remove(sourceMember);

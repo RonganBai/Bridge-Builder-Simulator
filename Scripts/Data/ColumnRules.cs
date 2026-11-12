@@ -29,15 +29,15 @@ namespace BridgeArchitect3D.Data
             {
                 if (a.IsAnchor && (!b.IsAnchor || a.Position.Y <= b.Position.Y)) return true;
                 if (b.IsAnchor) return false;
-                reason = $"{mat.Name}只能建在地图锚点上";
+                reason = Loc.F("{0}只能建在地图锚点上", (mat.Name));
                 return true;
             }
             bool aLow = a.Position.Y <= b.Position.Y;
             var low = aLow ? a : b;
             if (mat.BaseRule == BaseRule.Pier && !(low.PierBase || low.PierPart))
-                reason = $"{mat.Name}只能用桥墩工具从河床立起";
+                reason = Loc.F("{0}只能用桥墩工具从河床立起", (mat.Name));
             if (mat.BaseRule == BaseRule.Land && !level.IsOnLand(low.Position.X, low.Position.Y))
-                reason = $"{mat.Name}的底端必须落在陆地上（两岸或岩墩）";
+                reason = Loc.F("{0}的底端必须落在陆地上（两岸或岩墩）", (mat.Name));
             return aLow;
         }
 

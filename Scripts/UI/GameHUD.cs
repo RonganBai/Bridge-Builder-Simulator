@@ -143,20 +143,20 @@ namespace BridgeArchitect3D.UI
 			if (_levelVehicles.Count > 0 || m.IsDeck)
 			{
 				_matInfoBox.AddChild(new HSeparator());
-				_matInfoBox.AddChild(UiTheme.MakeLabel(m.IsDeck ? "承载对比（单段最长、整车压在跨中）" : "本关车辆重量", 13, UiTheme.Muted));
+				_matInfoBox.AddChild(UiTheme.MakeLabel(m.IsDeck ? Loc.T("承载对比（单段最长、整车压在跨中）") : Loc.T("本关车辆重量"), 13, UiTheme.Muted));
 				var g2 = MakeGrid(detail);
-				if (m.IsDeck) AddStatRow(g2, "桥面承载", MaterialRatings.LinearCells(cap, scale), UiTheme.Good, $"{cap:0} 吨");
+				if (m.IsDeck) AddStatRow(g2, Loc.T("桥面承载"), MaterialRatings.LinearCells(cap, scale), UiTheme.Good, Loc.F("{0:0} 吨", (cap)));
 				foreach (var v in _levelVehicles)
 				{
 					double t = MaterialRatings.VehicleTonnes(v);
 					bool ok = !m.IsDeck || t <= cap;
 					string name = m.IsDeck ? $"{(ok ? "✔" : "✘")} {v.Name}" : v.Name;
-					string val = v.Units > 1 ? $"{Num(t)} 吨/节 ×{v.Units}" : $"{Num(t)} 吨";
+					string val = v.Units > 1 ? Loc.F("{0} 吨/节 ×{1}", (Num(t)), (v.Units)) : Loc.F("{0} 吨", (Num(t)));
 					AddStatRow(g2, name, MaterialRatings.LinearCells(t, scale), m.IsDeck ? (ok ? UiTheme.Warn : UiTheme.Bad) : UiTheme.Warn, val);
 				}
 				_matInfoBox.AddChild(g2);
 			}
-			if (!detail) _matInfoBox.AddChild(UiTheme.MakeLabel("在设置中勾选“显示数值”可查看具体数字", 11, UiTheme.Muted));
+			if (!detail) _matInfoBox.AddChild(UiTheme.MakeLabel(Loc.T("在设置中勾选“显示数值”可查看具体数字"), 11, UiTheme.Muted));
 
 			_matInfo.Size = Vector2.Zero; // 收缩到内容大小
 			var min = _matInfo.GetCombinedMinimumSize();
@@ -186,26 +186,26 @@ namespace BridgeArchitect3D.UI
 
 		private void ShowNamedDesigns()
 		{
-			if (_namedOverlay == null) (_namedOverlay, _namedBox) = UiTheme.MakeDialog(this, "命名方案", 460);
+			if (_namedOverlay == null) (_namedOverlay, _namedBox) = UiTheme.MakeDialog(this, Loc.T("命名方案"), 460);
 			foreach (var c in _namedBox.GetChildren()) if (c.GetIndex() > 0) c.QueueFree();
 			var row = new HBoxContainer();
-			var name = new LineEdit { PlaceholderText = "输入方案名称", SizeFlagsHorizontal = SizeFlags.ExpandFill, MaxLength = 40 };
+			var name = new LineEdit { PlaceholderText = Loc.T("输入方案名称"), SizeFlagsHorizontal = SizeFlags.ExpandFill, MaxLength = 40 };
 			row.AddChild(name);
-			row.AddChild(UiTheme.MakeButton("保存", () => { _ctl.SaveDesignAs(name.Text); ShowNamedDesigns(); }, 80));
+			row.AddChild(UiTheme.MakeButton(Loc.T("保存"), () => { _ctl.SaveDesignAs(name.Text); ShowNamedDesigns(); }, 80));
 			_namedBox.AddChild(row);
 			var names = _ctl.NamedDesigns();
-			_namedBox.AddChild(UiTheme.MakeLabel(names.Count == 0 ? "还没有命名方案" : "已保存的方案（同名会覆盖）", 13, UiTheme.Muted));
+			_namedBox.AddChild(UiTheme.MakeLabel(names.Count == 0 ? Loc.T("还没有命名方案") : Loc.T("已保存的方案（同名会覆盖）"), 13, UiTheme.Muted));
 			foreach (var n in names)
 			{
 				var r = new HBoxContainer();
 				r.AddChild(UiTheme.MakeLabel(n, 15));
 				r.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
 				string nn = n;
-				r.AddChild(UiTheme.MakeButton("读取", () => { _ctl.LoadNamedDesign(nn); _namedOverlay.Visible = false; }, 70));
-				r.AddChild(UiTheme.MakeButton("用此名覆盖", () => { name.Text = nn; }, 100));
+				r.AddChild(UiTheme.MakeButton(Loc.T("读取"), () => { _ctl.LoadNamedDesign(nn); _namedOverlay.Visible = false; }, 70));
+				r.AddChild(UiTheme.MakeButton(Loc.T("用此名覆盖"), () => { name.Text = nn; }, 100));
 				_namedBox.AddChild(r);
 			}
-			_namedBox.AddChild(UiTheme.MakeButton("关闭", () => _namedOverlay.Visible = false, 80));
+			_namedBox.AddChild(UiTheme.MakeButton(Loc.T("关闭"), () => _namedOverlay.Visible = false, 80));
 			_namedOverlay.Visible = true;
 		}
 
@@ -215,14 +215,14 @@ namespace BridgeArchitect3D.UI
 		/// <summary>Vertical bar at the right edge: the current peak member utilization (0..100%+).</summary>
 		private void BuildLoadBar()
 		{
-			var panel = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore, TooltipText = "桥梁实时负载：最大构件利用率，越红越接近承载极限" };
+			var panel = new PanelContainer { MouseFilter = MouseFilterEnum.Ignore, TooltipText = Loc.T("桥梁实时负载：最大构件利用率，越红越接近承载极限") };
 			_loadPanel=panel;
 			AddChild(panel);
 			Place(panel, 1, 0.5f, 1, 0.5f, -58, -150, -8, 170);
 			var vb = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
 			vb.AddThemeConstantOverride("separation", 4);
 			panel.AddChild(vb);
-			vb.AddChild(UiTheme.MakeLabel("负载", 12, UiTheme.Muted));
+			vb.AddChild(UiTheme.MakeLabel(Loc.T("负载"), 12, UiTheme.Muted));
 			_loadTrack = new Control { CustomMinimumSize = new Vector2(22, 240), SizeFlagsHorizontal = SizeFlags.ShrinkCenter, MouseFilter = MouseFilterEnum.Ignore, ClipContents = true };
 			_loadTrack.AddChild(new ColorRect { Color = new Color(0.16f, 0.18f, 0.22f), MouseFilter = MouseFilterEnum.Ignore, AnchorRight = 1, AnchorBottom = 1 });
 			_loadFill = new ColorRect { MouseFilter = MouseFilterEnum.Ignore, AnchorLeft = 0, AnchorRight = 1, AnchorTop = 1, AnchorBottom = 1 };
@@ -282,22 +282,22 @@ namespace BridgeArchitect3D.UI
 			_budget = UiTheme.MakeLabel("", 13, UiTheme.Text);_budget.ClipText=true;_budget.CustomMinimumSize=new Vector2(180,0);
 			hb.AddChild(_budget);
 			hb.AddChild(new Control { CustomMinimumSize = new Vector2(16, 0) });
-			_undo = UiTheme.MakeButton("撤销", () => _ctl.Undo(), 50);
-			_redo = UiTheme.MakeButton("重做", () => _ctl.Redo(), 50);
+			_undo = UiTheme.MakeButton(Loc.T("撤销"), () => _ctl.Undo(), 50);
+			_redo = UiTheme.MakeButton(Loc.T("重做"), () => _ctl.Redo(), 50);
 			hb.AddChild(_undo); hb.AddChild(_redo);
 			hb.AddChild(new Control { CustomMinimumSize = new Vector2(10, 0) });
 			var vg = new ButtonGroup();
-			_sideBtn = new Button { Text = "侧视", ToggleMode = true, ButtonGroup = vg, ButtonPressed = true, CustomMinimumSize = new Vector2(56, 34), TooltipText = "正交侧视（F1），适合建造" };
-			_3dBtn = new Button { Text = "3D", ToggleMode = true, ButtonGroup = vg, CustomMinimumSize = new Vector2(48, 34), TooltipText = "自由 3D 视角（F3），右键旋转" };
+			_sideBtn = new Button { Text = Loc.T("侧视"), ToggleMode = true, ButtonGroup = vg, ButtonPressed = true, CustomMinimumSize = new Vector2(56, 34), TooltipText = Loc.T("正交侧视（F1），适合建造") };
+			_3dBtn = new Button { Text = "3D", ToggleMode = true, ButtonGroup = vg, CustomMinimumSize = new Vector2(48, 34), TooltipText = Loc.T("自由 3D 视角（F3），右键旋转") };
 			_sideBtn.Pressed += () => _ctl.SetView(true);
 			_3dBtn.Pressed += () => _ctl.SetView(false);
 			hb.AddChild(_sideBtn); hb.AddChild(_3dBtn);
-			_menu = new MenuButton { Text = "菜单", Flat = false, CustomMinimumSize = new Vector2(80, 34) };
+			_menu = new MenuButton { Text = Loc.T("菜单"), Flat = false, CustomMinimumSize = new Vector2(80, 34) };
 			var pm = _menu.GetPopup();
-			pm.AddItem("参考方案提示", 0); pm.AddItem("重置关卡", 1); pm.AddSeparator();
-			pm.AddItem("保存方案", 2); pm.AddItem("加载方案", 3);
-			pm.AddItem("方案另存为（命名）…", 6); pm.AddItem("读取命名方案…", 7); pm.AddSeparator();
-			pm.AddItem("设置", 4); pm.AddItem("返回主菜单", 5);
+			pm.AddItem(Loc.T("参考方案提示"), 0); pm.AddItem(Loc.T("重置关卡"), 1); pm.AddSeparator();
+			pm.AddItem(Loc.T("保存方案"), 2); pm.AddItem(Loc.T("加载方案"), 3);
+			pm.AddItem(Loc.T("方案另存为（命名）…"), 6); pm.AddItem(Loc.T("读取命名方案…"), 7); pm.AddSeparator();
+			pm.AddItem(Loc.T("设置"), 4); pm.AddItem(Loc.T("返回主菜单"), 5);
 			pm.IdPressed += id =>
 			{
 				switch (id)
@@ -324,10 +324,10 @@ namespace BridgeArchitect3D.UI
 			AddChild(_toastPanel);
 			var notice=new VBoxContainer(); _toastPanel.AddChild(notice);
 			var heading=new HBoxContainer(); notice.AddChild(heading);
-			var title=UiTheme.MakeLabel("提示",12); title.SizeFlagsHorizontal=SizeFlags.ExpandFill;
+			var title=UiTheme.MakeLabel(Loc.T("提示"),12); title.SizeFlagsHorizontal=SizeFlags.ExpandFill;
 			heading.AddChild(title);
-			_toastLocate=UiTheme.MakeButton("定位高亮",()=>_ctl.LocateDiagnostic()); heading.AddChild(_toastLocate);
-			var close=UiTheme.MakeButton("关闭",()=> { HideToast(); _ctl.ClearDiagnostic(); }); heading.AddChild(close);
+			_toastLocate=UiTheme.MakeButton(Loc.T("定位高亮"),()=>_ctl.LocateDiagnostic()); heading.AddChild(_toastLocate);
+			var close=UiTheme.MakeButton(Loc.T("关闭"),()=> { HideToast(); _ctl.ClearDiagnostic(); }); heading.AddChild(close);
 			foreach(var button in new[]{_toastLocate,close})
 			{
 				button.CustomMinimumSize=new Vector2(0,22);button.AddThemeFontSizeOverride("font_size",12);
@@ -338,7 +338,7 @@ namespace BridgeArchitect3D.UI
 				AutowrapMode=TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal=SizeFlags.ExpandFill,
 				CustomMinimumSize=new Vector2(0,56) };
 			_toast.AddThemeFontSizeOverride("normal_font_size",13); notice.AddChild(_toast);
-			_toastLegend=UiTheme.MakeLabel("青：当前杆　橙：欠约束　紫：死点　红：冲突",11,UiTheme.Muted);
+			_toastLegend=UiTheme.MakeLabel(Loc.T("青：当前杆　橙：欠约束　紫：死点　红：冲突"),11,UiTheme.Muted);
 			_toastLegend.AutowrapMode=TextServer.AutowrapMode.WordSmart; notice.AddChild(_toastLegend);
 
 			_preview = UiTheme.MakeLabel("", 14);
@@ -354,11 +354,11 @@ namespace BridgeArchitect3D.UI
 			Place(_leftBar, 0, 0, 0, 0, 12, 66, 172, 265);
 			var vb = new VBoxContainer(); vb.AddThemeConstantOverride("separation", 6);
 			_leftBar.AddChild(vb);
-			_stress = new CheckButton { Text = "受力显示" };
+			_stress = new CheckButton { Text = Loc.T("受力显示") };
 			_stress.Toggled += on => _ctl.SetStressView(on);
 			vb.AddChild(_stress);
 			vb.AddChild(new HSeparator());
-			var help = UiTheme.MakeLabel("从已有节点开始建造\n长按节点拖动\nCtrl 暂停节点吸附\nX 删除所选\nEsc 取消 · 空格测试", 12, UiTheme.Muted);
+			var help = UiTheme.MakeLabel(Loc.T("从已有节点开始建造\n长按节点拖动\nCtrl 暂停节点吸附\nX 删除所选\nEsc 取消 · 空格测试"), 12, UiTheme.Muted);
 			help.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 			vb.AddChild(help);
 		}
@@ -397,7 +397,7 @@ namespace BridgeArchitect3D.UI
 				_toolButtons[i] = b;
 				return b;
 			}
-			row.AddChild(Make(0, ToolIcon(null, false), "选择构件查看属性；拖动节点；空白处拖动可框选", BuildTool.Select, null));
+			row.AddChild(Make(0, ToolIcon(null, false), Loc.T("选择构件查看属性；拖动节点；空白处拖动可框选"), BuildTool.Select, null));
 			for (int j = 0; j < ordered.Count; j++)
 			{
 				if (j == decks.Count && j > 0) row.AddChild(new VSeparator());
@@ -409,7 +409,7 @@ namespace BridgeArchitect3D.UI
 				row.AddChild(mb);
 			}
 			row.AddChild(new VSeparator());
-			row.AddChild(Make(count - 1, ToolIcon(null, true), "直接点击构件或节点删除；空白处拖动可框选；已多选时直接删除所选", BuildTool.Delete, null));
+			row.AddChild(Make(count - 1, ToolIcon(null, true), Loc.T("直接点击构件或节点删除；空白处拖动可框选；已多选时直接删除所选"), BuildTool.Delete, null));
 			RefreshToolKeys();
 			return scroll;
 		}
@@ -425,13 +425,13 @@ namespace BridgeArchitect3D.UI
 			for (int i = 0; i < _toolButtons.Length; i++)
 			{
 				string text;
-				if (i == 0) text = "选择 / 拖动" + (oneFree ? "\n[1]" : "");
-				else if (i == _toolButtons.Length - 1) text = "删除\n[X]";
+				if (i == 0) text = Loc.T("选择 / 拖动") + (oneFree ? "\n[1]" : "");
+				else if (i == _toolButtons.Length - 1) text = Loc.T("删除\n[X]");
 				else
 				{
 					var m = _materials[i - 1];
 					string key = keys.TryGetValue(m.MaterialId, out var k) && k != "" ? $"[{k}]" : "";
-					string badge = _badges.TryGetValue(m.MaterialId, out int r) && r >= 0 ? $" 剩{r}" : "";
+					string badge = _badges.TryGetValue(m.MaterialId, out int r) && r >= 0 ? Loc.F(" 剩{0}", (r)) : "";
 					text = $"{m.Name}{badge}\n{key}";
 				}
 				_toolButtons[i].Text = text;
@@ -485,29 +485,29 @@ namespace BridgeArchitect3D.UI
 			_props = new RichTextLabel { BbcodeEnabled = true, FitContent = true, ScrollActive = false, CustomMinimumSize = new Vector2(270, 0) };
 			vb.AddChild(_props);
 			// 旧构件修复按钮（加固关）
-			_repairBtn = UiTheme.MakeButton("修复旧构件", () => _ctl.RepairSelected(), 240);
+			_repairBtn = UiTheme.MakeButton(Loc.T("修复旧构件"), () => _ctl.RepairSelected(), 240);
 			_repairBtn.Visible = false;
 			vb.AddChild(_repairBtn);
 			// 桥墩基础切换（选中墩底节点时显示）
 			_foundRow = new HBoxContainer();
-			_shallowBtn = UiTheme.MakeButton($"浅基础 ${FoundationRules.ShallowCost:0}", () => _ctl.SetFoundationSelected(FoundationType.Shallow), 120);
-			_pileBtn = UiTheme.MakeButton($"桩基础 ${FoundationRules.PileCost:0}", () => _ctl.SetFoundationSelected(FoundationType.Pile), 120);
+			_shallowBtn = UiTheme.MakeButton(Loc.F("浅基础 ${0:0}", (FoundationRules.ShallowCost)), () => _ctl.SetFoundationSelected(FoundationType.Shallow), 120);
+			_pileBtn = UiTheme.MakeButton(Loc.F("桩基础 ${0:0}", (FoundationRules.PileCost)), () => _ctl.SetFoundationSelected(FoundationType.Pile), 120);
 			_foundRow.AddChild(_shallowBtn); _foundRow.AddChild(_pileBtn);
 			_foundRow.Visible = false;
 			vb.AddChild(_foundRow);
 			// Movable bridge: deck lock on a node, bascule leaf on a hydraulic member, split a member at its midpoint
-			_lockBtn = UiTheme.MakeButton("设为中央锁扣", () => _ctl.MechanismAction(_lockIsSet ? "unlock" : "lock"), 240);
-			_lockBtn.TooltipText = "把桥面接缝节点拆成左右两个节点：闭合时锁扣传递力，解锁后两侧完全分开";
+			_lockBtn = UiTheme.MakeButton(Loc.T("设为中央锁扣"), () => _ctl.MechanismAction(_lockIsSet ? "unlock" : "lock"), 240);
+			_lockBtn.TooltipText = Loc.T("把桥面接缝节点拆成左右两个节点：闭合时锁扣传递力，解锁后两侧完全分开");
 			_lockBtn.Visible = false; vb.AddChild(_lockBtn);
-			_leafBtn = UiTheme.MakeButton("查看驱动关系（自动识别）", () => _ctl.MechanismAction("describe"), 240);
-			_leafBtn.TooltipText = "液压杆驱动哪片桥叶、转轴在哪、开桥时分离哪些接缝都由结构自动识别";
+			_leafBtn = UiTheme.MakeButton(Loc.T("查看驱动关系（自动识别）"), () => _ctl.MechanismAction("describe"), 240);
+			_leafBtn.TooltipText = Loc.T("液压杆驱动哪片桥叶、转轴在哪、开桥时分离哪些接缝都由结构自动识别");
 			_leafBtn.Visible = false; vb.AddChild(_leafBtn);
 			_directionRow=new HBoxContainer();
 			// Target length slider: range = what the current structure allows (shortest .. longest), auto computed
 			var sliderBox=new VBoxContainer{SizeFlagsHorizontal=SizeFlags.ExpandFill};
 			_strokeLabel=UiTheme.MakeLabel("",13);
 			_strokeSlider=new HSlider{Step=1,CustomMinimumSize=new Vector2(240,20),SizeFlagsHorizontal=SizeFlags.ExpandFill,
-				TooltipText="拖动设定液压杆目标长度；范围由当前结构自动计算（最短收缩 ~ 最长伸展）"};
+				TooltipText=Loc.T("拖动设定液压杆目标长度；范围由当前结构自动计算（最短收缩 ~ 最长伸展）")};
 			// Live while dragging (no undo step each tick), committed on release
 			_strokeSlider.ValueChanged+=v=>{ UpdateStrokeLabel(v); if(_strokeDragging) _ctl.MechanismAction("preview:"+v.ToString(System.Globalization.CultureInfo.InvariantCulture)); else SendStroke(v); };
 			_strokeSlider.DragStarted+=()=>_strokeDragging=true;
@@ -516,13 +516,13 @@ namespace BridgeArchitect3D.UI
 			sliderBox.AddChild(_strokeLabel); sliderBox.AddChild(_strokeSlider); sliderBox.AddChild(_strokeRange);
 			_directionRow.AddChild(sliderBox);
 			_directionRow.Visible=false; vb.AddChild(_directionRow);
-			_splitBtn = UiTheme.MakeButton("中点拆分：两根独立构件", () => _ctl.MechanismAction("split"), 240);
-			_splitBtn.TooltipText = "拆成两根独立构件，以可转动的节点连接；给新节点增加支撑，才能缩短实际受弯跨度";
+			_splitBtn = UiTheme.MakeButton(Loc.T("中点拆分：两根独立构件"), () => _ctl.MechanismAction("split"), 240);
+			_splitBtn.TooltipText = Loc.T("拆成两根独立构件，以可转动的节点连接；给新节点增加支撑，才能缩短实际受弯跨度");
 			_splitBtn.Visible = false; vb.AddChild(_splitBtn);
-			_rigidSplitBtn=UiTheme.MakeButton("中点添加刚性点（不可折叠）",()=>_ctl.MechanismAction("rigidSplit"),240);
-			_rigidSplitBtn.TooltipText="保持原构件刚性，新增点随构件运动，不作为折叠铰接";
+			_rigidSplitBtn=UiTheme.MakeButton(Loc.T("中点添加刚性点（不可折叠）"),()=>_ctl.MechanismAction("rigidSplit"),240);
+			_rigidSplitBtn.TooltipText=Loc.T("保持原构件刚性，新增点随构件运动，不作为折叠铰接");
 			_rigidSplitBtn.Visible=false;vb.AddChild(_rigidSplitBtn);
-			_convertSplitBtn=UiTheme.MakeButton("改为普通连接点（两侧独立）",()=>_ctl.MechanismAction("convertSplit"),240);
+			_convertSplitBtn=UiTheme.MakeButton(Loc.T("改为普通连接点（两侧独立）"),()=>_ctl.MechanismAction("convertSplit"),240);
 			_convertSplitBtn.Visible=false;vb.AddChild(_convertSplitBtn);
 			_rightPanel.Visible = false;
 		}
@@ -537,7 +537,7 @@ namespace BridgeArchitect3D.UI
 		private bool _strokeDragging; private double _strokeL0 = 1;
 
 		private void UpdateStrokeLabel(double pct) =>
-			_strokeLabel.Text = $"目标长度 {_strokeL0 * (1 + pct / 100):0.00} m（{(pct >= 0 ? "伸展" : "收缩")} {System.Math.Abs(pct):0}%）";
+			_strokeLabel.Text = Loc.F("目标长度 {0:0.00} m（{1} {2:0}%）", (_strokeL0 * (1 + pct / 100)), ((pct >= 0 ? Loc.T("伸展") : Loc.T("收缩"))), (System.Math.Abs(pct)));
 
 		private void SendStroke(double pct) => _ctl.MechanismAction("target:" + pct.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
@@ -550,7 +550,7 @@ namespace BridgeArchitect3D.UI
 			_strokeSlider.MinValue = System.Math.Floor(minPct * 100); _strokeSlider.MaxValue = System.Math.Ceiling(maxPct * 100);
 				if(!_strokeDragging) _strokeSlider.SetValueNoSignal(System.Math.Round(currentPct * 100));
 			UpdateStrokeLabel(_strokeSlider.Value);
-			_strokeRange.Text = $"可调范围 {builtLength * (1 + minPct):0.00} ~ {builtLength * (1 + maxPct):0.00} m（{minPct:+0%;-0%;0%} ~ {maxPct:+0%;-0%;0%}）" + (leaf ? "，按桥叶开启角自动换算" : "");
+			_strokeRange.Text = Loc.F("可调范围 {0:0.00} ~ {1:0.00} m（{2:+0%;-0%;0%} ~ {3:+0%;-0%;0%}）", (builtLength * (1 + minPct)), (builtLength * (1 + maxPct)), (minPct), (maxPct)) + (leaf ? Loc.T("，按桥叶开启角自动换算") : "");
 		}
 		private bool _lockIsSet, _leafIsSet;
 
@@ -560,9 +560,9 @@ namespace BridgeArchitect3D.UI
 			_lockIsSet = isLock; _leafIsSet = isLeaf;
 			// Manual deck locks also define release points for the general linkage mode.
 			_lockBtn.Visible = lockable || isLock;
-			_lockBtn.Text = isLock ? "取消中央锁扣（两侧重新刚接）" : "设为中央锁扣";
+			_lockBtn.Text = isLock ? Loc.T("取消中央锁扣（两侧重新刚接）") : Loc.T("设为中央锁扣");
 			_leafBtn.Visible = hydraulic;
-			_leafBtn.Text = "查看驱动关系（自动识别）";
+			_leafBtn.Text = Loc.T("查看驱动关系（自动识别）");
 			if(!hydraulic) _directionRow.Visible=false;
 			_splitBtn.Visible = splittable;
 			_rigidSplitBtn.Visible=splittable;_convertSplitBtn.Visible=rigidNode;
@@ -581,7 +581,7 @@ namespace BridgeArchitect3D.UI
 		public void SetRepair(bool visible, double cost)
 		{
 			_repairBtn.Visible = visible;
-			if (visible) _repairBtn.Text = $"🔧 修复旧构件（${cost:0}，恢复全部承载力）";
+			if (visible) _repairBtn.Text = Loc.F("🔧 修复旧构件（${0:0}，恢复全部承载力）", (cost));
 		}
 
 		private string _demolitionInfo;
@@ -612,7 +612,7 @@ namespace BridgeArchitect3D.UI
 			_buildRow = new HBoxContainer(); _buildRow.AddThemeConstantOverride("separation", 16);
 			_buildRow.SetAnchorsPreset(LayoutPreset.FullRect);
 			stack.AddChild(_buildRow);
-			_start = UiTheme.MakeButton("开始测试", () => _ctl.StartTest(), 140);
+			_start = UiTheme.MakeButton(Loc.T("开始测试"), () => _ctl.StartTest(), 140);
 			_start.CustomMinimumSize = new Vector2(140, 46);
 			_start.AddThemeFontSizeOverride("font_size", 15);
 			UiTheme.Primary(_start);
@@ -629,12 +629,12 @@ namespace BridgeArchitect3D.UI
 			_testScroll=new ScrollContainer {VerticalScrollMode=ScrollContainer.ScrollMode.Disabled,FollowFocus=true};
 			stack.AddChild(_testScroll);_testScroll.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 			hb.SizeFlagsHorizontal=SizeFlags.ExpandFill;_testScroll.AddChild(hb);
-			_pause = UiTheme.MakeButton("⏸ 暂停", () => _ctl.TogglePause(), 90);
-			_resetTest = UiTheme.MakeButton("↻ 重新测试", () => _ctl.ResetTest(), 100);
-			_back = UiTheme.MakeButton("← 返回建造", () => _ctl.BackToBuild(), 110);
+			_pause = UiTheme.MakeButton(Loc.T("⏸ 暂停"), () => _ctl.TogglePause(), 90);
+			_resetTest = UiTheme.MakeButton(Loc.T("↻ 重新测试"), () => _ctl.ResetTest(), 100);
+			_back = UiTheme.MakeButton(Loc.T("← 返回建造"), () => _ctl.BackToBuild(), 110);
 			UiTheme.Primary(_back);
 			hb.AddChild(_back); hb.AddChild(_pause); hb.AddChild(_resetTest);
-			hb.AddChild(UiTheme.MakeLabel("速度", 14, UiTheme.Muted));
+			hb.AddChild(UiTheme.MakeLabel(Loc.T("速度"), 14, UiTheme.Muted));
 			var g = new ButtonGroup();
 			int[] speeds = { 1, 2, 4 };
 			_speedButtons = new Button[3];
@@ -645,12 +645,12 @@ namespace BridgeArchitect3D.UI
 				b.Pressed += () => _ctl.SetSpeed(s);
 				_speedButtons[i] = b; hb.AddChild(b);
 			}
-			_stressTest = new CheckButton { Text = "受力显示", ButtonPressed = true };
+			_stressTest = new CheckButton { Text = Loc.T("受力显示"), ButtonPressed = true };
 			_stressTest.Toggled += on => _ctl.SetStressView(on);
 			hb.AddChild(_stressTest);
 			var vb = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-			_progressLabel = UiTheme.MakeLabel("测试进度", 13, UiTheme.Muted);
-			_progress = new HSlider { MinValue = 0, MaxValue = 1, Step = 0.1, CustomMinimumSize = new Vector2(160, 18), TooltipText = "测试结束后可拖动，查看对应时刻的实际情况" };
+			_progressLabel = UiTheme.MakeLabel(Loc.T("测试进度"), 13, UiTheme.Muted);
+			_progress = new HSlider { MinValue = 0, MaxValue = 1, Step = 0.1, CustomMinimumSize = new Vector2(160, 18), TooltipText = Loc.T("测试结束后可拖动，查看对应时刻的实际情况") };
 			_progress.DragStarted += () => _scrubbing = true;
 			_progress.DragEnded += _ => _scrubbing = false;
 			// Only a finished test can be scrubbed; while running the bar is display-only (no accidental freeze)
@@ -660,8 +660,8 @@ namespace BridgeArchitect3D.UI
 			hb.AddChild(vb);
 			var vb2 = new VBoxContainer { CustomMinimumSize = new Vector2(180, 0) };
 			vb2.SizeFlagsHorizontal=SizeFlags.ExpandFill;
-			_vehicleLabel = UiTheme.MakeLabel("当前车辆：—", 13);_vehicleLabel.ClipText=true;
-			_statusLabel = UiTheme.MakeLabel("结构状态：—", 14);
+			_vehicleLabel = UiTheme.MakeLabel(Loc.T("当前车辆：—"), 13);_vehicleLabel.ClipText=true;
+			_statusLabel = UiTheme.MakeLabel(Loc.T("结构状态：—"), 14);
 			_statusLabel.ClipText = true;
 			vb2.AddChild(_vehicleLabel); vb2.AddChild(_statusLabel);
 			hb.AddChild(vb2);
@@ -674,9 +674,9 @@ namespace BridgeArchitect3D.UI
 
 		private void BuildOverlays()
 		{
-			(_failOverlay, _failBox) = UiTheme.MakeDialog(this, "测试失败", 600);
-			(_successOverlay, _successBox) = UiTheme.MakeDialog(this, "关卡完成！", 520);
-			(_settingsOverlay, _settingsBox) = UiTheme.MakeDialog(this, "设置", 460);
+			(_failOverlay, _failBox) = UiTheme.MakeDialog(this, Loc.T("测试失败"), 600);
+			(_successOverlay, _successBox) = UiTheme.MakeDialog(this, Loc.T("关卡完成！"), 520);
+			(_settingsOverlay, _settingsBox) = UiTheme.MakeDialog(this, Loc.T("设置"), Loc.IsEnglish ? 560 : 460);
 			BuildSettings();
 		}
 
@@ -690,31 +690,31 @@ namespace BridgeArchitect3D.UI
 		{
 			var gm = Core.GameManager.Instance;
 			var s = gm?.Settings ?? new Core.GameSettings();
-			_settingsBox.AddChild(UiTheme.MakeLabel("静态桥变形放大（液压机构保持真实比例）", 14, UiTheme.Muted));
+			_settingsBox.AddChild(UiTheme.MakeLabel(Loc.T("静态桥变形放大（液压机构保持真实比例）"), 14, UiTheme.Muted));
 			var row = new HBoxContainer();
 			_defSlider = new HSlider { MinValue = 1, MaxValue = 100, Step = 1, Value = s.DeformationScale, SizeFlagsHorizontal = SizeFlags.ExpandFill };
 			_defValue = UiTheme.MakeLabel($"{s.DeformationScale:0}×");
 			_defSlider.ValueChanged += v => _defValue.Text = $"{v:0}×";
 			row.AddChild(_defSlider); row.AddChild(_defValue);
 			_settingsBox.AddChild(row);
-			_settingsBox.AddChild(UiTheme.MakeLabel("相机灵敏度", 14, UiTheme.Muted));
+			_settingsBox.AddChild(UiTheme.MakeLabel(Loc.T("相机灵敏度"), 14, UiTheme.Muted));
 			_sensSlider = new HSlider { MinValue = 0.3, MaxValue = 3, Step = 0.1, Value = s.CameraSensitivity };
 			_settingsBox.AddChild(_sensSlider);
-			_gridCheck = new CheckBox { Text = "显示建造网格", ButtonPressed = s.ShowGrid };
+			_gridCheck = new CheckBox { Text = Loc.T("显示建造网格"), ButtonPressed = s.ShowGrid };
 			_settingsBox.AddChild(_gridCheck);
 			_commitDisplay = DisplaySettingsUI.Build(_settingsBox, s);
-			_settingsBox.AddChild(UiTheme.MakeLabel("画面", 14, UiTheme.Muted));
+			_settingsBox.AddChild(UiTheme.MakeLabel(Loc.T("画面"), 14, UiTheme.Muted));
 			_commitGraphics = GraphicsSettingsUI.Build(_settingsBox, s, false);
-			_valuesCheck = new CheckBox { Text = "显示数值（建材性能面板显示具体数字）", ButtonPressed = s.ShowMaterialValues };
+			_valuesCheck = new CheckBox { Text = Loc.T("显示数值（建材性能面板显示具体数字）"), ButtonPressed = s.ShowMaterialValues };
 			_settingsBox.AddChild(_valuesCheck);
-			_settingsBox.AddChild(UiTheme.MakeLabel("建材快捷键（数字键 1~0，未占用的 1 = 选择 / 拖动）", 14, UiTheme.Muted));
+			_settingsBox.AddChild(UiTheme.MakeLabel(Loc.T("建材快捷键（数字键 1~0，未占用的 1 = 选择 / 拖动）"), 14, UiTheme.Muted));
 			var keyGrid = new GridContainer { Columns = 4 };
 			var resolved = s.ResolveKeys(_materials.Select(m => m.MaterialId));
 			_keyPickers.Clear();
 			foreach (var m in _materials)
 			{
 				var pick = new OptionButton { CustomMinimumSize = new Vector2(64, 0) };
-				pick.AddItem("无");
+				pick.AddItem(Loc.T("无"));
 				foreach (var dg in Core.GameSettings.Digits) pick.AddItem(dg);
 				string cur = resolved.TryGetValue(m.MaterialId, out var ck) ? ck : "";
 				pick.Selected = cur == "" ? 0 : System.Array.IndexOf(Core.GameSettings.Digits, cur) + 1;
@@ -723,7 +723,7 @@ namespace BridgeArchitect3D.UI
 			}
 			_settingsBox.AddChild(keyGrid);
 			var hb = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
-			hb.AddChild(UiTheme.MakeButton("确定", () =>
+			hb.AddChild(UiTheme.MakeButton(Loc.T("确定"), () =>
 			{
 				var st = Core.GameManager.Instance?.Settings;
 				if (st != null)
@@ -767,8 +767,8 @@ namespace BridgeArchitect3D.UI
 			double rem = budget - used;
 			// 与结算同一套规则：超出预算仍可建造和通关，但会降低预算分
 			_budget.Text = rem >= 0
-				? $"预算目标 ${budget:N0} · 已用 ${used:N0} · 剩余 ${rem:N0}"
-				: $"预算目标 ${budget:N0} · 已超 ${-rem:N0}（扣预算分）";
+				? Loc.F("预算目标 ${0:N0} · 已用 ${1:N0} · 剩余 ${2:N0}", (budget), (used), (rem))
+				: Loc.F("预算目标 ${0:N0} · 已超 ${1:N0}（扣预算分）", (budget), (-rem));
 			if (!string.IsNullOrEmpty(_demolitionInfo)) _budget.Text += " · " + _demolitionInfo;
 			_budget.TooltipText=_budget.Text;
 			_budget.AddThemeColorOverride("font_color", rem < 0 ? UiTheme.Bad : rem < budget * 0.1 ? UiTheme.Warn : UiTheme.Text);
@@ -796,7 +796,7 @@ namespace BridgeArchitect3D.UI
 		public void SetMode(bool test)
 		{
 			if(test) HideToast();
-			_modeBanner.Text = test ? "● 测试模式" : "● 建造模式";
+			_modeBanner.Text = test ? Loc.T("● 测试模式") : Loc.T("● 建造模式");
 			_modeBanner.AddThemeColorOverride("font_color", test ? UiTheme.TestAccent : UiTheme.Accent);
 			foreach (var b in _toolButtons) b.Disabled = test;
 			if (test) { _repairBtn.Visible = false; _foundRow.Visible = false; }
@@ -808,8 +808,8 @@ namespace BridgeArchitect3D.UI
 			_bottomStyle.BorderWidthTop = 1;
 			_bottomStyle.BorderColor = UiTheme.Border;
 			// 回到建造时清空上次测试的进度与时间，避免误以为测试仍在进行
-			_pause.Text = "⏸ 暂停"; _progress.SetValueNoSignal(0);
-			_progressLabel.Text = "测试进度 0%"; _vehicleLabel.Text = "当前车辆：—"; _statusLabel.Text = "结构状态：—";
+			_pause.Text = Loc.T("⏸ 暂停"); _progress.SetValueNoSignal(0);
+			_progressLabel.Text = Loc.T("测试进度 0%"); _vehicleLabel.Text = Loc.T("当前车辆：—"); _statusLabel.Text = Loc.T("结构状态：—");
 			_failOverlay.Visible = false; _successOverlay.Visible = false;
 			_preview.Visible = false;
 		}
@@ -820,18 +820,18 @@ namespace BridgeArchitect3D.UI
 			if (!finished) _scrubbing = false;
 			_progress.MaxValue = System.Math.Max(recorded, 0.1);
 			if (!_scrubbing) _progress.SetValueNoSignal(time);
-			_progressLabel.Text = $"测试进度 {progress * 100:0}%   时间 {time:0.0} / {recorded:0.0}s{(finished ? "（可拖动回看）" : "")}";
-			_vehicleLabel.Text = "当前车辆：" + vehicle;
-			_statusLabel.Text = "结构状态：" + status;
+			_progressLabel.Text = Loc.F("测试进度 {0:0}%   时间 {1:0.0} / {2:0.0}s{3}", (progress * 100), (time), (recorded), ((finished ? Loc.T("（可拖动回看）") : "")));
+			_vehicleLabel.Text = Loc.T("当前车辆：") + vehicle;
+			_statusLabel.Text = Loc.T("结构状态：") + status;
 			_statusLabel.AddThemeColorOverride("font_color", statusColor);
-			_pause.Text = paused ? "▶ 继续" : "⏸ 暂停";
+			_pause.Text = paused ? Loc.T("▶ 继续") : Loc.T("⏸ 暂停");
 		}
 
 		public void SetStructureStatus(string status, Color c)
 		{
 			_buildStatus.Text = status;
 			_buildStatus.AddThemeColorOverride("font_color", c);
-			_statusLabel.Text = "结构状态：" + status;
+			_statusLabel.Text = Loc.T("结构状态：") + status;
 			_statusLabel.AddThemeColorOverride("font_color", c);
 		}
 
@@ -844,7 +844,7 @@ namespace BridgeArchitect3D.UI
 
 		public void ShowToast(string text, bool error, double seconds = 0, bool hasSceneTargets = false)
 		{
-			bool warning=error || (text?.Contains("暂不动作") ?? false) || (text?.Contains("锁死") ?? false);
+			bool warning=error || (text?.Contains(Loc.T("暂不动作")) ?? false) || (text?.Contains(Loc.T("锁死")) ?? false);
 			_toast.Text=text ?? "";
 			_toast.AddThemeColorOverride("default_color",warning?UiTheme.Bad:UiTheme.Text);
 			_toastLocate.Visible=hasSceneTargets;
@@ -921,41 +921,43 @@ namespace BridgeArchitect3D.UI
 			HideToast();
 			ClearBox(_failBox);
 			// 先说发生了什么、该怎么改；编号、受力与回放放进“详情”
-			_failBox.AddChild(UiTheme.MakeLabel(string.IsNullOrEmpty(r.Headline) ? FailureDetector.ReasonText(r.FailureReason) : r.Headline, 22, UiTheme.Bad));
+			var headline = UiTheme.MakeLabel(string.IsNullOrEmpty(r.Headline) ? FailureDetector.ReasonText(r.FailureReason) : r.Headline, 22, UiTheme.Bad);
+			headline.AutowrapMode = TextServer.AutowrapMode.WordSmart; // English headlines are longer
+			_failBox.AddChild(headline);
 			if (!string.IsNullOrEmpty(r.TopSuggestion))
 			{
-				var tip = UiTheme.MakeLabel("建议：" + r.TopSuggestion, 17, UiTheme.Text);
+				var tip = UiTheme.MakeLabel(Loc.T("建议：") + r.TopSuggestion, 17, UiTheme.Text);
 				tip.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 				tip.CustomMinimumSize = new Vector2(560, 0);
 				_failBox.AddChild(tip);
 			}
 			var hb = new HBoxContainer(); hb.AddThemeConstantOverride("separation", 10);
-			var locate = UiTheme.MakeButton("定位问题并返回建造", () => _ctl.LocateProblem(), 200);
+			var locate = UiTheme.MakeButton(Loc.T("定位问题并返回建造"), () => _ctl.LocateProblem(), 200);
 			locate.CustomMinimumSize = new Vector2(220, 44);
 			UiTheme.Primary(locate);
 			hb.AddChild(locate);
-			hb.AddChild(UiTheme.MakeButton("重新测试", () => _ctl.ResetTest(), 100));
+			hb.AddChild(UiTheme.MakeButton(Loc.T("重新测试"), () => _ctl.ResetTest(), 100));
 			_failBox.AddChild(hb);
 
 			var details = new VBoxContainer { Visible = false };
-			var toggle = UiTheme.MakeButton("▸ 详情（构件编号、受力与回放）", null);
+			var toggle = UiTheme.MakeButton(Loc.T("▸ 详情（构件编号、受力与回放）"), null);
 			toggle.Flat = true; toggle.Alignment = HorizontalAlignment.Left;
-			toggle.Pressed += () => { details.Visible = !details.Visible; toggle.Text = (details.Visible ? "▾" : "▸") + " 详情（构件编号、受力与回放）"; };
+			toggle.Pressed += () => { details.Visible = !details.Visible; toggle.Text = (details.Visible ? "▾" : "▸") + Loc.T(" 详情（构件编号、受力与回放）"); };
 			_failBox.AddChild(toggle);
 			var sb = new StringBuilder();
 			sb.Append($"[color=#f09797]{FailureDetector.ReasonText(r.FailureReason)}[/color]\n{r.FailureMessage}\n\n");
-			sb.Append($"[color=#a3afbf]发生时间：[/color]{r.FailureTime:0.00} s\n");
-			sb.Append($"[color=#a3afbf]涉及构件：[/color]{(r.InvolvedMemberIds.Count > 0 ? string.Join(", ", r.InvolvedMemberIds.Distinct().Select(i => "#" + i)) : "—")}\n");
-			sb.Append($"[color=#a3afbf]通过车辆：[/color]{r.PassedVehicles}/{r.VehicleResults.Count}\n\n");
-			sb.Append("[b]其他改进方向：[/b]\n");
+			sb.Append(Loc.F("[color=#a3afbf]发生时间：[/color]{0:0.00} s\n", (r.FailureTime)));
+			sb.Append(Loc.F("[color=#a3afbf]涉及构件：[/color]{0}\n", ((r.InvolvedMemberIds.Count > 0 ? string.Join(", ", r.InvolvedMemberIds.Distinct().Select(i => "#" + i)) : "—"))));
+			sb.Append(Loc.F("[color=#a3afbf]通过车辆：[/color]{0}/{1}\n\n", (r.PassedVehicles), (r.VehicleResults.Count)));
+			sb.Append(Loc.T("[b]其他改进方向：[/b]\n"));
 			foreach (var s in r.Suggestions.Distinct()) sb.Append($" • {s}\n");
 			details.AddChild(new RichTextLabel { BbcodeEnabled = true, FitContent = true, Text = sb.ToString(), CustomMinimumSize = new Vector2(560, 0) });
 			var hb2 = new HBoxContainer(); hb2.AddThemeConstantOverride("separation", 10);
-			var snap = UiTheme.MakeButton("首次失效快照", () => { _failOverlay.Visible = false; _ctl.ShowSnapshot(); }, 120);
-			var rep = UiTheme.MakeButton("回放最后几秒", () => { _failOverlay.Visible = false; _ctl.Replay(); }, 120);
+			var snap = UiTheme.MakeButton(Loc.T("首次失效快照"), () => { _failOverlay.Visible = false; _ctl.ShowSnapshot(); }, 120);
+			var rep = UiTheme.MakeButton(Loc.T("回放最后几秒"), () => { _failOverlay.Visible = false; _ctl.Replay(); }, 120);
 			snap.Disabled = !canReplay; rep.Disabled = !canReplay;
 			hb2.AddChild(snap); hb2.AddChild(rep);
-			hb2.AddChild(UiTheme.MakeButton("仅返回建造", () => _ctl.BackToBuild(), 100));
+			hb2.AddChild(UiTheme.MakeButton(Loc.T("仅返回建造"), () => _ctl.BackToBuild(), 100));
 			details.AddChild(hb2);
 			_failBox.AddChild(details);
 			_failOverlay.Visible = true;
@@ -965,36 +967,36 @@ namespace BridgeArchitect3D.UI
 		{
 			HideToast();
 			ClearBox(_successBox);
-			_successBox.AddChild(UiTheme.MakeLabel($"{r.Score:N0} 分", 32, UiTheme.Accent));
-			if (r.Score > previousBest) _successBox.AddChild(UiTheme.MakeLabel(previousBest > 0 ? $"新纪录！（原最高 {previousBest:N0}）" : "首次通关！", 16, UiTheme.Good));
-			else _successBox.AddChild(UiTheme.MakeLabel($"本关最高分 {previousBest:N0}", 14, UiTheme.Muted));
+			_successBox.AddChild(UiTheme.MakeLabel(Loc.F("{0:N0} 分", (r.Score)), 32, UiTheme.Accent));
+			if (r.Score > previousBest) _successBox.AddChild(UiTheme.MakeLabel(previousBest > 0 ? Loc.F("新纪录！（原最高 {0:N0}）", (previousBest)) : Loc.T("首次通关！"), 16, UiTheme.Good));
+			else _successBox.AddChild(UiTheme.MakeLabel(Loc.F("本关最高分 {0:N0}", (previousBest)), 14, UiTheme.Muted));
 			// 三项目标分开列出，玩家能看懂下一次要改什么
 			bool inBudget = r.TotalCost <= r.Budget + 1e-6, intact = r.DeckIntegrity >= 0.999;
 			var checks = new RichTextLabel { BbcodeEnabled = true, FitContent = true, CustomMinimumSize = new Vector2(480, 0) };
-			checks.Text = "[color=#8ecdb1]✔ 通关[/color]　　"
-				+ (inBudget ? "[color=#8ecdb1]✔ 预算内[/color]" : $"[color=#f09797]✘ 超预算 ${r.TotalCost - r.Budget:N0}[/color]") + "　　"
-				+ (intact ? "[color=#8ecdb1]✔ 桥面完整[/color]" : $"[color=#e3c384]△ 桥面完整度 {r.DeckIntegrity * 100:0}%[/color]");
+			checks.Text = Loc.T("[color=#8ecdb1]✔ 通关[/color]　　")
+				+ (inBudget ? Loc.T("[color=#8ecdb1]✔ 预算内[/color]") : Loc.F("[color=#f09797]✘ 超预算 ${0:N0}[/color]", (r.TotalCost - r.Budget))) + "　　"
+				+ (intact ? Loc.T("[color=#8ecdb1]✔ 桥面完整[/color]") : Loc.F("[color=#e3c384]△ 桥面完整度 {0:0}%[/color]", (r.DeckIntegrity * 100)));
 			_successBox.AddChild(checks);
 			var sb = new StringBuilder();
 			double ratio = r.Budget > 0 ? r.TotalCost / r.Budget : 0;
-			sb.Append($"预算分（×6）：{r.BudgetScore:N0}　使用 ${r.TotalCost:N0} / ${r.Budget:N0} = {ratio * 100:0}%，越省越高\n");
+			sb.Append(Loc.F("预算分（×6）：{0:N0}　使用 ${1:N0} / ${2:N0} = {3:0}%，越省越高\n", (r.BudgetScore), (r.TotalCost), (r.Budget), (ratio * 100)));
 			sb.Append(r.ReferenceTime > 0
-				? $"时间分（×2）：{r.TimeScore:N0}　完成 {r.CompletionTime:0.0} s，理想 {r.ReferenceTime:0.0} s（车船全速不等待），越快越高\n"
-				: $"时间分（×2）：{r.TimeScore:N0}\n");
-			sb.Append($"完整度分（×1）：{r.IntegrityScore:N0}　通过后桥面完整 {r.DeckIntegrity * 100:0}%\n");
+				? Loc.F("时间分（×2）：{0:N0}　完成 {1:0.0} s，理想 {2:0.0} s（车船全速不等待），越快越高\n", (r.TimeScore), (r.CompletionTime), (r.ReferenceTime))
+				: Loc.F("时间分（×2）：{0:N0}\n", (r.TimeScore)));
+			sb.Append(Loc.F("完整度分（×1）：{0:N0}　通过后桥面完整 {1:0}%\n", (r.IntegrityScore), (r.DeckIntegrity * 100)));
 			sb.Append(r.StressUsesMargin
-				? $"受力分（×1）：{r.StressScore:N0}　取安全冗余 {r.SafetyMargin * 100:0}%（利用率 {r.MaxUtilization * 100:0}%，冗余上限 150%）\n\n"
-				: $"受力分（×1）：{r.StressScore:N0}　取利用率 {r.MaxUtilization * 100:0}%（安全冗余 {r.SafetyMargin * 100:0}%）\n\n");
-			sb.Append($"成功通过车辆：{r.PassedVehicles}/{r.VehicleResults.Count}");
-			if (r.TotalShips > 0) sb.Append($"　船只：{r.ShipsPassed}/{r.TotalShips}");
-			sb.Append($"\n完成时间：{r.CompletionTime:0.0} s\n");
+				? Loc.F("受力分（×1）：{0:N0}　取安全冗余 {1:0}%（利用率 {2:0}%，冗余上限 150%）\n\n", (r.StressScore), (r.SafetyMargin * 100), (r.MaxUtilization * 100))
+				: Loc.F("受力分（×1）：{0:N0}　取利用率 {1:0}%（安全冗余 {2:0}%）\n\n", (r.StressScore), (r.MaxUtilization * 100), (r.SafetyMargin * 100)));
+			sb.Append(Loc.F("成功通过车辆：{0}/{1}", (r.PassedVehicles), (r.VehicleResults.Count)));
+			if (r.TotalShips > 0) sb.Append(Loc.F("　船只：{0}/{1}", (r.ShipsPassed), (r.TotalShips)));
+			sb.Append(Loc.F("\n完成时间：{0:0.0} s\n", (r.CompletionTime)));
 			_successBox.AddChild(UiTheme.MakeLabel(sb.ToString(), 16));
 			var hb = new HBoxContainer(); hb.AddThemeConstantOverride("separation", 10);
-			var next = UiTheme.MakeButton("下一关", () => _ctl.NextLevel(), 100);
+			var next = UiTheme.MakeButton(Loc.T("下一关"), () => _ctl.NextLevel(), 100);
 			next.Disabled = !hasNext;
 			hb.AddChild(next);
-			hb.AddChild(UiTheme.MakeButton("返回关卡选择", () => _ctl.OpenLevelSelect(), 120));
-			hb.AddChild(UiTheme.MakeButton("继续修改", () => _ctl.BackToBuild(), 100));
+			hb.AddChild(UiTheme.MakeButton(Loc.T("返回关卡选择"), () => _ctl.OpenLevelSelect(), 120));
+			hb.AddChild(UiTheme.MakeButton(Loc.T("继续修改"), () => _ctl.BackToBuild(), 100));
 			_successBox.AddChild(hb);
 			_successOverlay.Visible = true;
 		}
@@ -1005,38 +1007,38 @@ namespace BridgeArchitect3D.UI
 		public static string NodeProperties(BridgeNode n, LevelDefinition level, BridgeDesign d, BridgeSimulation stat)
 		{
 			var sb = new StringBuilder();
-			sb.Append(n.IsAnchor ? $"[b]固定锚点 {n.AnchorId}[/b]\n" : n.PierBase ? $"[b]桥墩基础 #{n.Id}[/b]\n" : $"[b]节点 #{n.Id}[/b]{(n.PierPart ? "（桥墩支点）" : "")}\n");
+			sb.Append(n.IsAnchor ? Loc.F("[b]固定锚点 {0}[/b]\n", (n.AnchorId)) : n.PierBase ? Loc.F("[b]桥墩基础 #{0}[/b]\n", (n.Id)) : Loc.F("[b]节点 #{0}[/b]{1}\n", (n.Id), ((n.PierPart ? Loc.T("（桥墩支点）") : ""))));
 			if (n.PierBase)
 			{
 				var zone = level.Terrain.ZoneAt(n.Position.X);
-				sb.Append($"地基：{zone.Name}\n基础：{FoundationRules.Name(n.Foundation)}（${FoundationRules.Cost(n.Foundation):0}）\n");
-				sb.Append($"地基承载力：{FoundationRules.Capacity(zone, n.Foundation) / 1000:0} kN\n");
-				if (zone.Scour) sb.Append(n.Foundation == FoundationType.Pile ? "[color=#8ecdb1]冲刷区：桩基础不受冲刷影响[/color]\n" : "[color=#e3b67b]冲刷区：洪水时浅基础会被掏空[/color]\n");
-				if (!zone.IsRock && n.Foundation != FoundationType.Pile) sb.Append("[color=#e3c384]软土上的浅基础承载很低，重车可能压垮[/color]\n");
-				sb.Append("[color=#a3afbf]删除墩底节点会拆掉整座桥墩[/color]\n");
+				sb.Append(Loc.F("地基：{0}\n基础：{1}（${2:0}）\n", (zone.Name), (FoundationRules.Name(n.Foundation)), (FoundationRules.Cost(n.Foundation))));
+				sb.Append(Loc.F("地基承载力：{0:0} kN\n", (FoundationRules.Capacity(zone, n.Foundation) / 1000)));
+				if (zone.Scour) sb.Append(n.Foundation == FoundationType.Pile ? Loc.T("[color=#8ecdb1]冲刷区：桩基础不受冲刷影响[/color]\n") : Loc.T("[color=#e3b67b]冲刷区：洪水时浅基础会被掏空[/color]\n"));
+				if (!zone.IsRock && n.Foundation != FoundationType.Pile) sb.Append(Loc.T("[color=#e3c384]软土上的浅基础承载很低，重车可能压垮[/color]\n"));
+				sb.Append(Loc.T("[color=#a3afbf]删除墩底节点会拆掉整座桥墩[/color]\n"));
 			}
-			if(n.IsSplitJoint) sb.Append("普通连接节点：两侧构件独立，可连接其他构件\n");
-			if(n.IsRigidSplit) sb.Append("[color=#91bbeb]刚性拆分点：保持原构件直线，不可折叠（蓝色方块）[/color]\n");
-			sb.Append($"位置：{n.Position}\n");
+			if(n.IsSplitJoint) sb.Append(Loc.T("普通连接节点：两侧构件独立，可连接其他构件\n"));
+			if(n.IsRigidSplit) sb.Append(Loc.T("[color=#91bbeb]刚性拆分点：保持原构件直线，不可折叠（蓝色方块）[/color]\n"));
+			sb.Append(Loc.F("位置：{0}\n", (n.Position)));
 			int deg = d.Members.Count(m => m.StartNodeId == n.Id || m.EndNodeId == n.Id);
-			sb.Append($"连接构件：{deg}\n");
+			sb.Append(Loc.F("连接构件：{0}\n", (deg)));
 			if (n.IsAnchor)
 			{
 				var a = level.Anchors.FirstOrDefault(x => x.Id == n.AnchorId);
 				if (a != null)
 				{
-					sb.Append($"支撑类型：{(a.SupportType == SupportType.Pinned ? "铰支（固定 X/Y）" : "滚动（固定 Y）")}\n");
-					sb.Append(a.MaxLoad > 0 ? $"最大承载：{a.MaxLoad / 1000:0} kN\n" : "最大承载：无限\n");
+					sb.Append(Loc.F("支撑类型：{0}\n", ((a.SupportType == SupportType.Pinned ? Loc.T("铰支（固定 X/Y）") : Loc.T("滚动（固定 Y）")))));
+					sb.Append(a.MaxLoad > 0 ? Loc.F("最大承载：{0:0} kN\n", (a.MaxLoad / 1000)) : Loc.T("最大承载：无限\n"));
 					if (stat?.Model != null && stat.Output.Stable && stat.Model.NodeIndex.TryGetValue(n.Id, out int i))
 					{
 						double r = System.Math.Sqrt(stat.Output.Reaction[2 * i] * stat.Output.Reaction[2 * i] + stat.Output.Reaction[2 * i + 1] * stat.Output.Reaction[2 * i + 1]);
-						sb.Append($"自重支反力：{r / 1000:0.0} kN\n");
+						sb.Append(Loc.F("自重支反力：{0:0.0} kN\n", (r / 1000)));
 					}
-					sb.Append("[color=#a3afbf]锚点不可移动、不可删除[/color]\n");
+					sb.Append(Loc.T("[color=#a3afbf]锚点不可移动、不可删除[/color]\n"));
 				}
 			}
 			else if (stat?.Model != null && stat.Output.Stable && stat.Model.NodeIndex.TryGetValue(n.Id, out int i))
-				sb.Append($"自重下位移：{stat.Output.Displacement[2 * i + 1] * 1000:0.0} mm（竖向）\n");
+				sb.Append(Loc.F("自重下位移：{0:0.0} mm（竖向）\n", (stat.Output.Displacement[2 * i + 1] * 1000)));
 			return sb.ToString();
 		}
 
@@ -1044,44 +1046,44 @@ namespace BridgeArchitect3D.UI
 		{
 			var mat = db.GetMaterial(m.MaterialId);
 			var sb = new StringBuilder();
-			sb.Append($"[b]构件 #{m.Id}[/b]  {mat?.Name}\n");
+			sb.Append(Loc.F("[b]构件 #{0}[/b]  {1}\n", (m.Id), (mat?.Name)));
 			if (m.Existing)
 			{
 				string col = m.Condition >= 0.999 ? "#8ecdb1" : m.Condition >= 0.7 ? "#e3c384" : "#e3b67b";
-				sb.Append($"[color={col}]旧桥原有构件 · 状况 {m.Condition * 100:0}%{(m.Condition >= 0.999 ? "（已修复）" : "（承载力按此折减）")}[/color]\n");
-				sb.Append("[color=#a3afbf]不计费用；节点不能移动；拆除计入上限[/color]\n");
+				sb.Append(Loc.F("[color={0}]旧桥原有构件 · 状况 {1:0}%{2}[/color]\n", (col), (m.Condition * 100), ((m.Condition >= 0.999 ? Loc.T("（已修复）") : Loc.T("（承载力按此折减）")))));
+				sb.Append(Loc.T("[color=#a3afbf]不计费用；节点不能移动；拆除计入上限[/color]\n"));
 			}
-			sb.Append($"长度：{m.Length:0.00} m（最大 {mat?.MaximumLength:0.#} m）\n");
-			sb.Append($"质量：{(mat?.MassPerMeter ?? 0) * m.Length:0.0} kg\n");
-			sb.Append($"费用：${m.EffectiveCost():0}" + (m.CostStroke is double cs && cs > 0 ? $"（含行程 {cs:0%} 加价 ${m.EffectiveCost() - m.Cost:0}）" : "") + "\n");
+			sb.Append(Loc.F("长度：{0:0.00} m（最大 {1:0.#} m）\n", (m.Length), (mat?.MaximumLength)));
+			sb.Append(Loc.F("质量：{0:0.0} kg\n", ((mat?.MassPerMeter ?? 0) * m.Length)));
+			sb.Append(Loc.F("费用：${0:0}", (m.EffectiveCost())) + (m.CostStroke is double cs && cs > 0 ? Loc.F("（含行程 {0:0%} 加价 ${1:0}）", (cs), (m.EffectiveCost() - m.Cost)) : "") + "\n");
 			if (mat != null)
 			{
-				sb.Append($"抗拉承载力：{mat.TensionCapacity * CrossBeams.TensionFactor(mat, m.Length) / 1000:0} kN" + (CrossBeams.Has(mat, m.Length) ? $"（{CrossBeams.RuleText(mat)}，共 {CrossBeams.Count(mat, m.Length)} 根，抗拉 +{CrossBeams.TensionBonus:0%}；横梁会挡住车辆）" : "") + "\n");
-				sb.Append(mat.IsCable ? "抗压：无（钢索仅受拉）\n" : $"抗压承载力：{mat.CompressionCapacity(m.Length) / 1000:0} kN（含屈曲）\n");
-				if (mat.IsCable || mat.PinnedEnds) sb.Append("连接：两端铰接（只受轴力）\n");
-				else if (mat.BendingCapacity > 0) sb.Append($"抗弯承载力：{mat.BendingCapacity / 1000:0} kN·m（刚接）\n");
-				if (mat.IsDeck) sb.Append($"桥面宽度：{mat.DeckWidth:0.#} m\n");
+				sb.Append(Loc.F("抗拉承载力：{0:0} kN", (mat.TensionCapacity * CrossBeams.TensionFactor(mat, m.Length) / 1000)) + (CrossBeams.Has(mat, m.Length) ? Loc.F("（{0}，共 {1} 根，抗拉 +{2:0%}；横梁会挡住车辆）", (CrossBeams.RuleText(mat)), (CrossBeams.Count(mat, m.Length)), (CrossBeams.TensionBonus)) : "") + "\n");
+				sb.Append(mat.IsCable ? Loc.T("抗压：无（钢索仅受拉）\n") : Loc.F("抗压承载力：{0:0} kN（含屈曲）\n", (mat.CompressionCapacity(m.Length) / 1000)));
+				if (mat.IsCable || mat.PinnedEnds) sb.Append(Loc.T("连接：两端铰接（只受轴力）\n"));
+				else if (mat.BendingCapacity > 0) sb.Append(Loc.F("抗弯承载力：{0:0} kN·m（刚接）\n", (mat.BendingCapacity / 1000)));
+				if (mat.IsDeck) sb.Append(Loc.F("桥面宽度：{0:0.#} m\n", (mat.DeckWidth)));
 				if (mat.IsColumn)
 				{
-					sb.Append(mat.BaseRule == BaseRule.Land ? "基础：底端须在陆地上，形成固定基础\n" : "基础：须建在地图锚点上，形成刚接基础\n");
-					sb.Append($"最大倾角：{mat.MaxTiltDegrees:0}°\n");
+					sb.Append(mat.BaseRule == BaseRule.Land ? Loc.T("基础：底端须在陆地上，形成固定基础\n") : Loc.T("基础：须建在地图锚点上，形成刚接基础\n"));
+					sb.Append(Loc.F("最大倾角：{0:0}°\n", (mat.MaxTiltDegrees)));
 				}
-				if (mat.Extendable) sb.Append("[color=#e3c384]行程固定 50%：仅选择收缩或伸展[/color]\n");
+				if (mat.Extendable) sb.Append(Loc.T("[color=#e3c384]行程固定 50%：仅选择收缩或伸展[/color]\n"));
 				if (!string.IsNullOrEmpty(mat.Description)) sb.Append($"[color=#a3afbf]{mat.Description}[/color]\n");
 			}
 			sb.Append($"\n[color=#a3afbf]{loadCase}[/color]\n");
-			if (!stable) { sb.Append("[color=#f09797]结构不稳定，无法给出内力[/color]\n"); return sb.ToString(); }
+			if (!stable) { sb.Append(Loc.T("[color=#f09797]结构不稳定，无法给出内力[/color]\n")); return sb.ToString(); }
 			if (model != null && status != null && model.MemberIndex.TryGetValue(m.Id, out int k) && k < status.Length)
 			{
 				var s = status[k];
-				if (model.Broken[k]) { sb.Append("[color=#f09797]状态：已断裂[/color]\n"); return sb.ToString(); }
-				string mode = s.Mode switch { MemberMode.Tension => "受拉", MemberMode.Compression => "受压", MemberMode.Slack => "松弛（不受力）", _ => "不参与承载" };
-				sb.Append($"轴力：{s.Force / 1000:0.0} kN（{mode}）\n");
-				if (s.Moment > 0) sb.Append($"最大弯矩：{s.Moment / 1000:0.0} kN·m\n");
+				if (model.Broken[k]) { sb.Append(Loc.T("[color=#f09797]状态：已断裂[/color]\n")); return sb.ToString(); }
+				string mode = s.Mode switch { MemberMode.Tension => Loc.T("受拉"), MemberMode.Compression => Loc.T("受压"), MemberMode.Slack => Loc.T("松弛（不受力）"), _ => Loc.T("不参与承载") };
+				sb.Append(Loc.F("轴力：{0:0.0} kN（{1}）\n", (s.Force / 1000), (mode)));
+				if (s.Moment > 0) sb.Append(Loc.F("最大弯矩：{0:0.0} kN·m\n", (s.Moment / 1000)));
 				string col = s.Utilization > 1 ? "#f09797" : s.Utilization > 0.8 ? "#e3c384" : "#8ecdb1";
-				sb.Append($"利用率：[color={col}]{s.Utilization * 100:0}%[/color]\n");
-				string safe = s.Utilization > 1 ? "超过允许极限" : s.Utilization > 0.8 ? "接近允许极限" : "安全";
-				sb.Append($"安全状态：[color={col}]{safe}[/color]\n");
+				sb.Append(Loc.F("利用率：[color={0}]{1:0}%[/color]\n", (col), (s.Utilization * 100)));
+				string safe = s.Utilization > 1 ? Loc.T("超过允许极限") : s.Utilization > 0.8 ? Loc.T("接近允许极限") : Loc.T("安全");
+				sb.Append(Loc.F("安全状态：[color={0}]{1}[/color]\n", (col), (safe)));
 			}
 			return sb.ToString();
 		}

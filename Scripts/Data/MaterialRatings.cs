@@ -43,12 +43,12 @@ namespace BridgeArchitect3D.Data
         /// <summary>原始指标（面板单位）。</summary>
         public static (string label, string unit, Func<MaterialDefinition, double> get)[] Metrics { get; } =
         {
-            ("价格", "$/m", m => m.CostPerMeter),
-            ("自重", "kg/m", m => m.MassPerMeter),
-            ("抗拉", "吨", m => Tonnes(m.TensionCapacity)),
-            ("抗压", "吨", m => Tonnes(m.CompressionCapacity(m.MaximumLength))),
-            ("抗弯", "吨·m", m => Tonnes(m.BendingCapacity)),
-            ("最大长度", "m", m => m.MaximumLength),
+            (Loc.T("价格"), "$/m", m => m.CostPerMeter),
+            (Loc.T("自重"), "kg/m", m => m.MassPerMeter),
+            (Loc.T("抗拉"), Loc.T("吨"), m => Tonnes(m.TensionCapacity)),
+            (Loc.T("抗压"), Loc.T("吨"), m => Tonnes(m.CompressionCapacity(m.MaximumLength))),
+            (Loc.T("抗弯"), Loc.T("吨·m"), m => Tonnes(m.BendingCapacity)),
+            (Loc.T("最大长度"), "m", m => m.MaximumLength),
         };
 
         /// <summary>

@@ -275,7 +275,7 @@ namespace BridgeArchitect3D.World
                 root.AddChild(new MeshInstance3D { Mesh = fm, MaterialOverride = fillMat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
                 root.AddChild(new Label3D
                 {
-                    Text = $"航道 净空 {e.Height:0.#} m", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                    Text = Loc.F("航道 净空 {0:0.#} m", (e.Height)), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
                     FontSize = 36, PixelSize = 0.01f, Modulate = new Color(1f, 0.7f, 0.35f),
                     Position = new Vector3((x0 + x1) / 2, y1 + 0.4f, BuildPlane.FrontZ + 0.3f),
                 });
@@ -320,7 +320,7 @@ namespace BridgeArchitect3D.World
                 else for (int i = 0; i < 4; i++) AddBox(root, new Vector3(cx, bed - 0.4f - i * 0.75f, BuildPlane.FrontZ + 1.2f), new Vector3(wz, 0.75f, 0.3f), i % 2 == 0 ? soft1 : soft2, false);
                 root.AddChild(new Label3D
                 {
-                    Text = z.Name + (z.IsRock ? "：浅基础即可" : "：浅基础承载低，建议桩基础"), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+                    Text = z.Name + (z.IsRock ? Loc.T("：浅基础即可") : Loc.T("：浅基础承载低，建议桩基础")), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
                     FontSize = 28, PixelSize = 0.01f, Modulate = z.IsRock ? new Color(0.85f, 0.88f, 0.92f) : new Color(1f, 0.82f, 0.55f),
                     Position = new Vector3(cx, bed + 0.6f, BuildPlane.FrontZ + 1.5f),
                 });
@@ -394,7 +394,7 @@ namespace BridgeArchitect3D.World
                 root.AddChild(mi);
                 root.AddChild(new Label3D
                 {
-                    Text = $"桥面坡度 ≤ {s * 100:0}%", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
+                    Text = Loc.F("桥面坡度 ≤ {0:0}%", (s * 100)), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
                     FontSize = 32, PixelSize = 0.01f, Modulate = new Color(0.5f, 0.9f, 1f),
                     Position = new Vector3((x0 + x1) / 2, y0 + (float)(s * (x1 - x0) / 2) + 0.5f, z + 0.3f),
                 });

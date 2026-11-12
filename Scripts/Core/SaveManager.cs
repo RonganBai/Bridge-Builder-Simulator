@@ -26,7 +26,7 @@ namespace BridgeArchitect3D.Core
                 DirAccess.MakeDirRecursiveAbsolute(SaveDir);
                 design.SavedTotalCost = design.TotalCost();
                 using var f = Godot.FileAccess.Open(DesignPath(design.LevelId), Godot.FileAccess.ModeFlags.Write);
-                if (f == null) { error = "无法写入存档：" + Godot.FileAccess.GetOpenError(); return false; }
+                if (f == null) { error = Loc.T("无法写入存档：") + Godot.FileAccess.GetOpenError(); return false; }
                 f.StoreString(GameDatabase.SerializeDesign(design));
                 return true;
             }
@@ -38,12 +38,12 @@ namespace BridgeArchitect3D.Core
             error = null;
             try
             {
-                if (!HasSave(levelId)) { error = "没有找到该关卡的存档"; return null; }
+                if (!HasSave(levelId)) { error = Loc.T("没有找到该关卡的存档"); return null; }
                 var d = GameDatabase.DeserializeDesign(Godot.FileAccess.GetFileAsString(DesignPath(levelId)));
-                if (d == null || d.LevelId != levelId) { error = "存档与关卡不匹配"; return null; }
+                if (d == null || d.LevelId != levelId) { error = Loc.T("存档与关卡不匹配"); return null; }
                 return d;
             }
-            catch (Exception e) { error = "存档损坏：" + e.Message; return null; }
+            catch (Exception e) { error = Loc.T("存档损坏：") + e.Message; return null; }
         }
 
         /// <summary>读取参考方案（res://Data/ReferenceDesigns）。</summary>
@@ -72,14 +72,14 @@ namespace BridgeArchitect3D.Core
         {
             error = null;
             if (WritesSuspended) return true;
-            if (string.IsNullOrWhiteSpace(name)) { error = "请输入方案名称"; return false; }
+            if (string.IsNullOrWhiteSpace(name)) { error = Loc.T("请输入方案名称"); return false; }
             try
             {
                 DirAccess.MakeDirRecursiveAbsolute(NamedDir(design.LevelId));
                 design.SavedTotalCost = design.TotalCost();
                 design.Name = name.Trim();
                 using var f = Godot.FileAccess.Open(NamedPath(design.LevelId, name), Godot.FileAccess.ModeFlags.Write);
-                if (f == null) { error = "无法写入存档：" + Godot.FileAccess.GetOpenError(); return false; }
+                if (f == null) { error = Loc.T("无法写入存档：") + Godot.FileAccess.GetOpenError(); return false; }
                 f.StoreString(GameDatabase.SerializeDesign(design));
                 return true;
             }
@@ -109,12 +109,12 @@ namespace BridgeArchitect3D.Core
             string path = NamedPath(levelId, name);
             try
             {
-                if (!Godot.FileAccess.FileExists(path)) { error = "找不到方案：" + name; return null; }
+                if (!Godot.FileAccess.FileExists(path)) { error = Loc.T("找不到方案：") + name; return null; }
                 var d = GameDatabase.DeserializeDesign(Godot.FileAccess.GetFileAsString(path));
-                if (d == null || d.LevelId != levelId) { error = "方案与关卡不匹配"; return null; }
+                if (d == null || d.LevelId != levelId) { error = Loc.T("方案与关卡不匹配"); return null; }
                 return d;
             }
-            catch (Exception e) { error = "方案损坏：" + e.Message; return null; }
+            catch (Exception e) { error = Loc.T("方案损坏：") + e.Message; return null; }
         }
 
         // ---------------- Custom levels (user://custom_levels) ----------------
@@ -129,7 +129,7 @@ namespace BridgeArchitect3D.Core
                 DirAccess.MakeDirRecursiveAbsolute(CustomDir);
                 spec.Id = CustomLevelBuilder.IdFor(spec.Name);
                 using var f = Godot.FileAccess.Open($"{CustomDir}/{spec.Id}.json", Godot.FileAccess.ModeFlags.Write);
-                if (f == null) { error = "无法写入关卡：" + Godot.FileAccess.GetOpenError(); return false; }
+                if (f == null) { error = Loc.T("无法写入关卡：") + Godot.FileAccess.GetOpenError(); return false; }
                 f.StoreString(JsonSerializer.Serialize(spec, GameDatabase.JsonOptions));
                 return true;
             }
@@ -166,7 +166,7 @@ namespace BridgeArchitect3D.Core
                 if (!Godot.FileAccess.FileExists(path)) return null;
                 return JsonSerializer.Deserialize<T>(Godot.FileAccess.GetFileAsString(path), GameDatabase.JsonOptions);
             }
-            catch (Exception e) { GD.PushWarning($"读取 {path} 失败：{e.Message}"); return null; }
+            catch (Exception e) { GD.PushWarning(Loc.F("读取 {0} 失败：{1}", (path), (e.Message))); return null; }
         }
 
         public static void WriteUserJson<T>(string path, T data)
@@ -177,7 +177,7 @@ namespace BridgeArchitect3D.Core
                 using var f = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write);
                 f?.StoreString(JsonSerializer.Serialize(data, GameDatabase.JsonOptions));
             }
-            catch (Exception e) { GD.PushWarning($"写入 {path} 失败：{e.Message}"); }
+            catch (Exception e) { GD.PushWarning(Loc.F("写入 {0} 失败：{1}", (path), (e.Message))); }
         }
     }
 }

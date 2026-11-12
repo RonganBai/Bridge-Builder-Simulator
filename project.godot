@@ -15,6 +15,8 @@ config/description="3D å»ºæ¡¥ç‰©ç†æ¨¡æ‹Ÿæ¸¸æˆï¼ˆ
 run/main_scene="res://Scenes/MainMenu.tscn"
 config/icon="res://icon.png"
 config/windows_native_icon="res://icon.ico"
+config/use_custom_user_dir.template=true
+config/custom_user_dir_name.template="BridgeArchitect3D"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 [autoload]

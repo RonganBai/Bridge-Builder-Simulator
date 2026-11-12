@@ -1,3 +1,4 @@
+using BridgeArchitect3D.Data;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
@@ -87,7 +88,7 @@ namespace BridgeArchitect3D.Core
             if (_t < Warmup + Sample) return;
             var sorted = _frames.OrderBy(x => x).ToList();
             double avg = _frames.Average(), p99 = sorted[(int)(sorted.Count * 0.99)], worst = sorted[^1];
-            GD.Print($"BENCH {GameManager.Instance.CurrentLevelId}{(GameManager.Instance.Settings.LowQuality ? " [低画质]" : "")}: avg {1000 / avg:0} fps ({avg:0.00} ms), p99 {p99:0.00} ms, worst {worst:0.00} ms, draw calls {_drawCalls}, objects {_objects}, frames {_frames.Count}, GPU {_gpu / System.Math.Max(1, _timed):0.00} ms, render CPU {_cpu / System.Math.Max(1, _timed):0.00} ms");
+            GD.Print($"BENCH {GameManager.Instance.CurrentLevelId}{(GameManager.Instance.Settings.LowQuality ? Loc.T(" [低画质]") : "")}: avg {1000 / avg:0} fps ({avg:0.00} ms), p99 {p99:0.00} ms, worst {worst:0.00} ms, draw calls {_drawCalls}, objects {_objects}, frames {_frames.Count}, GPU {_gpu / System.Math.Max(1, _timed):0.00} ms, render CPU {_cpu / System.Math.Max(1, _timed):0.00} ms");
             Next();
         }
     }

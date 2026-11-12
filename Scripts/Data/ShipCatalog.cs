@@ -9,10 +9,10 @@ namespace BridgeArchitect3D.Data
     {
         public static IReadOnlyList<ShipType> Types { get; }=new[]
         {
-            new ShipType("cargo","内河货轮",4.4,4.5,18,2.4),
-            new ShipType("sailboat","帆船",2.8,8.5,8,2.8),
-            new ShipType("speedboat","快艇",2.1,1.6,6,5.5),
-            new ShipType("tugboat","拖轮",3.3,3.8,9,2.6)
+            new ShipType("cargo",Loc.T("内河货轮"),4.4,4.5,18,2.4),
+            new ShipType("sailboat",Loc.T("帆船"),2.8,8.5,8,2.8),
+            new ShipType("speedboat",Loc.T("快艇"),2.1,1.6,6,5.5),
+            new ShipType("tugboat",Loc.T("拖轮"),3.3,3.8,9,2.6)
         };
         public static string Kind(TrafficEvent e)=>Types.Any(t=>t.Id==e.ShipKind)?e.ShipKind:"cargo";
         public static TrafficEvent Create(string kind,double laneX,double time=0)

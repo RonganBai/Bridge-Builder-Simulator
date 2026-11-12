@@ -65,8 +65,8 @@ namespace BridgeArchitect3D.Traffic
                 if (def.IsRoadStart) start = i;
                 if (def.IsRoadEnd) end = i;
             }
-            if (start < 0 || end < 0) { reason = FailureReason.RoadNotConnected; error = "关卡缺少道路锚点"; return null; }
-            string laneName = lane == 0 ? "" : "上层";
+            if (start < 0 || end < 0) { reason = FailureReason.RoadNotConnected; error = Loc.T("关卡缺少道路锚点"); return null; }
+            string laneName = lane == 0 ? "" : Loc.T("上层");
 
             var p = new RoadPath { Lane = lane };
             var roadNodes = new HashSet<int> { start };
@@ -116,14 +116,14 @@ namespace BridgeArchitect3D.Traffic
                 if (slope > limit * MaxSlopeFactor + SlopeTolerance)
                 {
                     reason = FailureReason.VehicleBlocked; involved.Add(m.MemberIds[k2]);
-                    error = $"桥面 #{m.MemberIds[k2]} 坡度 {slope * 100:0}% 太陡，车辆爬不上去（最多 {limit * MaxSlopeFactor * 100:0}%，建议不超过 {limit * 100:0}%）";
+                    error = Loc.F("桥面 #{0} 坡度 {1:0}% 太陡，车辆爬不上去（最多 {2:0}%，建议不超过 {3:0}%）", (m.MemberIds[k2]), (slope * 100), (limit * MaxSlopeFactor * 100), (limit * 100));
                     break;
                 }
                 if (slope > limit + SlopeTolerance) p.SteepMemberIds.Add(m.MemberIds[k2]);
                 if (m.Length[k2] > m.Mat[k2].MaximumLength + 1e-6)
                 {
                     reason = FailureReason.DeckSpanTooLong; involved.Add(m.MemberIds[k2]);
-                    error = $"桥面 #{m.MemberIds[k2]} 跨度 {m.Length[k2]:0.0} m 超过最大 {m.Mat[k2].MaximumLength:0.0} m";
+                    error = Loc.F("桥面 #{0} 跨度 {1:0.0} m 超过最大 {2:0.0} m", (m.MemberIds[k2]), (m.Length[k2]), (m.Mat[k2].MaximumLength));
                     break;
                 }
 
@@ -159,7 +159,7 @@ namespace BridgeArchitect3D.Traffic
             else if (reason == FailureReason.None)
             {
                 reason = FailureReason.RoadNotConnected;
-                error = p.DeckMemberIds.Count == 0 ? $"左岸{laneName}道路入口没有连接桥面" : $"{laneName}道路在 X = {cx:0.0} m 处中断，未能到达右岸";
+                error = p.DeckMemberIds.Count == 0 ? Loc.F("左岸{0}道路入口没有连接桥面", (laneName)) : Loc.F("{0}道路在 X = {1:0.0} m 处中断，未能到达右岸", (laneName), (cx));
             }
             p.Complete = complete;
 

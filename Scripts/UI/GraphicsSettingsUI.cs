@@ -1,3 +1,4 @@
+using BridgeArchitect3D.Data;
 using System;
 using BridgeArchitect3D.Core;
 using Godot;
@@ -12,16 +13,16 @@ namespace BridgeArchitect3D.UI
 	{
 		private static readonly (string id, string name)[] Aa =
 		{
-			("off", "关"), ("fxaa", "FXAA（最省，略糊）"), ("smaa", "SMAA（清晰，省）"),
-			("msaa2", "MSAA 2×"), ("msaa4", "MSAA 4×"), ("msaa8", "MSAA 8×（最贵）"), ("taa", "TAA（最平滑，运动略拖影）"),
+			("off", Loc.T("关")), ("fxaa", Loc.T("FXAA（最省，略糊）")), ("smaa", Loc.T("SMAA（清晰，省）")),
+			("msaa2", "MSAA 2×"), ("msaa4", "MSAA 4×"), ("msaa8", Loc.T("MSAA 8×（最贵）")), ("taa", Loc.T("TAA（最平滑，运动略拖影）")),
 		};
-		private static readonly (string id, string name)[] Shadow = { ("off", "关"), ("low", "低"), ("high", "高") };
+		private static readonly (string id, string name)[] Shadow = { ("off", Loc.T("关")), ("low", Loc.T("低")), ("high", Loc.T("高")) };
 		private static readonly int[] Fps = { 0, 30, 60, 120, 144, 240 };
 
 		private static HBoxContainer Row(Container parent, string label)
 		{
 			var row = new HBoxContainer();
-			row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(90, 0) });
+			row.AddChild(new Label { Text = label, CustomMinimumSize = new Vector2(Loc.IsEnglish ? 130 : 90, 0) });
 			parent.AddChild(row);
 			return row;
 		}
@@ -48,20 +49,20 @@ namespace BridgeArchitect3D.UI
 		public static Action Build(Container parent, GameSettings s, bool mainMenu)
 		{
 			s.MigrateGraphics();
-			var presets = Row(parent, "画质预设");
-			var aa = Options(parent, "抗锯齿", Aa, s.Antialiasing);
-			var sh = Options(parent, "阴影", Shadow, s.Shadows);
-			var scale = Slider(parent, "3D 渲染比例", 0.5, 1.0, 0.05, s.RenderScale, x => $"{x * 100:0}%");
-			scale.TooltipText = "低于 100% 时 3D 画面按更低分辨率渲染再放大（FSR），界面文字不受影响";
-			var bright = Slider(parent, "亮度", 0.5, 1.5, 0.05, s.Brightness, x => $"{x * 100:0}%");
-			var contrast = Slider(parent, "对比度", 0.5, 1.5, 0.05, s.Contrast, x => $"{x * 100:0}%");
-			var sat = Slider(parent, "饱和度", 0.0, 2.0, 0.05, s.Saturation, x => $"{x * 100:0}%");
-			var vsync = new CheckBox { Text = "垂直同步（防画面撕裂）", ButtonPressed = s.VSync };
+			var presets = Row(parent, Loc.T("画质预设"));
+			var aa = Options(parent, Loc.T("抗锯齿"), Aa, s.Antialiasing);
+			var sh = Options(parent, Loc.T("阴影"), Shadow, s.Shadows);
+			var scale = Slider(parent, Loc.T("3D 渲染比例"), 0.5, 1.0, 0.05, s.RenderScale, x => $"{x * 100:0}%");
+			scale.TooltipText = Loc.T("低于 100% 时 3D 画面按更低分辨率渲染再放大（FSR），界面文字不受影响");
+			var bright = Slider(parent, Loc.T("亮度"), 0.5, 1.5, 0.05, s.Brightness, x => $"{x * 100:0}%");
+			var contrast = Slider(parent, Loc.T("对比度"), 0.5, 1.5, 0.05, s.Contrast, x => $"{x * 100:0}%");
+			var sat = Slider(parent, Loc.T("饱和度"), 0.0, 2.0, 0.05, s.Saturation, x => $"{x * 100:0}%");
+			var vsync = new CheckBox { Text = Loc.T("垂直同步（防画面撕裂）"), ButtonPressed = s.VSync };
 			parent.AddChild(vsync);
 			var fps = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-			foreach (int f in Fps) fps.AddItem(f == 0 ? "不限" : $"{f} FPS");
+			foreach (int f in Fps) fps.AddItem(f == 0 ? Loc.T("不限") : $"{f} FPS");
 			fps.Selected = Math.Max(0, Array.IndexOf(Fps, s.MaxFps));
-			Row(parent, "帧率上限").AddChild(fps);
+			Row(parent, Loc.T("帧率上限")).AddChild(fps);
 
 			void Preset(string name, string id)
 			{
@@ -73,8 +74,8 @@ namespace BridgeArchitect3D.UI
 					scale.Value = tmp.RenderScale;
 				}, 64));
 			}
-			Preset("低", "low"); Preset("中", "medium"); Preset("高", "high");
-			presets.AddChild(UiTheme.MakeButton("颜色复位", () => { bright.Value = 1; contrast.Value = 1; sat.Value = 1; }, 84));
+			Preset(Loc.T("低"), "low"); Preset(Loc.T("中"), "medium"); Preset(Loc.T("高"), "high");
+			presets.AddChild(UiTheme.MakeButton(Loc.T("颜色复位"), () => { bright.Value = 1; contrast.Value = 1; sat.Value = 1; }, 84));
 
 			return () =>
 			{

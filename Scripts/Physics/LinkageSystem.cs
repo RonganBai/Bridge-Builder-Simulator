@@ -38,7 +38,7 @@ namespace BridgeArchitect3D.Physics
             _drivers.Clear(); _triangles.Clear(); _count=0; Progress=0; Fault=null; FaultKind=LinkageFaultKind.None;
             FaultNodes.Clear(); FaultMembers.Clear(); PendingForceCheck=false; Ready=false;
             _model = model;
-            if(settings?.Drivers==null) return Fail("联动驱动配置为空");
+            if(settings?.Drivers==null) return Fail(Loc.T("联动驱动配置为空"));
             _rest = (double[])model.Length.Clone();
             _pins = (bool[])model.Pinned.Clone();
             _releaseA=(bool[])model.ReleaseA.Clone();_releaseB=(bool[])model.ReleaseB.Clone();
@@ -47,14 +47,14 @@ namespace BridgeArchitect3D.Physics
             foreach (var driver in settings.Drivers)
             {
                 if (!model.MemberIndex.TryGetValue(driver.MemberId, out int k) || !model.Mat[k].Extendable || model.Broken[k])
-                    return Fail($"驱动液压杆 #{driver.MemberId} 不存在或已失效");
+                    return Fail(Loc.F("驱动液压杆 #{0} 不存在或已失效", (driver.MemberId)));
                 var mat = model.Mat[k];
                 double stroke = Math.Abs(driver.Ratio);
                 if (!double.IsFinite(driver.Ratio) || stroke < LinkageDriverData.MinStroke - 1e-9 || stroke > LinkageDriverData.MaxStroke + 1e-9)
-                    return Fail($"液压杆 #{driver.MemberId} 行程必须在 {LinkageDriverData.MinStroke:P0}～{LinkageDriverData.MaxStroke:P0} 之间");
-                if (!_drivers.TryAdd(k, driver.Ratio)) return Fail($"液压杆 #{driver.MemberId} 重复配置");
+                    return Fail(Loc.F("液压杆 #{0} 行程必须在 {1:P0}～{2:P0} 之间", (driver.MemberId), (LinkageDriverData.MinStroke), (LinkageDriverData.MaxStroke)));
+                if (!_drivers.TryAdd(k, driver.Ratio)) return Fail(Loc.F("液压杆 #{0} 重复配置", (driver.MemberId)));
             }
-            if (_drivers.Count == 0) return Fail("请选择至少一根通用联动驱动杆");
+            if (_drivers.Count == 0) return Fail(Loc.T("请选择至少一根通用联动驱动杆"));
             // Recognize closed triangular loops around a driver, including other hydraulic sides.
             foreach (int k in _drivers.Keys)
                 for (int a = 0; a < model.MemberCount; a++)
@@ -87,7 +87,7 @@ namespace BridgeArchitect3D.Physics
             {
                 if (model.Broken[k] || !connected.Contains(model.A[k])) continue;
                 if (model.Mat[k].IsCable || model.Mat[k].IsColumn)
-                    return Fail("通用连杆组件暂不支持钢索或立柱；请将驱动组件与这些构件分开");
+                    return Fail(Loc.T("通用连杆组件暂不支持钢索或立柱；请将驱动组件与这些构件分开"));
             }
             for (int i=0; i<model.NodeCount; i++)
             {
@@ -95,7 +95,7 @@ namespace BridgeArchitect3D.Physics
                 if (!model.FixX[i]) _variable[2*i]=_count++;
                 if (!model.FixY[i]) _variable[2*i+1]=_count++;
             }
-            if (_count == 0 || _count > 160) return Fail("联动组件没有可动自由度，或超过 80 个自由节点的求解规模");
+            if (_count == 0 || _count > 160) return Fail(Loc.T("联动组件没有可动自由度，或超过 80 个自由节点的求解规模"));
             for (int k=0; k<model.MemberCount; k++)
                 if (!model.Broken[k] && connected.Contains(model.A[k])) model.Pinned[k]=true;
             ApplyRigidSplits();
@@ -111,7 +111,7 @@ namespace BridgeArchitect3D.Physics
             var moving=Enumerable.Range(0,_model.NodeCount).Where(i=>
                 Math.Abs(_model.X[i]-_lastX[i])+Math.Abs(_model.Y[i]-_lastY[i])>1e-9).ToHashSet();
             Rollback(); PendingForceCheck=false;
-            if(moving.Count==0) return Fail("所选液压杆没有可实现的行程；请检查固定支撑或零行程设置");
+            if(moving.Count==0) return Fail(Loc.T("所选液压杆没有可实现的行程；请检查固定支撑或零行程设置"));
             Array.Copy(_pins,_model.Pinned,_pins.Length);
             Array.Copy(_releaseA,_model.ReleaseA,_releaseA.Length);
             Array.Copy(_releaseB,_model.ReleaseB,_releaseB.Length);
@@ -154,9 +154,9 @@ namespace BridgeArchitect3D.Physics
         {
             if (!Ready || !double.IsFinite(progress) || progress<0 || progress>1) return false;
             if (_model.RigidBodies.Any(body=>body.nodes.Any(IsVariable) && body.members.Any(k=>_model.Broken[k])))
-                return Fail("主桥叶构件已断裂，联合机构停止；请修复从动结构");
+                return Fail(Loc.T("主桥叶构件已断裂，联合机构停止；请修复从动结构"));
             if (_model.RigidSplits.Any(j=>IsVariable(j.node) && j.members.Any(k=>_model.Broken[k])))
-                return Fail("刚性原构件已断裂，无法继续驱动；请修复从动结构");
+                return Fail(Loc.T("刚性原构件已断裂，无法继续驱动；请修复从动结构"));
             if (!ValidateTriangles(progress)) return false;
             var x=(double[])_model.X.Clone(); var y=(double[])_model.Y.Clone();
             int worst=-1;
@@ -213,8 +213,8 @@ namespace BridgeArchitect3D.Physics
         private double TargetLength(int member, double progress) =>
             _rest[member] * (1 + (_drivers.TryGetValue(member, out double ratio) ? ratio * progress : 0));
 
-        private string TargetDescription() => string.Join("、", FaultNodes.OrderBy(id=>id).Select(id=>$"节点 #{id}")) +
-            (FaultMembers.Count==0 ? "" : "；"+string.Join("、",FaultMembers.OrderBy(id=>id).Select(id=>$"构件 #{id}")));
+        private string TargetDescription() => string.Join(Loc.T("、"), FaultNodes.OrderBy(id=>id).Select(id=>Loc.F("节点 #{0}", (id)))) +
+            (FaultMembers.Count==0 ? "" : Loc.T("；")+string.Join(Loc.T("、"),FaultMembers.OrderBy(id=>id).Select(id=>Loc.F("构件 #{0}", (id)))));
 
         private void MarkMember(int k)
         {
@@ -227,7 +227,7 @@ namespace BridgeArchitect3D.Physics
         {
             FaultNodes.Clear(); FaultMembers.Clear();
             MarkMember(triangle.driver); MarkMember(triangle.first); MarkMember(triangle.second);
-            FaultKind=kind; Fault=message+"。涉及："+TargetDescription(); return false;
+            FaultKind=kind; Fault=message+Loc.T("。涉及：")+TargetDescription(); return false;
         }
 
         // RREF exposes the full null-space support, rather than blaming the last member visited.
@@ -281,9 +281,9 @@ namespace BridgeArchitect3D.Physics
                     FaultMembers.Add(_model.MemberIds[k]);
             FaultKind=genericRank<_count ? LinkageFaultKind.Underconstrained : LinkageFaultKind.DeadPoint;
             Fault=FaultKind==LinkageFaultKind.Underconstrained
-                ? $"机构欠约束：仍有 {_count-genericRank} 个未驱动自由度；请在高亮位置增加有效支撑或明确选择所需驱动。"
-                : "几何死点：当前姿态使约束方向退化；请调整高亮位置的初始夹角或支点。";
-            Fault+="涉及："+TargetDescription();return false;
+                ? Loc.F("机构欠约束：仍有 {0} 个未驱动自由度；请在高亮位置增加有效支撑或明确选择所需驱动。", (_count-genericRank))
+                : Loc.T("几何死点：当前姿态使约束方向退化；请调整高亮位置的初始夹角或支点。");
+            Fault+=Loc.T("涉及：")+TargetDescription();return false;
         }
 
         private bool ConstraintFailure(double[] x,double[] y,double progress,int worst)
@@ -308,7 +308,7 @@ namespace BridgeArchitect3D.Physics
                     foreach(int k in joint.members)MarkMember(k);
             if(FaultMembers.Count==0 && worst>=0)MarkMember(worst);
             FaultKind=LinkageFaultKind.ConstraintConflict;
-            Fault="约束冲突：所选行程与高亮杆件或刚性连接无法同时满足；已保留上一稳定位置。涉及："+TargetDescription();
+            Fault=Loc.T("约束冲突：所选行程与高亮杆件或刚性连接无法同时满足；已保留上一稳定位置。涉及：")+TargetDescription();
             return false;
         }
 
@@ -331,12 +331,12 @@ namespace BridgeArchitect3D.Physics
                 double minimum = Math.Abs(b - c), maximum = b + c;
                 if (a <= minimum + LengthTolerance || a >= maximum - LengthTolerance)
                     return TriangleFailure(triangle, LinkageFaultKind.ConstraintConflict,
-                        $"约束冲突：三角形无法闭合，目标 {a:0.000} m，可行范围 {minimum:0.000}～{maximum:0.000} m");
+                        Loc.F("约束冲突：三角形无法闭合，目标 {0:0.000} m，可行范围 {1:0.000}～{2:0.000} m", (a), (minimum), (maximum)));
                 double quality = TriangleSine(a, b, c);
                 double current = TriangleSine(_model.Length[triangle.driver], _model.Length[triangle.first], _model.Length[triangle.second]);
                 if (progress != Progress && quality < MinimumTriangleSine && quality < current - 1e-9)
                     return TriangleFailure(triangle, LinkageFaultKind.DeadPoint,
-                        "几何死点：三角形接近共线死点；已保留上一稳定位置，请调整支点或初始夹角");
+                        Loc.T("几何死点：三角形接近共线死点；已保留上一稳定位置，请调整支点或初始夹角"));
             }
             return true;
         }
@@ -357,7 +357,7 @@ namespace BridgeArchitect3D.Physics
                 Rollback(); PendingForceCheck = false;
                 progress = start + (progress - start) / 2;
             }
-            return Fail("联动机构接近运动奇异点，已保留上一稳定位置");
+            return Fail(Loc.T("联动机构接近运动奇异点，已保留上一稳定位置"));
         }
 
         private void Build(double[] x,double[] y,double p,out double[] normal,out double[] rhs,out double error,out int worst)
@@ -476,7 +476,7 @@ namespace BridgeArchitect3D.Physics
             foreach(int k in _drivers.Keys)
                 if(Math.Abs(output.AxialForce[k])>_model.Mat[k].ActuatorForce)
                 {
-                    Rollback(); return Fail($"液压杆 #{_model.MemberIds[k]} 推拉力不足：需要 {Math.Abs(output.AxialForce[k])/1000:0.0} kN，最大 {_model.Mat[k].ActuatorForce/1000:0.0} kN");
+                    Rollback(); return Fail(Loc.F("液压杆 #{0} 推拉力不足：需要 {1:0.0} kN，最大 {2:0.0} kN", (_model.MemberIds[k]), (Math.Abs(output.AxialForce[k])/1000), (_model.Mat[k].ActuatorForce/1000)));
                 }
             return true;
         }

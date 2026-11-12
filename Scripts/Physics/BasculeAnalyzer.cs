@@ -80,9 +80,9 @@ namespace BridgeArchitect3D.Physics
         public string Hint()
         {
             if (Groups.Count > 0 || !HasHydraulics) return null;
-            string why = Rejected.Count == 0 ? "" : "\n" + string.Join("\n", Rejected.Select(r => $"液压杆 #{r.Key}：{r.Value}"));
-            return "没有有效的开启桥配置，液压杆不会动作（不会自动强制收缩）。开启桥的要求：每片桥叶只通过一个转轴节点连着岸上结构；" +
-                   "液压杆一端接在桥叶上、另一端接在固定结构上；桥叶与对面之间是桥面接缝（桥面接缝会自动分离）。" + why;
+            string why = Rejected.Count == 0 ? "" : "\n" + string.Join("\n", Rejected.Select(r => Loc.F("液压杆 #{0}：{1}", (r.Key), (r.Value))));
+            return Loc.T("没有有效的开启桥配置，液压杆不会动作（不会自动强制收缩）。开启桥的要求：每片桥叶只通过一个转轴节点连着岸上结构；") +
+                   Loc.T("液压杆一端接在桥叶上、另一端接在固定结构上；桥叶与对面之间是桥面接缝（桥面接缝会自动分离）。") + why;
         }
     }
 
@@ -156,9 +156,9 @@ namespace BridgeArchitect3D.Physics
             public bool Leaf(Graph g, int end, int other, out int pivot, out HashSet<int> leaf, out string err)
             {
                 pivot = int.MinValue; leaf = null; err = null;
-                if (Fixed.Contains(end)) { err = "这一端在固定结构上"; return false; }
+                if (Fixed.Contains(end)) { err = Loc.T("这一端在固定结构上"); return false; }
                 var all = Reach(g, end, Array.Empty<int>(), out bool any);
-                if (!any) { err = "桥叶没有连到任何固定支座"; return false; }
+                if (!any) { err = Loc.T("桥叶没有连到任何固定支座"); return false; }
                 foreach (int v in all)
                 {
                     if (v == end || Fixed.Contains(v)) continue;
@@ -166,12 +166,12 @@ namespace BridgeArchitect3D.Physics
                     if (hit) continue;
                     if (leaf == null || set.Count > leaf.Count) { pivot = v; leaf = set; }
                 }
-                if (leaf == null) { err = "桥叶除了一个转轴节点之外还连着固定结构"; return false; }
-                if (leaf.Contains(other)) { err = "液压杆两端都在桥叶上"; return false; }
-                if (other == pivot) { err = "液压杆一端在转轴上，没有力臂"; return false; }
+                if (leaf == null) { err = Loc.T("桥叶除了一个转轴节点之外还连着固定结构"); return false; }
+                if (leaf.Contains(other)) { err = Loc.T("液压杆两端都在桥叶上"); return false; }
+                if (other == pivot) { err = Loc.T("液压杆一端在转轴上，没有力臂"); return false; }
                 var blocked = new HashSet<int>(leaf) { pivot };
                 Reach(g, other, blocked, out bool otherFixed);
-                if (!otherFixed) { err = "液压杆另一端没有连到固定结构"; return false; }
+                if (!otherFixed) { err = Loc.T("液压杆另一端没有连到固定结构"); return false; }
                 return true;
             }
         }
@@ -241,7 +241,7 @@ namespace BridgeArchitect3D.Physics
                 }
                 options[h.Id] = list.GroupBy(o => (o.EndKey, Cuts: string.Join(",", o.Seams.OrderBy(x => x))))
                     .Select(g => g.First()).OrderBy(o => o.Score).Take(MaxOptionsPerActuator).ToList();
-                if (list.Count == 0) p.Rejected[h.Id] = Diagnose(c, h) ?? firstErr ?? "找不到可以转动的桥叶";
+                if (list.Count == 0) p.Rejected[h.Id] = Diagnose(c, h) ?? firstErr ?? Loc.T("找不到可以转动的桥叶");
             }
 
             // Prefer independent valid leaves, fewer releases and nearby connections; do not inflate the moving region.
@@ -314,14 +314,14 @@ namespace BridgeArchitect3D.Physics
             }
             if (picked != null) { p.Groups = picked; p.CutSeams = pickedCut; }
             if (p.Groups.Count == 0 && unstable != null)
-                foreach (var id in acts) p.Rejected[id] = "没有能正常开启的桥叶组合（已逐一尝试）：" + unstable;
+                foreach (var id in acts) p.Rejected[id] = Loc.T("没有能正常开启的桥叶组合（已逐一尝试）：") + unstable;
             // Any hydraulic left without a leaf: if one extra member is what locks its leaf, name that member.
             foreach (var h in hyd)
                 if (p.GroupOf(h.Id) == null && !p.Rejected.ContainsKey(h.Id) && Diagnose(c, h) is { } brace)
                     p.Rejected[h.Id] = brace;
             foreach (var id in acts)
                 if (p.GroupOf(id) == null && !p.Rejected.ContainsKey(id))
-                    p.Rejected[id] = "与其他液压杆抢同一侧桥叶，或它的固定端在另一片桥叶上；保持为固定长度构件";
+                    p.Rejected[id] = Loc.T("与其他液压杆抢同一侧桥叶，或它的固定端在另一片桥叶上；保持为固定长度构件");
             return p;
         }
 
@@ -430,7 +430,7 @@ namespace BridgeArchitect3D.Physics
             }
             if (best.m == null) return null;
             var bm = c.Db.GetMaterial(best.m.MaterialId);
-            return $"构件 #{best.m.Id}（{bm.Name}）把活动段锁死了：桥叶除了转轴节点 #{Math.Abs(best.pivot)} 之外还通过它连着固定结构，液压杆不会强行驱动。删除这根构件，或把它改接到桥叶内部";
+            return Loc.F("构件 #{0}（{1}）把活动段锁死了：桥叶除了转轴节点 #{2} 之外还通过它连着固定结构，液压杆不会强行驱动。删除这根构件，或把它改接到桥叶内部", (best.m.Id), (bm.Name), (Math.Abs(best.pivot)));
         }
 
         private static Dictionary<int, int> Hops(Graph g, int start)

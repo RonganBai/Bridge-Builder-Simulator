@@ -50,7 +50,7 @@ namespace BridgeArchitect3D.Data
 
         /// <summary>Short player-facing rule text.</summary>
         public static string RuleText(MaterialDefinition mat) => mat != null && mat.IsColumn
-            ? $"柱每 {ColumnSpacing:0} m 自动加一根横杆" : $"≥ {MinLength:0} m 自动在中点加横梁";
+            ? Loc.F("柱每 {0:0} m 自动加一根横杆", (ColumnSpacing)) : Loc.F("≥ {0:0} m 自动在中点加横梁", (MinLength));
 
         public static double TensionFactor(MaterialDefinition mat, double length) => Has(mat, length) ? 1 + TensionBonus : 1;
 

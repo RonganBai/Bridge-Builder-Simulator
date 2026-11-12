@@ -47,7 +47,7 @@ namespace BridgeArchitect3D.UI
 				DrawCircle(p, 5, c);
 				DrawString(font, p + new Vector2(6, -6), a.Id, HorizontalAlignment.Left, -1, 12, c);
 			}
-			DrawString(font, P(w / 2, y1 - 1) - new Vector2(40, 0), $"河宽 {w:0.#} m", HorizontalAlignment.Left, -1, 13, Colors.White);
+			DrawString(font, P(w / 2, y1 - 1) - new Vector2(40, 0), Loc.F("河宽 {0:0.#} m", (w)), HorizontalAlignment.Left, -1, 13, Colors.White);
 		}
 	}
 }

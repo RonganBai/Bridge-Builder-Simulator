@@ -29,11 +29,11 @@ namespace BridgeArchitect3D.Data
         public static GameDatabase FromJson(string materialsJson, string vehiclesJson, string levelsJson)
         {
             var db = new GameDatabase();
-            var mats = JsonSerializer.Deserialize<MaterialFile>(materialsJson, JsonOptions) ?? throw new Exception("材料数据为空");
+            var mats = JsonSerializer.Deserialize<MaterialFile>(materialsJson, JsonOptions) ?? throw new Exception(Loc.T("材料数据为空"));
             foreach (var m in mats.Materials) db.Materials[m.MaterialId] = m;
-            var veh = JsonSerializer.Deserialize<VehicleFile>(vehiclesJson, JsonOptions) ?? throw new Exception("车辆数据为空");
+            var veh = JsonSerializer.Deserialize<VehicleFile>(vehiclesJson, JsonOptions) ?? throw new Exception(Loc.T("车辆数据为空"));
             foreach (var v in veh.Vehicles) db.Vehicles[v.Id] = v;
-            var lv = JsonSerializer.Deserialize<LevelFile>(levelsJson, JsonOptions) ?? throw new Exception("关卡数据为空");
+            var lv = JsonSerializer.Deserialize<LevelFile>(levelsJson, JsonOptions) ?? throw new Exception(Loc.T("关卡数据为空"));
             db.Levels.AddRange(lv.Levels);
             db.Validate();
             return db;
@@ -45,12 +45,12 @@ namespace BridgeArchitect3D.Data
             foreach (var l in Levels)
             {
                 foreach (var id in l.AllowedMaterials)
-                    if (!Materials.ContainsKey(id)) throw new Exception($"关卡 {l.Id} 引用了不存在的材料 {id}");
+                    if (!Materials.ContainsKey(id)) throw new Exception(Loc.F("关卡 {0} 引用了不存在的材料 {1}", (l.Id), (id)));
                 foreach (var e in l.TrafficEvents)
                     if (e.Type == TrafficEventType.Vehicle && !Vehicles.ContainsKey(e.VehicleId))
-                        throw new Exception($"关卡 {l.Id} 引用了不存在的车辆 {e.VehicleId}");
+                        throw new Exception(Loc.F("关卡 {0} 引用了不存在的车辆 {1}", (l.Id), (e.VehicleId)));
                 if (!l.Anchors.Any(a => a.IsRoadStart) || !l.Anchors.Any(a => a.IsRoadEnd))
-                    throw new Exception($"关卡 {l.Id} 缺少道路起点/终点锚点");
+                    throw new Exception(Loc.F("关卡 {0} 缺少道路起点/终点锚点", (l.Id)));
             }
         }
 

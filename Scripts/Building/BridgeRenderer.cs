@@ -186,7 +186,7 @@ namespace BridgeArchitect3D.Building
                 if (!labelled)
                 {
                     labelled = true;
-                    _container.AddChild(new Label3D { Text = $"限高 {lim:0.0} m", Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 32, PixelSize = 0.01f,
+                    _container.AddChild(new Label3D { Text = Loc.F("限高 {0:0.0} m", (lim)), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 32, PixelSize = 0.01f,
                         Modulate = new Color(1f, 0.65f, 0.3f), Position = pa.Lerp(pb, 0.5f) + new Vector3(0, 0.3f, BuildPlane.FrontZ) });
                 }
             }

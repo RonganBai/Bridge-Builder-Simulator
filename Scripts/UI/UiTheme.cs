@@ -1,3 +1,4 @@
+using BridgeArchitect3D.Data;
 using Godot;
 
 namespace BridgeArchitect3D.UI
@@ -99,7 +100,7 @@ namespace BridgeArchitect3D.UI
             var shell=new VBoxContainer();shell.AddThemeConstantOverride("separation",12);panel.AddChild(shell);
             var heading=new HBoxContainer();shell.AddChild(heading);
             var titleLabel=MakeLabel(title,22);titleLabel.SizeFlagsHorizontal=Control.SizeFlags.ExpandFill;heading.AddChild(titleLabel);
-            heading.AddChild(MakeButton("关闭",()=>overlay.Hide(),56));
+            heading.AddChild(MakeButton(Loc.T("关闭"),()=>overlay.Hide(),56));
             var scroll=new ScrollContainer {FollowFocus=true};shell.AddChild(scroll);
             var content=new VBoxContainer {SizeFlagsHorizontal=Control.SizeFlags.ExpandFill};content.AddThemeConstantOverride("separation",12);scroll.AddChild(content);
             // Callers retain child zero when rebuilding dialog bodies.

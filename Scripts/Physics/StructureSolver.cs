@@ -1,3 +1,4 @@
+using BridgeArchitect3D.Data;
 using System;
 
 namespace BridgeArchitect3D.Physics
@@ -225,7 +226,7 @@ namespace BridgeArchitect3D.Physics
                 {
                     o.Stable = false;
                     o.UnstableNodeId = NodeOfDof(m, p);
-                    o.Message = o.UnstableNodeId >= 0 ? $"节点 #{o.UnstableNodeId} 约束不足，结构形成可动机构" : "结构约束不足";
+                    o.Message = o.UnstableNodeId >= 0 ? Loc.F("节点 #{0} 约束不足，结构形成可动机构", (o.UnstableNodeId)) : Loc.T("结构约束不足");
                     return;
                 }
                 for (int r = p + 1; r < nf; r++)
@@ -255,7 +256,7 @@ namespace BridgeArchitect3D.Physics
                     if (double.IsNaN(v) || double.IsInfinity(v) || (d < 2 && Math.Abs(v) > limit))
                     {
                         o.Stable = false; o.UnstableNodeId = m.NodeIds[i];
-                        o.Message = $"节点 #{o.UnstableNodeId} 位移发散，结构失稳";
+                        o.Message = Loc.F("节点 #{0} 位移发散，结构失稳", (o.UnstableNodeId));
                         return;
                     }
                     if (d < 2) o.Displacement[2 * i + d] = v; else o.Rotation[i] = v;

@@ -32,7 +32,7 @@ namespace BridgeArchitect3D.Core
         public override void _Ready()
         {
             _gm = GameManager.Instance;
-            if (_gm?.Db == null) { ShowFatal(_gm?.LoadError ?? "游戏数据未加载"); return; }
+            if (_gm?.Db == null) { ShowFatal(_gm?.LoadError ?? Loc.T("游戏数据未加载")); return; }
             _db = _gm.Db;
             _level = _gm.ResolveLevel(_gm.CurrentLevelId) ?? _db.Levels[0];
 
@@ -41,7 +41,7 @@ namespace BridgeArchitect3D.Core
             {
                 AddChild(new Label3D
                 {
-                    Text = a.Id + (a.IsRoadStart ? " 起点" : a.IsRoadEnd ? " 终点" : ""),
+                    Text = a.Id + (a.IsRoadStart ? Loc.T(" 起点") : a.IsRoadEnd ? Loc.T(" 终点") : ""),
                     Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
                     FontSize = 40, PixelSize = 0.01f, Modulate = new Color(1f, 0.75f, 0.4f),
                     Font = UiTheme.Get().DefaultFont,
@@ -104,7 +104,7 @@ namespace BridgeArchitect3D.Core
             _traffic.DeformationScale = (float)_gm.Settings.DeformationScale;
             _traffic.Finished += OnTestFinished;
             _traffic.MemberBrokenVisual += e => _hud.ShowToast(e.Text, true);
-            _traffic.MemberCrackedVisual += e => _hud.ShowToast("⚠ " + e.Text + "：接近失效，注意加强", false, 3);
+            _traffic.MemberCrackedVisual += e => _hud.ShowToast("⚠ " + e.Text + Loc.T("：接近失效，注意加强"), false, 3);
 
             _hud.SetTool(BuildTool.Select, null);
             RefreshBudget();
@@ -135,11 +135,11 @@ namespace BridgeArchitect3D.Core
         private string GoalText()
         {
             var parts = _level.TrafficEvents.Where(e => e.Type == TrafficEventType.Vehicle)
-                .GroupBy(e => e.VehicleId).Select(g => $"{g.Count()} 辆{_db.Vehicles[g.Key].Name}").ToList();
+                .GroupBy(e => e.VehicleId).Select(g => Loc.F("{0} 辆{1}", (g.Count()), (_db.Vehicles[g.Key].Name))).ToList();
             var ships = _level.TrafficEvents.Count(e => e.Type == TrafficEventType.Ship);
-            string s = "目标：让 " + string.Join("、", parts) + " 通过";
-            if (ships > 0) s += $"，并给 {ships} 艘船留出航道";
-            if (_level.TrafficEvents.Any(e => e.Type == TrafficEventType.Environment)) s += "，并扛住一场洪水";
+            string s = Loc.T("目标：让 ") + string.Join(Loc.T("、"), parts) + Loc.T(" 通过");
+            if (ships > 0) s += Loc.F("，并给 {0} 艘船留出航道", (ships));
+            if (_level.TrafficEvents.Any(e => e.Type == TrafficEventType.Environment)) s += Loc.T("，并扛住一场洪水");
             return s;
         }
 
@@ -152,7 +152,7 @@ namespace BridgeArchitect3D.Core
                 var deck = _building.MaterialOrder.FirstOrDefault(id => id == "road") ?? _building.MaterialOrder.FirstOrDefault(id => _db.GetMaterial(id).IsDeck);
                 if (deck != null) _building.SetTool(BuildTool.Build, deck);
                 if (startAnchor != null) _building.SetHintNode(startAnchor.Id);
-                _hud.ShowToast("点击发光锚点，铺第一段桥面", false, 6);
+                _hud.ShowToast(Loc.T("点击发光锚点，铺第一段桥面"), false, 6);
             }
             else if (!string.IsNullOrEmpty(_level.StartHint)) _hud.ShowToast(_level.StartHint, false, 7);
             else _hud.ShowToast(_level.Description, false);
@@ -170,7 +170,7 @@ namespace BridgeArchitect3D.Core
             var vb = new VBoxContainer { Theme = UiTheme.Get() };
             vb.SetAnchorsPreset(Control.LayoutPreset.Center);
             vb.AddChild(UiTheme.MakeLabel(msg, 18, UiTheme.Bad));
-            vb.AddChild(UiTheme.MakeButton("返回主菜单", () => GetTree().ChangeSceneToFile(GameManager.MainMenuScene)));
+            vb.AddChild(UiTheme.MakeButton(Loc.T("返回主菜单"), () => GetTree().ChangeSceneToFile(GameManager.MainMenuScene)));
             canvas.AddChild(vb);
         }
 
@@ -192,7 +192,7 @@ namespace BridgeArchitect3D.Core
             {
                 _propTimer = 0.1;
                 var m = _traffic.Sim.Design.FindMember(_traffic.SelectedMember);
-                if (m != null) _hud.ShowProperties(GameHUD.MemberProperties(m, _db, sim.Model, sim.Status, sim.Output.Stable || sim.State != SimState.Failed, $"测试工况 t={sim.Time:0.0}s"));
+                if (m != null) _hud.ShowProperties(GameHUD.MemberProperties(m, _db, sim.Model, sim.Status, sim.Output.Stable || sim.State != SimState.Failed, Loc.F("测试工况 t={0:0.0}s", (sim.Time))));
             }
         }
 
@@ -200,30 +200,30 @@ namespace BridgeArchitect3D.Core
 
         private void UpdateTestHud(BridgeSimulation sim)
         {
-            string vehicles = string.Join("、", sim.Vehicles.Where(v => !v.Finished).Select(v => v.Def.Name));
+            string vehicles = string.Join(Loc.T("、"), sim.Vehicles.Where(v => !v.Finished).Select(v => v.Def.Name));
             if (string.IsNullOrEmpty(vehicles)) vehicles = "—";
-            vehicles += $"（已通过 {sim.FinishedVehicles}/{sim.TotalVehicles}）";
-            if (sim.Vehicles.Any(v => v.WaitingForBridge && !v.Finished)) vehicles += " · 开启桥动作中，车辆在活动桥面前停车等候";
+            vehicles += Loc.F("（已通过 {0}/{1}）", (sim.FinishedVehicles), (sim.TotalVehicles));
+            if (sim.Vehicles.Any(v => v.WaitingForBridge && !v.Finished)) vehicles += Loc.T(" · 开启桥动作中，车辆在活动桥面前停车等候");
             if (sim.Ships.Count > 0)
             {
                 var sailing = sim.Ships.Where(s => s.Spawned && !s.Done).Select(s => s.Ev.Name).ToList();
-                vehicles += $"  船只 {sim.Ships.Count(s => s.Done)}/{sim.Ships.Count}" + (sailing.Count > 0 ? $"（{string.Join("、", sailing)}航行中）" : "");
-                if (sim.Ships.Any(s => s.Waiting)) vehicles += " · 船只等候开桥";
-                if (sim.HydraulicFactor > 0) vehicles += $"  液压杆收缩 {sim.HydraulicFactor * 100:0}%";
+                vehicles += Loc.F("  船只 {0}/{1}", (sim.Ships.Count(s => s.Done)), (sim.Ships.Count)) + (sailing.Count > 0 ? Loc.F("（{0}航行中）", (string.Join(Loc.T("、"), sailing))) : "");
+                if (sim.Ships.Any(s => s.Waiting)) vehicles += Loc.T(" · 船只等候开桥");
+                if (sim.HydraulicFactor > 0) vehicles += Loc.F("  液压杆收缩 {0:0}%", (sim.HydraulicFactor * 100));
             }
             // Movable bridge state and faults (stroke / force / alignment / configuration)
             if (sim.Bascule.Leaves.Count > 0) vehicles += "  " + sim.Bascule.StatusText;
             if (sim.Bascule.Fault != null) vehicles += "  ⚠ " + sim.Bascule.Fault;
             if (sim.Bascule.ConfigNote != null) vehicles += "  ⚠ " + sim.Bascule.ConfigNote;
-            if (sim.FloodRise > 0.01) vehicles += $"  🌊 洪水 +{sim.FloodRise:0.0} m";
+            if (sim.FloodRise > 0.01) vehicles += Loc.F("  🌊 洪水 +{0:0.0} m", (sim.FloodRise));
             string status; Color col;
-            if (_traffic.IsReplaying) { status = $"回放中 t={_traffic.ReplayFrameTime:0.0}s（按“继续”退出回放）"; col = UiTheme.Warn; }
-            else if (sim.State == SimState.Failed) { status = "失败：" + FailureDetector.ReasonText(sim.Result.FailureReason); col = UiTheme.Bad; }
-            else if (sim.State == SimState.Succeeded) { status = "全部车辆通过"; col = UiTheme.Good; }
+            if (_traffic.IsReplaying) { status = Loc.F("回放中 t={0:0.0}s（按“继续”退出回放）", (_traffic.ReplayFrameTime)); col = UiTheme.Warn; }
+            else if (sim.State == SimState.Failed) { status = Loc.T("失败：") + FailureDetector.ReasonText(sim.Result.FailureReason); col = UiTheme.Bad; }
+            else if (sim.State == SimState.Succeeded) { status = Loc.T("全部车辆通过"); col = UiTheme.Good; }
             else
             {
                 double u = sim.CurrentMaxUtilization;
-                status = $"{(u > 0.9 ? "接近极限" : "安全")}  当前最大利用率 {u * 100:0}%  断裂 {sim.BrokenCount}";
+                status = Loc.F("{0}  当前最大利用率 {1:0}%  断裂 {2}", ((u > 0.9 ? Loc.T("接近极限") : Loc.T("安全"))), (u * 100), (sim.BrokenCount));
                 col = u > 0.9 ? UiTheme.Warn : UiTheme.Good;
             }
             _hud.SetLoad(sim.CurrentMaxUtilization);
@@ -259,7 +259,7 @@ namespace BridgeArchitect3D.Core
         private void RefreshBudget()
         {
             foreach (var id in _level.MaterialLimits.Keys) _hud.SetToolBadge(id, _editor.RemainingOf(id));
-            _hud.SetDemolitionInfo(_level.MaxDemolitions >= 0 ? $"拆除旧构件 {_editor.Design.DemolishedCount}/{_level.MaxDemolitions}" : null);
+            _hud.SetDemolitionInfo(_level.MaxDemolitions >= 0 ? Loc.F("拆除旧构件 {0}/{1}", (_editor.Design.DemolishedCount), (_level.MaxDemolitions)) : null);
             _hud.UpdateBudget(_editor.UsedCost, _editor.Budget, _editor.CanUndo && !_testing, _editor.CanRedo && !_testing);
             if (!_testing) _hud.SetStructureStatus(StaticStatusText(out var c), c);
         }
@@ -267,12 +267,12 @@ namespace BridgeArchitect3D.Core
         private string StaticStatusText(out Color c)
         {
             var s = _building?.StaticSim;
-            if (s == null || s.Model == null || s.Model.MemberCount == 0) { c = UiTheme.Muted; _hud.SetLoad(0, false); return "尚未建造构件"; }
-            if (!s.Output.Stable) { c = UiTheme.Bad; _hud.SetLoad(1); return "自重下不稳定：" + s.Output.Message; }
+            if (s == null || s.Model == null || s.Model.MemberCount == 0) { c = UiTheme.Muted; _hud.SetLoad(0, false); return Loc.T("尚未建造构件"); }
+            if (!s.Output.Stable) { c = UiTheme.Bad; _hud.SetLoad(1); return Loc.T("自重下不稳定：") + s.Output.Message; }
             double u = s.CurrentMaxUtilization;
             _hud.SetLoad(u);
             c = u > 1 ? UiTheme.Bad : u > 0.8 ? UiTheme.Warn : UiTheme.Good;
-            return $"自重下稳定，最大利用率 {u * 100:0}%";
+            return Loc.F("自重下稳定，最大利用率 {0:0}%", (u * 100));
         }
 
         private void RefreshProperties()
@@ -283,7 +283,7 @@ namespace BridgeArchitect3D.Core
             if (_building.SelectedNodeId >= 0 && d.FindNode(_building.SelectedNodeId) is { } n)
                 _hud.ShowProperties(GameHUD.NodeProperties(n, _level, d, stat));
             else if (_building.SelectedMemberId >= 0 && d.FindMember(_building.SelectedMemberId) is { } m)
-                _hud.ShowProperties(GameHUD.MemberProperties(m, _db, stat?.Model, stat?.Status, stat?.Output.Stable ?? false, "自重工况（无车辆）"));
+                _hud.ShowProperties(GameHUD.MemberProperties(m, _db, stat?.Model, stat?.Status, stat?.Output.Stable ?? false, Loc.T("自重工况（无车辆）")));
             else _hud.ShowProperties(null);
             var selMat = _building.SelectedMemberId >= 0 ? _db.GetMaterial(d.FindMember(_building.SelectedMemberId)?.MaterialId) : null;
             var selMem = _building.SelectedMemberId >= 0 ? d.FindMember(_building.SelectedMemberId) : null;
@@ -318,19 +318,19 @@ namespace BridgeArchitect3D.Core
             // 加固关重置回原来的旧桥；其他关卡重置为空桥
             var start = string.IsNullOrEmpty(_level.StartDesign) ? null : SaveManager.LoadStartDesign(_level.StartDesign);
             _editor.ReplaceDesign(start != null && start.Members.Any(m => m.Existing) ? start : BridgeDesign.CreateForLevel(_level));
-            _hud.ShowToast("关卡已重置（可撤销）", false);
+            _hud.ShowToast(Loc.T("关卡已重置（可撤销）"), false);
         }
 
         public void SaveDesign()
         {
-            if (SaveManager.SaveDesign(_editor.Design, out var err)) _hud.ShowToast("方案已保存", false);
-            else _hud.ShowToast("保存失败：" + err, true);
+            if (SaveManager.SaveDesign(_editor.Design, out var err)) _hud.ShowToast(Loc.T("方案已保存"), false);
+            else _hud.ShowToast(Loc.T("保存失败：") + err, true);
         }
 
         public void SaveDesignAs(string name)
         {
-            if (SaveManager.SaveNamedDesign(_editor.Design, name, out var err)) _hud.ShowToast($"方案“{name.Trim()}”已保存", false);
-            else _hud.ShowToast("保存失败：" + err, true);
+            if (SaveManager.SaveNamedDesign(_editor.Design, name, out var err)) _hud.ShowToast(Loc.F("方案“{0}”已保存", (name.Trim())), false);
+            else _hud.ShowToast(Loc.T("保存失败：") + err, true);
         }
 
         public System.Collections.Generic.IReadOnlyList<string> NamedDesigns() => SaveManager.ListNamedDesigns(_level.Id);
@@ -341,7 +341,7 @@ namespace BridgeArchitect3D.Core
             var d = SaveManager.LoadNamedDesign(_level.Id, name, out var err);
             if (d == null) { _hud.ShowToast(err, true); return; }
             _editor.ReplaceDesign(d);
-            _hud.ShowToast($"已加载方案“{name}”：{d.Members.Count} 根构件，已用 ${_editor.UsedCost:N0}（可撤销）", false);
+            _hud.ShowToast(Loc.F("已加载方案“{0}”：{1} 根构件，已用 ${2:N0}（可撤销）", (name), (d.Members.Count), (_editor.UsedCost)), false);
         }
 
         public void LoadDesign()
@@ -350,7 +350,7 @@ namespace BridgeArchitect3D.Core
             var d = SaveManager.LoadDesign(_level.Id, out var err);
             if (d == null) { _hud.ShowToast(err, true); return; }
             _editor.ReplaceDesign(d);
-            _hud.ShowToast($"已加载存档：{d.Nodes.Count} 个节点，{d.Members.Count} 根构件，已用 ${_editor.UsedCost:N0}", false);
+            _hud.ShowToast(Loc.F("已加载存档：{0} 个节点，{1} 根构件，已用 ${2:N0}", (d.Nodes.Count), (d.Members.Count), (_editor.UsedCost)), false);
         }
 
         private int _referenceStep;
@@ -363,10 +363,10 @@ namespace BridgeArchitect3D.Core
             if (_referenceStep == 0)
             {
                 _referenceStep = 1;
-                _hud.ShowToast((_level.ReferenceHint ?? "试着用三角形支撑桥面节点。") + "　（再次点击“参考方案提示”可查看局部示意）", false, 9);
+                _hud.ShowToast((_level.ReferenceHint ?? Loc.T("试着用三角形支撑桥面节点。")) + Loc.T("　（再次点击“参考方案提示”可查看局部示意）"), false, 9);
                 return;
             }
-            if (d == null) { _hud.ShowToast("没有找到参考方案", true); return; }
+            if (d == null) { _hud.ShowToast(Loc.T("没有找到参考方案"), true); return; }
             if (_referenceStep == 1)
             {
                 _referenceStep = 2;
@@ -376,11 +376,11 @@ namespace BridgeArchitect3D.Core
                 part.Members.RemoveAll(m => !m.Existing && (part.FindNode(m.StartNodeId).Position.X > half || part.FindNode(m.EndNodeId).Position.X > half));   // 旧桥原有构件保留
                 part.Nodes.RemoveAll(n => !n.IsAnchor && !part.Members.Any(m => m.StartNodeId == n.Id || m.EndNodeId == n.Id));
                 _editor.ReplaceDesign(part);
-                _hud.ShowToast("已载入左半座桥的示意（可撤销）。照着它完成右半边，或再次点击载入完整方案。", false, 8);
+                _hud.ShowToast(Loc.T("已载入左半座桥的示意（可撤销）。照着它完成右半边，或再次点击载入完整方案。"), false, 8);
                 return;
             }
             _editor.ReplaceDesign(d);
-            _hud.ShowToast("已载入完整参考方案（可撤销）", false);
+            _hud.ShowToast(Loc.T("已载入完整参考方案（可撤销）"), false);
         }
 
         public void BackToMenu()
@@ -451,7 +451,7 @@ namespace BridgeArchitect3D.Core
                 "split" when mem >= 0 => _editor.SplitMember(mem,false),
                 "rigidSplit" when mem >= 0 => _editor.SplitMember(mem,true),
                 "convertSplit" when node >= 0 => _editor.ConvertRigidToSplit(node),
-                _ => BuildResult.Fail("请先选中节点或构件"),
+                _ => BuildResult.Fail(Loc.T("请先选中节点或构件")),
             };
             var targets=DiagnosticTargets.Parse(r.Message,mem);
             _building.ShowDiagnostic(targets);
@@ -551,7 +551,7 @@ namespace BridgeArchitect3D.Core
                 _building.HighlightProblem(ids);
                 _hud.ShowToast($"{headline}　→ {tip}", true, 8);
             }
-            else _hud.ShowToast(string.IsNullOrEmpty(tip) ? "已返回建造" : tip, false, 6);
+            else _hud.ShowToast(string.IsNullOrEmpty(tip) ? Loc.T("已返回建造") : tip, false, 6);
         }
 
         public void SetSpeed(int x) { _traffic.SpeedMultiplier = x; }

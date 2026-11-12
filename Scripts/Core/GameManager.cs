@@ -37,6 +37,8 @@ namespace BridgeArchitect3D.Core
         /// <summary>视觉变形放大系数（仅影响显示，不影响判定）。</summary>
         public double DeformationScale { get; set; } = 30;
         public bool ShowGrid { get; set; } = true;
+        /// <summary>Interface language: "zh" (default) or "en". Changing it restarts the game.</summary>
+        public string Language { get; set; } = Loc.Chinese;
         public double CameraSensitivity { get; set; } = 1.0;
         public bool Fullscreen { get; set; }
         /// <summary>"windowed" / "fullscreen" / "borderless"; null in old settings files (then Fullscreen decides).</summary>
@@ -153,20 +155,27 @@ namespace BridgeArchitect3D.Core
         public override void _Ready()
         {
             Instance = this;
+            // Settings first: the language decides how texts and the game data are loaded
+            var s = SaveManager.ReadUserJson<GameSettings>("user://settings.json");
+            if (s != null) Settings = s;
+            Loc.Language = Settings.Language == Loc.English ? Loc.English : Loc.Chinese;
+            if (Loc.IsEnglish && Godot.FileAccess.FileExists(EnglishTable))
+            {
+                try { Loc.LoadEnglish(Godot.FileAccess.GetFileAsString(EnglishTable)); }
+                catch (Exception e) { GD.PushError("English text table: " + e.Message); }
+            }
             try
             {
                 Db = GameDatabase.FromJson(
-                    ReadRes("res://Data/Materials/materials.json"),
-                    ReadRes("res://Data/Vehicles/vehicles.json"),
-                    ReadRes("res://Data/Levels/levels.json"));
+                    Loc.TranslateJson(ReadRes("res://Data/Materials/materials.json")),
+                    Loc.TranslateJson(ReadRes("res://Data/Vehicles/vehicles.json")),
+                    Loc.TranslateJson(ReadRes("res://Data/Levels/levels.json")));
             }
             catch (Exception e)
             {
-                LoadError = "数据加载失败：" + e.Message;
+                LoadError = Loc.T("数据加载失败：") + e.Message;
                 GD.PushError(LoadError);
             }
-            var s = SaveManager.ReadUserJson<GameSettings>("user://settings.json");
-            if (s != null) Settings = s;
             var p = SaveManager.ReadUserJson<GameProgress>("user://progress.json");
             if (p != null) Progress = p;
             ApplySettings();
@@ -178,9 +187,19 @@ namespace BridgeArchitect3D.Core
             }
         }
 
+        public const string EnglishTable = "res://Data/Locale/en.json";
+
+        /// <summary>Save the settings and restart the game so every text is created in the new language.</summary>
+        public void RestartForLanguage()
+        {
+            SaveSettings();
+            OS.SetRestartOnExit(true, OS.GetCmdlineArgs());
+            GetTree().Quit();
+        }
+
         private static string ReadRes(string path)
         {
-            if (!Godot.FileAccess.FileExists(path)) throw new Exception($"找不到文件 {path}");
+            if (!Godot.FileAccess.FileExists(path)) throw new Exception(Loc.F("找不到文件 {0}", (path)));
             return Godot.FileAccess.GetFileAsString(path);
         }
 

@@ -95,3 +95,13 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 - LowPolyDetails.Batch 直接在 C# 合并顶点数组（PrimitiveMesh 用 GetMeshArrays 在 CPU 生成，相同参数的图元缓存；CurvedMeshes 建的网格保存数组，CurvedMeshes.TryGetArrays），不再逐个 SurfaceTool CreateFrom/Index/Commit（那样会向渲染器注册临时网格并回读）。树木用单位尺寸网格 + 节点缩放。主菜单背景构建 6.5 s → 约 1.1 s。
 - MainMenuBackdrop：首次进入主菜单时先显示界面，2 帧后再构建背景；车辆 / 船只模型之后每帧建一个。进入关卡前 GameManager.StartLevel 调用 MainMenuBackdrop.KeepFrom 把背景从场景摘下保存在内存，回到主菜单直接复用（约 0.25 s）。
 - 引擎自身启动（Vulkan、着色器缓存、.NET）约 3 s，不是游戏代码；导出版首次运行还要编译着色器管线，会更慢。
+
+## 语言（中文 / English）
+- Scripts/Data/Loc.cs（纯 C#）：源文本就是中文字符串，Loc.T("中文") / Loc.F("中文 {0:0.0}", 值) 查 Data/Locale/en.json（中文 → 英文）；缺条目时显示中文。GameSettings.Language（"zh" 默认 / "en"）。
+- GameManager._Ready 先读设置、设 Loc.Language、载入 en.json，再用 Loc.TranslateJson 翻译关卡 / 材料 / 车辆 JSON 里的文字后建 GameDatabase。
+- 语言选项只在主菜单设置里（“语言 / Language”，双语标签）；切换后 GameManager.RestartForLanguage 保存设置并自动重启（静态文字只在启动时生成）。
+- 新增中文界面文字后：node tools/i18n/locwrap.js .（把未包裹的中文字面量改成 Loc.T / Loc.F），再 node tools/i18n/missing.js 列出缺英文的条目，补进 en.json（占位符 {n}、\n、[color] 标签必须一致）。“语言 / Language”“中文”两个是故意不翻译的。
+- 英文文字更长：设置对话框英文时加宽，失败标题自动换行。
+
+## 导出版用户数据
+- project.godot 的 config/use_custom_user_dir.template / custom_user_dir_name.template：导出版（template 特性）存档在 %APPDATA%/BridgeArchitect3D，和编辑器 / 开发运行的 %APPDATA%/Godot/app_userdata/Bridge Architect 3D 分开，所以安装版从零开始，不带开发时的关卡进度。不要删除开发目录里的存档。

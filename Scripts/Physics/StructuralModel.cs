@@ -140,7 +140,7 @@ namespace BridgeArchitect3D.Physics
                 var zone = level.Terrain.ZoneAt(node.Position.X);
                 m.FixX[i] = true; m.FixY[i] = true; m.FixRot[i] = true;
                 m.IsAnchor[i] = true;
-                m.AnchorIds[i] = $"桥墩 #{node.Id} 的{FoundationRules.Name(node.Foundation)}（{zone.Name}）";
+                m.AnchorIds[i] = Loc.F("桥墩 #{0} 的{1}（{2}）", (node.Id), (FoundationRules.Name(node.Foundation)), (zone.Name));
                 m.AnchorMaxLoad[i] = FoundationRules.Capacity(zone, node.Foundation);
                 m.PierFoundation[i] = node.Foundation;
                 m.ScourZone[i] = zone.Scour;

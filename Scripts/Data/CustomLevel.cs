@@ -20,7 +20,7 @@ namespace BridgeArchitect3D.Data
     {
         public int Version { get; set; } = 1;
         public string Id { get; set; }
-        public string Name { get; set; } = "我的关卡";
+        public string Name { get; set; } = Loc.T("我的关卡");
         public string Description { get; set; } = "";
         public double RiverWidth { get; set; } = 16;
         public double LeftBankHeight { get; set; }
@@ -90,41 +90,41 @@ namespace BridgeArchitect3D.Data
         public static List<string> Validate(CustomLevelSpec s, GameDatabase db)
         {
             var e = new List<string>();
-            if (string.IsNullOrWhiteSpace(s.Name)) e.Add("请给关卡起个名字");
-            if (s.RiverWidth < 6 || s.RiverWidth > 80) e.Add("河宽应在 6~80 m 之间");
-            if (Math.Abs(s.LeftBankHeight) > 20 || Math.Abs(s.RightBankHeight) > 20) e.Add("两岸高度应在 −20~20 m 之间");
-            if (s.WaterDepth < 0.5) e.Add("水面至少比低岸低 0.5 m");
-            if (s.BedDepth < s.WaterDepth + 1) e.Add("河床至少比水面低 1 m");
-            if (s.Budget <= 0) e.Add("预算必须大于 0");
+            if (string.IsNullOrWhiteSpace(s.Name)) e.Add(Loc.T("请给关卡起个名字"));
+            if (s.RiverWidth < 6 || s.RiverWidth > 80) e.Add(Loc.T("河宽应在 6~80 m 之间"));
+            if (Math.Abs(s.LeftBankHeight) > 20 || Math.Abs(s.RightBankHeight) > 20) e.Add(Loc.T("两岸高度应在 −20~20 m 之间"));
+            if (s.WaterDepth < 0.5) e.Add(Loc.T("水面至少比低岸低 0.5 m"));
+            if (s.BedDepth < s.WaterDepth + 1) e.Add(Loc.T("河床至少比水面低 1 m"));
+            if (s.Budget <= 0) e.Add(Loc.T("预算必须大于 0"));
             var mats = s.Materials.Select(db.GetMaterial).ToList();
-            if (mats.Count == 0 || mats.Any(m => m == null)) e.Add("请选择可用建材");
-            else if (!mats.Any(m => m.IsDeck)) e.Add("至少选一种桥面，车辆才有路可走");
+            if (mats.Count == 0 || mats.Any(m => m == null)) e.Add(Loc.T("请选择可用建材"));
+            else if (!mats.Any(m => m.IsDeck)) e.Add(Loc.T("至少选一种桥面，车辆才有路可走"));
             else
             {
                 var vdefs = s.Vehicles.Where(db.Vehicles.ContainsKey).Select(v => db.Vehicles[v]).ToList();
-                if (vdefs.Any(RailTrack.IsTrain) && !mats.Any(m => m.CarriesTrains)) e.Add("有火车：至少选一种铁轨桥面（铁轨桥面或铁轨公路复合桥面）");
-                if (vdefs.Any(v => !RailTrack.IsTrain(v)) && !mats.Any(m => m.CarriesCars)) e.Add("有汽车：至少选一种公路桥面（公路桥面或铁轨公路复合桥面）");
+                if (vdefs.Any(RailTrack.IsTrain) && !mats.Any(m => m.CarriesTrains)) e.Add(Loc.T("有火车：至少选一种铁轨桥面（铁轨桥面或铁轨公路复合桥面）"));
+                if (vdefs.Any(v => !RailTrack.IsTrain(v)) && !mats.Any(m => m.CarriesCars)) e.Add(Loc.T("有汽车：至少选一种公路桥面（公路桥面或铁轨公路复合桥面）"));
             }
-            if (s.Vehicles.Count == 0 || s.Vehicles.Any(v => !db.Vehicles.ContainsKey(v))) e.Add("请至少选择一种通行车辆");
-            if (s.Ship && (s.ShipHeight < 1 || s.ShipHeight > 20)) e.Add("船高应在 1~20 m 之间");
-            if (s.Ship && !s.HasWater) e.Add("无水河道不能有船只通过");
-            if (s.BankSlope < 30 || s.BankSlope > 90) e.Add("岸壁角度应在 30°~90° 之间");
-            if (s.BedSoil != "rock" && s.BedSoil != "soft") e.Add("请选择河床材质");
+            if (s.Vehicles.Count == 0 || s.Vehicles.Any(v => !db.Vehicles.ContainsKey(v))) e.Add(Loc.T("请至少选择一种通行车辆"));
+            if (s.Ship && (s.ShipHeight < 1 || s.ShipHeight > 20)) e.Add(Loc.T("船高应在 1~20 m 之间"));
+            if (s.Ship && !s.HasWater) e.Add(Loc.T("无水河道不能有船只通过"));
+            if (s.BankSlope < 30 || s.BankSlope > 90) e.Add(Loc.T("岸壁角度应在 30°~90° 之间"));
+            if (s.BedSoil != "rock" && s.BedSoil != "soft") e.Add(Loc.T("请选择河床材质"));
             {
                 double run = s.WallRun, low0 = Math.Min(s.LeftBankHeight, s.RightBankHeight);
                 double toes = run * (s.LeftBankHeight - (low0 - s.BedDepth)) + run * (s.RightBankHeight - (low0 - s.BedDepth));
-                if (toes > s.RiverWidth - 2) e.Add($"岸壁太缓：两侧坡脚共伸入河道 {toes:0.#} m，河底至少要留 2 m，请加大角度或河宽");
+                if (toes > s.RiverWidth - 2) e.Add(Loc.F("岸壁太缓：两侧坡脚共伸入河道 {0:0.#} m，河底至少要留 2 m，请加大角度或河宽", (toes)));
             }
             double low = Math.Min(s.LeftBankHeight, s.RightBankHeight), bed = low - s.BedDepth, top = Math.Max(s.LeftBankHeight, s.RightBankHeight) + 12;
             for (int i = 0; i < s.Anchors.Count; i++)
             {
                 var a = s.Anchors[i];
-                if (a.X < -8 || a.X > s.RiverWidth + 8) e.Add($"固定节点 {i + 1} 超出可建范围（x 应在 −8~{s.RiverWidth + 8:0} m）");
-                else if (a.Y < bed || a.Y > top) e.Add($"固定节点 {i + 1} 的高度应在河床 {bed:0.#} m 与 {top:0.#} m 之间");
-                else if (a.X <= 0 && a.Y > s.LeftBankHeight + 1e-6) e.Add($"固定节点 {i + 1} 悬在左岸上空，应放在岸面或岸坡上");
-                else if (a.X >= s.RiverWidth && a.Y > s.RightBankHeight + 1e-6) e.Add($"固定节点 {i + 1} 悬在右岸上空，应放在岸面或岸坡上");
-                else if (s.NoPiers && a.X > 0 && a.X < s.RiverWidth && a.Y < low && !OnWall(s, a)) e.Add($"固定节点 {i + 1} 在禁止建墩的河道里");
-                else if (a.X > 0 && a.X < s.RiverWidth && a.Y < GroundY(s, a.X) - 0.05) e.Add($"固定节点 {i + 1} 埋在岸坡土体里，应放在坡面上");
+                if (a.X < -8 || a.X > s.RiverWidth + 8) e.Add(Loc.F("固定节点 {0} 超出可建范围（x 应在 −8~{1:0} m）", (i + 1), (s.RiverWidth + 8)));
+                else if (a.Y < bed || a.Y > top) e.Add(Loc.F("固定节点 {0} 的高度应在河床 {1:0.#} m 与 {2:0.#} m 之间", (i + 1), (bed), (top)));
+                else if (a.X <= 0 && a.Y > s.LeftBankHeight + 1e-6) e.Add(Loc.F("固定节点 {0} 悬在左岸上空，应放在岸面或岸坡上", (i + 1)));
+                else if (a.X >= s.RiverWidth && a.Y > s.RightBankHeight + 1e-6) e.Add(Loc.F("固定节点 {0} 悬在右岸上空，应放在岸面或岸坡上", (i + 1)));
+                else if (s.NoPiers && a.X > 0 && a.X < s.RiverWidth && a.Y < low && !OnWall(s, a)) e.Add(Loc.F("固定节点 {0} 在禁止建墩的河道里", (i + 1)));
+                else if (a.X > 0 && a.X < s.RiverWidth && a.Y < GroundY(s, a.X) - 0.05) e.Add(Loc.F("固定节点 {0} 埋在岸坡土体里，应放在坡面上", (i + 1)));
             }
             return e;
         }
@@ -146,8 +146,8 @@ namespace BridgeArchitect3D.Data
             {
                 Id = string.IsNullOrEmpty(s.Id) ? IdFor(s.Name) : s.Id,
                 Name = s.Name,
-                Difficulty = "自定义",
-                Description = string.IsNullOrWhiteSpace(s.Description) ? "玩家自定义关卡" : s.Description,
+                Difficulty = Loc.T("自定义"),
+                Description = string.IsNullOrWhiteSpace(s.Description) ? Loc.T("玩家自定义关卡") : s.Description,
                 Budget = s.Budget,
                 Terrain = new TerrainConfig
                 {
@@ -171,7 +171,7 @@ namespace BridgeArchitect3D.Data
                 // A fixed node inside the river stands on a rock pillar so it really is supported ground
                 if (a.X > 0 && a.X < w && !OnWall(s, a)) lv.Terrain.Pillars.Add(new PillarConfig { X = a.X, TopY = a.Y, Width = PillarWidth });
             }
-            if (s.NoPiers) lv.Terrain.NoBuildZones.Add(new NoBuildZone { X0 = 0, X1 = w, BelowY = low, Name = "禁止建墩区" });
+            if (s.NoPiers) lv.Terrain.NoBuildZones.Add(new NoBuildZone { X0 = 0, X1 = w, BelowY = low, Name = Loc.T("禁止建墩区") });
             for (int i = 0; i < s.Vehicles.Count; i++)
                 if (db.Vehicles.ContainsKey(s.Vehicles[i])) lv.TrafficEvents.Add(new TrafficEvent { Time = i * 2, VehicleId = s.Vehicles[i] });
             if (s.Ship && s.HasWater)
