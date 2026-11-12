@@ -90,3 +90,8 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 - 图标：icon.png（游戏内 / 项目）、icon.ico（多尺寸，exe 与安装包）。导出预设 export_presets.cfg（Windows Desktop，排除 Media / Tests / docs），需要 BridgeArchitect3D.sln（Godot .NET 导出必需）。
 - 导出：Godot_console.exe --headless --path . --export-release "Windows Desktop" export/BridgeArchitect3D.exe（模板在 %APPDATA%/Godot/export_templates/4.7.2.stable.mono）。
 - 安装包：%LOCALAPPDATA%/InnoSetup6/ISCC.exe installer/BridgeArchitect3D.iss → export/installer/BridgeArchitect3D-Setup-1.0.0.exe（export/ 不入库）。
+
+## 加载速度（主菜单）
+- LowPolyDetails.Batch 直接在 C# 合并顶点数组（PrimitiveMesh 用 GetMeshArrays 在 CPU 生成，相同参数的图元缓存；CurvedMeshes 建的网格保存数组，CurvedMeshes.TryGetArrays），不再逐个 SurfaceTool CreateFrom/Index/Commit（那样会向渲染器注册临时网格并回读）。树木用单位尺寸网格 + 节点缩放。主菜单背景构建 6.5 s → 约 1.1 s。
+- MainMenuBackdrop：首次进入主菜单时先显示界面，2 帧后再构建背景；车辆 / 船只模型之后每帧建一个。进入关卡前 GameManager.StartLevel 调用 MainMenuBackdrop.KeepFrom 把背景从场景摘下保存在内存，回到主菜单直接复用（约 0.25 s）。
+- 引擎自身启动（Vulkan、着色器缓存、.NET）约 3 s，不是游戏代码；导出版首次运行还要编译着色器管线，会更慢。

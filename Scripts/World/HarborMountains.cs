@@ -108,12 +108,13 @@ namespace BridgeArchitect3D.World
 
         private static void Tree(Node3D root,Vector3 foot,float scale,bool conifer,Material bark,Material leaf)
         {
-            root.AddChild(new MeshInstance3D {Mesh=new CylinderMesh {TopRadius=0.11f*scale,BottomRadius=0.19f*scale,Height=2.7f*scale,RadialSegments=6},Position=foot+new Vector3(0,1.35f*scale,0),MaterialOverride=bark});
+            // Unit-size meshes scaled by the node: identical primitives are generated once when batching
+            root.AddChild(new MeshInstance3D {Mesh=new CylinderMesh {TopRadius=0.11f,BottomRadius=0.19f,Height=2.7f,RadialSegments=6},Position=foot+new Vector3(0,1.35f*scale,0),Scale=Vector3.One*scale,MaterialOverride=bark});
             for(int tier=0;tier<2;tier++)
             {
-                float radius=(tier==0?1.45f:1.05f)*scale,height=(tier==0?3.2f:2.7f)*scale;
+                float radius=tier==0?1.45f:1.05f,height=tier==0?3.2f:2.7f;
                 Mesh mesh=conifer?new CylinderMesh {TopRadius=0,BottomRadius=radius,Height=height,RadialSegments=7}:new SphereMesh {Radius=radius,Height=height,RadialSegments=8,Rings=4};
-                root.AddChild(new MeshInstance3D {Mesh=mesh,Position=foot+new Vector3(tier==1 && !conifer?0.35f*scale:0,(3+tier*1.4f)*scale,0),MaterialOverride=leaf});
+                root.AddChild(new MeshInstance3D {Mesh=mesh,Position=foot+new Vector3(tier==1 && !conifer?0.35f*scale:0,(3+tier*1.4f)*scale,0),Scale=Vector3.One*scale,MaterialOverride=leaf});
             }
         }
         private static Material Mat(string color)=>new StandardMaterial3D {AlbedoColor=new Color(color),Roughness=0.95f};

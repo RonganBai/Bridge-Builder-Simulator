@@ -26,7 +26,38 @@ namespace BridgeArchitect3D.UI
         private HarborTraffic _simulation;
         public double SceneTime=>_simulation?.Time??0;
         public HarborTraffic Traffic=>_simulation;
-        public override void _Process(double delta){_simulation?.Advance(Math.Min(delta,0.1));UpdateScene();}
+        // ---- Kept between menu visits: building the harbor takes over a second ----
+        private static MainMenuBackdrop _kept;
+        private GameDatabase _db;
+        private int _pendingFrames=-1;
+        public bool IsBuilt=>_pendingFrames<0;
+        public event Action Built;
+
+        /// <summary>The kept backdrop from an earlier menu visit, or a new one that builds itself two frames after
+        /// entering the tree (so the menu UI is shown first instead of a frozen window).</summary>
+        public static MainMenuBackdrop Acquire(GameDatabase db)
+        {
+            if(_kept!=null && IsInstanceValid(_kept) && _kept._db==db){var kept=_kept;_kept=null;return kept;}
+            return new MainMenuBackdrop {Name="MenuBackdrop",_db=db,_pendingFrames=2};
+        }
+
+        /// <summary>Detach the menu backdrop from a scene that is about to be replaced, so it is reused next time.</summary>
+        public static void KeepFrom(Node scene)
+        {
+            if(scene?.GetNodeOrNull("MenuBackdrop") is not MainMenuBackdrop backdrop || !backdrop.IsBuilt)return;
+            if(_kept!=null && _kept!=backdrop && IsInstanceValid(_kept))_kept.QueueFree();
+            backdrop.Built=null;scene.RemoveChild(backdrop);_kept=backdrop;
+        }
+
+        public override void _EnterTree(){if(_camera!=null)_camera.Current=true;}
+
+        public override void _Process(double delta)
+        {
+            if(_pendingFrames>0){if(--_pendingFrames==0){_pendingFrames=-1;Setup(_db);Built?.Invoke();}return;}
+            if(_buildQueue.Count>0)_buildQueue.Dequeue()();
+            _simulation?.Advance(Math.Min(delta,0.1));UpdateScene();
+        }
+        private readonly Queue<Action> _buildQueue=new();
         public void Setup(GameDatabase db)
         {
             try
@@ -45,16 +76,21 @@ namespace BridgeArchitect3D.UI
                 var details=new HarborBankDetails();AddChild(details);details.Build();
                 _focus=new Vector3(12,0.4f,0);_camera=new Camera3D {Current=true,Fov=48,Near=0.3f,Far=450,HOffset=-6};AddChild(_camera);
                 _simulation=new HarborTraffic(db.Vehicles.Values,level.Terrain.WaterLevel);
+                // Vehicle and ship models are built one per frame after the scene is shown (they take ~0.7 s together);
+                // a car or ship whose model is not built yet is simply not drawn for those few frames
                 foreach(var definition in _simulation.Fleet)
-                {
-                    var vehicle=new VehicleController {Visible=false};AddChild(vehicle);vehicle.Setup(definition);
-                    _traffic.Add(new RoadVisual {Model=vehicle,Geometry=Descendants(vehicle).OfType<MeshInstance3D>().ToArray()});
-                }
+                    _buildQueue.Enqueue(()=>
+                    {
+                        var vehicle=new VehicleController {Visible=false};AddChild(vehicle);vehicle.Setup(definition);
+                        _traffic.Add(new RoadVisual {Model=vehicle,Geometry=Descendants(vehicle).OfType<MeshInstance3D>().ToArray()});
+                    });
+                double water=level.Terrain.WaterLevel,bed=level.Terrain.RiverBedDepth;
                 foreach(var type in ShipCatalog.Types)
-                {
-                    var definition=ShipCatalog.Create(type.Id,12);var ship=new ShipController {Visible=false};AddChild(ship);
-                    ship.Setup(definition,level.Terrain.WaterLevel,24,level.Terrain.RiverBedDepth);_ships.Add((ship,definition));
-                }
+                    _buildQueue.Enqueue(()=>
+                    {
+                        var definition=ShipCatalog.Create(type.Id,12);var ship=new ShipController {Visible=false};AddChild(ship);
+                        ship.Setup(definition,water,24,bed);_ships.Add((ship,definition));
+                    });
                 _simulation.Advance(12);
                 UpdateScene();
             }
@@ -83,7 +119,7 @@ namespace BridgeArchitect3D.UI
             foreach(var ship in _ships)ship.model.Visible=false;
             foreach(var car in _simulation.Cars)
             {
-                var visual=_traffic.First(v=>v.Model.Def.Id==car.Definition.Id);
+                var visual=_traffic.FirstOrDefault(v=>v.Model.Def.Id==car.Definition.Id);if(visual==null)continue;
                 visual.Model.Visible=true;visual.Model.PlaceAlongPath(x=>new Vector3((float)x,0.24f,0),car.AxleX);
                 visual.Model.SetEmergencyLights(car.EmergencyLightsOn,_simulation.Time);
                 float alpha=(float)HarborTimeline.VehicleOpacity(car.Front,car.Definition.Length);
@@ -92,7 +128,7 @@ namespace BridgeArchitect3D.UI
             }
             foreach(var boat in _simulation.Boats)
             {
-                var visual=_ships.First(s=>s.definition.ShipKind==boat.Definition.ShipKind);
+                var visual=_ships.FirstOrDefault(s=>s.definition.ShipKind==boat.Definition.ShipKind);if(visual.model==null)continue;
                 visual.model.Visible=true;visual.model.SetZ((float)boat.Z);
             }
         }

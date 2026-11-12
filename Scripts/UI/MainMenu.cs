@@ -19,9 +19,10 @@ namespace BridgeArchitect3D.UI
 			AddChild(fallback);fallback.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 			if(_gm?.Db!=null)
 			{
-				// Real-time 3D scene (the pre-rendered video background is no longer used)
-				var backdrop=new MainMenuBackdrop {Name="MenuBackdrop"};AddChild(backdrop);backdrop.Setup(_gm.Db);
-				fallback.Hide();
+				// Real-time 3D scene, kept in memory between menu visits; the first build runs after the menu is drawn
+				var backdrop=MainMenuBackdrop.Acquire(_gm.Db);AddChild(backdrop);
+				if(backdrop.IsBuilt)fallback.Hide();else backdrop.Built+=fallback.Hide;
+				_gm.ApplyQuality();
 			}
 			var shade=new ColorRect {MouseFilter=MouseFilterEnum.Ignore};
 			shade.Material=new ShaderMaterial {Shader=new Shader {Code="shader_type canvas_item; void fragment(){float a=mix(0.86,0.12,smoothstep(0.0,0.86,UV.x));COLOR=vec4(0.035,0.05,0.075,a);}"}};

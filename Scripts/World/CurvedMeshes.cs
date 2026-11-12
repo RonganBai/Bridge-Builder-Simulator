@@ -7,6 +7,14 @@ namespace BridgeArchitect3D.World
     /// <summary>Small faceted curves preserve silhouettes without smooth high-resolution primitives.</summary>
     public static class CurvedMeshes
     {
+        // Arrays of the meshes built here, so batching can merge them without reading them back from the renderer
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Mesh,Godot.Collections.Array> Arrays=new();
+        public static bool TryGetArrays(Mesh mesh,out Godot.Collections.Array arrays)=>Arrays.TryGetValue(mesh,out arrays);
+        private static ArrayMesh Commit(SurfaceTool st)
+        {
+            var arrays=st.CommitToArrays();var mesh=new ArrayMesh();mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles,arrays);
+            Arrays.AddOrUpdate(mesh,arrays);return mesh;
+        }
         private static void Triangle(SurfaceTool st,Vector3 a,Vector3 b,Vector3 c)
         {
             // Godot uses clockwise front faces; keep outward normals while reversing the vertex order.
@@ -21,7 +29,7 @@ namespace BridgeArchitect3D.World
                 int j=(i+1)%n;Triangle(st,P(i,-depth/2),P(j,depth/2),P(i,depth/2));Triangle(st,P(i,-depth/2),P(j,-depth/2),P(j,depth/2));
                 if(i>0 && i<n-1){Triangle(st,P(0,depth/2),P(i,depth/2),P(j,depth/2));Triangle(st,P(0,-depth/2),P(j,-depth/2),P(i,-depth/2));}
             }
-            st.Index();return st.Commit();
+            st.Index();return Commit(st);
         }
         public static Mesh RoundedBox(Vector3 size,float radius)
         {
@@ -33,14 +41,14 @@ namespace BridgeArchitect3D.World
                 shape[corner*4+step]=new Vector2(cx+Mathf.Cos(angle)*radius,cz+Mathf.Sin(angle)*radius);
             }
             // The source profile is XZ; rotate extrusion depth into the vertical axis.
-            var mesh=Extrude(shape,size.Y);var st=new SurfaceTool();st.Begin(Mesh.PrimitiveType.Triangles);st.AppendFrom(mesh,0,new Transform3D(new Basis(Vector3.Right,Mathf.Pi/2),Vector3.Zero));st.Index();return st.Commit();
+            var mesh=Extrude(shape,size.Y);var st=new SurfaceTool();st.Begin(Mesh.PrimitiveType.Triangles);st.AppendFrom(mesh,0,new Transform3D(new Basis(Vector3.Right,Mathf.Pi/2),Vector3.Zero));st.Index();return Commit(st);
         }
         public static void Windshield(Node3D parent,float bottomX,float bottomY,float topX,float topY,float width,float bulge,Material glass)
         {
             var st=new SurfaceTool();st.Begin(Mesh.PrimitiveType.Triangles);
             Vector3 P(int row,int col){float t=col/6f;return new Vector3((row==0?bottomX:topX)+bulge*(1-Mathf.Pow(2*t-1,2)),row==0?bottomY:topY,(t-0.5f)*width);}
             for(int i=0;i<6;i++){var a=P(0,i);var b=P(0,i+1);var c=P(1,i+1);var d=P(1,i);Triangle(st,a,b,c);Triangle(st,a,c,d);Triangle(st,c,b,a);Triangle(st,d,c,a);}
-            st.Index();parent.AddChild(new MeshInstance3D{Mesh=st.Commit(),MaterialOverride=glass});
+            st.Index();parent.AddChild(new MeshInstance3D{Mesh=Commit(st),MaterialOverride=glass});
         }
         public static Vector2[] Stadium(float halfStraight,float radius)
         {
@@ -60,14 +68,14 @@ namespace BridgeArchitect3D.World
                 var mid=(outer[i]+outer[j])/2;var delta=outer[j]-outer[i];
                 parent.AddChild(new MeshInstance3D{Mesh=new BoxMesh{Size=new Vector3(delta.Length()*0.7f,0.055f,depth+0.04f)},Position=new(mid.X-0.6f,mid.Y+0.5f,z),RotationDegrees=new(0,0,Mathf.RadToDeg(Mathf.Atan2(delta.Y,delta.X))),MaterialOverride=tread});
             }
-            st.Index();parent.AddChild(new MeshInstance3D{Mesh=st.Commit(),MaterialOverride=rubber});
+            st.Index();parent.AddChild(new MeshInstance3D{Mesh=Commit(st),MaterialOverride=rubber});
         }
         public static Mesh Solid(ShipSolid solid)
         {
             var st=new SurfaceTool();st.Begin(Mesh.PrimitiveType.Triangles);
             foreach(var face in solid.Faces)for(int i=1;i<face.Length-1;i++)
             {Vector3 P(int n){var p=solid.Vertices[n];return new((float)p.X,(float)p.Y,(float)p.Z);}Triangle(st,P(face[0]),P(face[i]),P(face[i+1]));Triangle(st,P(face[i+1]),P(face[i]),P(face[0]));}
-            st.Index();return st.Commit();
+            st.Index();return Commit(st);
         }
     }
 }

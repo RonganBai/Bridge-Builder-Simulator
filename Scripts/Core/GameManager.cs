@@ -281,6 +281,7 @@ namespace BridgeArchitect3D.Core
             LoadSavedDesign = loadSave;
             Progress.LastLevelId = levelId;
             SaveProgress();
+            BridgeArchitect3D.UI.MainMenuBackdrop.KeepFrom(GetTree().CurrentScene);
             GetTree().ChangeSceneToFile(LevelScene);
         }
 

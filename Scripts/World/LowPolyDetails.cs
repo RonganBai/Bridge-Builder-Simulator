@@ -116,26 +116,74 @@ namespace BridgeArchitect3D.World
                 }
             }
             Collect(root,Transform3D.Identity);
+            // Merge vertex arrays directly in C#: the former SurfaceTool CreateFrom / Index / Commit per source mesh
+            // registered a temporary mesh with the renderer each time and made the menu scene take seconds to build.
             foreach(var group in meshes.GroupBy(m=>m.mesh.MaterialOverride))
             {
-                var surface=new SurfaceTool();surface.Begin(Mesh.PrimitiveType.Triangles);
-                int expectedFaces=0;
+                var verts=new List<Vector3>();var normals=new List<Vector3>();var uvs=new List<Vector2>();var indices=new List<int>();
+                bool ok=true;
                 foreach(var item in group)
                 {
-                    // Normalize every source: mixing indexed primitives and unindexed custom curves loses faces.
-                    expectedFaces+=item.mesh.Mesh.GetFaces().Length;
-                    var indexed=new SurfaceTool();indexed.CreateFrom(item.mesh.Mesh,0);indexed.Index();
-                    surface.AppendFrom(indexed.Commit(),0,item.transform);
+                    var src=Source(item.mesh.Mesh);
+                    if(src==null){ok=false;break;}
+                    var (v,n,uv,idx)=src.Value;int start=verts.Count;
+                    var basis=item.transform.Basis;if(Math.Abs(basis.Determinant())<1e-12)continue; // degenerate (zero-size) source: nothing visible
+                    var normalBasis=basis.Inverse().Transposed();
+                    for(int i=0;i<v.Length;i++)
+                    {
+                        verts.Add(item.transform*v[i]);
+                        normals.Add(n!=null&&n.Length==v.Length?(normalBasis*n[i]).Normalized():Vector3.Up);
+                        uvs.Add(uv!=null&&uv.Length==v.Length?uv[i]:Vector2.Zero);
+                    }
+                    // A mirroring transform flips the winding; swap two corners to keep faces pointing outwards
+                    bool flip=basis.Determinant()<0;
+                    for(int i=0;i+2<idx.Length;i+=3)
+                    {
+                        indices.Add(start+idx[i]);
+                        if(flip){indices.Add(start+idx[i+2]);indices.Add(start+idx[i+1]);}
+                        else{indices.Add(start+idx[i+1]);indices.Add(start+idx[i+2]);}
+                    }
                 }
-                surface.Index();var combined=surface.Commit();
-                if(combined.GetFaces().Length!=expectedFaces)
-                {
-                    GD.PushWarning("Mesh batching face-count mismatch; retaining the original visible meshes.");
-                    continue;
-                }
+                if(!ok || verts.Count==0)continue;
+                var arrays=new Godot.Collections.Array();arrays.Resize((int)Mesh.ArrayType.Max);
+                arrays[(int)Mesh.ArrayType.Vertex]=verts.ToArray();arrays[(int)Mesh.ArrayType.Normal]=normals.ToArray();
+                arrays[(int)Mesh.ArrayType.TexUV]=uvs.ToArray();arrays[(int)Mesh.ArrayType.Index]=indices.ToArray();
+                var combined=new ArrayMesh();combined.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles,arrays);
                 root.AddChild(new MeshInstance3D{Mesh=combined,MaterialOverride=group.Key});
                 foreach(var item in group){item.mesh.GetParent().RemoveChild(item.mesh);item.mesh.QueueFree();}
             }
+        }
+
+        // Surface 0 arrays of a source mesh. Primitive meshes are generated on the CPU (GetMeshArrays) instead of
+        // being read back from the renderer, and identical primitives share one cached result.
+        private static readonly Dictionary<string,(Vector3[] v,Vector3[] n,Vector2[] uv,int[] idx)?> SourceCache=new();
+        private static string PrimitiveKey(PrimitiveMesh p)=>p switch
+        {
+            BoxMesh b=>$"box{b.Size}{b.SubdivideWidth},{b.SubdivideHeight},{b.SubdivideDepth}",
+            SphereMesh sp=>$"sph{sp.Radius},{sp.Height},{sp.RadialSegments},{sp.Rings},{sp.IsHemisphere}",
+            CylinderMesh c=>$"cyl{c.TopRadius},{c.BottomRadius},{c.Height},{c.RadialSegments},{c.Rings},{c.CapTop},{c.CapBottom}",
+            _=>null,
+        };
+        private static (Vector3[] v,Vector3[] n,Vector2[] uv,int[] idx)? Source(Mesh mesh)
+        {
+            string key=mesh is PrimitiveMesh pm?PrimitiveKey(pm):null;
+            if(key!=null && SourceCache.TryGetValue(key,out var cached))return cached;
+            Godot.Collections.Array arrays=null;
+            if(mesh is PrimitiveMesh p)arrays=p.GetMeshArrays();
+            else if(CurvedMeshes.TryGetArrays(mesh,out var built))arrays=built;
+            else if(mesh.GetSurfaceCount()>0 && (mesh is not ArrayMesh am || am.SurfaceGetPrimitiveType(0)==Mesh.PrimitiveType.Triangles))arrays=mesh.SurfaceGetArrays(0);
+            (Vector3[] v,Vector3[] n,Vector2[] uv,int[] idx)? result=null;
+            if(arrays!=null && arrays.Count>(int)Mesh.ArrayType.Index)
+            {
+                var v=arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                var n=arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
+                var uv=arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
+                var idx=arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
+                if(idx==null || idx.Length==0)idx=Enumerable.Range(0,v.Length-v.Length%3).ToArray();
+                result=(v,n,uv,idx);
+            }
+            if(key!=null)SourceCache[key]=result;
+            return result;
         }
     }
 }
