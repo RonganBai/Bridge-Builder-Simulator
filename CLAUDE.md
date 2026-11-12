@@ -85,3 +85,8 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 ## 画面设置（GraphicsSettingsUI.cs，主菜单与关卡内共用）
 - GameSettings：Antialiasing（off/fxaa/smaa/msaa2/msaa4/msaa8/taa，默认 msaa2）、Shadows（off/low/high）、RenderScale（0.5~1，<1 用 FSR）、Brightness/Contrast/Saturation（WorldEnvironment Adjustment；首页视频用 canvas_item 着色器）、VSync、MaxFps。预设 低/中/高，默认中（MSAA 2×、阴影低、100%）。GraphicsVersion=0 的旧设置由 MigrateGraphics 把 LowQuality 迁移为低预设。
 - 首页视频分辨率上限 = 实际窗口大小（避免大视频缩小产生锯齿闪烁）。
+
+## 打包发布
+- 图标：icon.png（游戏内 / 项目）、icon.ico（多尺寸，exe 与安装包）。导出预设 export_presets.cfg（Windows Desktop，排除 Media / Tests / docs），需要 BridgeArchitect3D.sln（Godot .NET 导出必需）。
+- 导出：Godot_console.exe --headless --path . --export-release "Windows Desktop" export/BridgeArchitect3D.exe（模板在 %APPDATA%/Godot/export_templates/4.7.2.stable.mono）。
+- 安装包：%LOCALAPPDATA%/InnoSetup6/ISCC.exe installer/BridgeArchitect3D.iss → export/installer/BridgeArchitect3D-Setup-1.0.0.exe（export/ 不入库）。
