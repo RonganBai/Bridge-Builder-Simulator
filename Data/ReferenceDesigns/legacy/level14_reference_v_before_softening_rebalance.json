@@ -1,0 +1,174 @@
+{
+  "Version": 5,
+  "LevelId": "level14",
+  "Name": null,
+  "Nodes": [
+    {
+      "Id": 1,
+      "Position": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "L1",
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None",
+      "TunnelPoint": false,
+      "TunnelJoint": 0
+    },
+    {
+      "Id": 2,
+      "Position": {
+        "X": 80,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "R1",
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "Pinned",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None",
+      "TunnelPoint": false,
+      "TunnelJoint": 0
+    },
+    {
+      "Id": 3,
+      "Position": {
+        "X": 0,
+        "Y": -10,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None",
+      "TunnelPoint": true,
+      "TunnelJoint": 0
+    },
+    {
+      "Id": 4,
+      "Position": {
+        "X": 80,
+        "Y": -10,
+        "Z": 0
+      },
+      "IsAnchor": false,
+      "AnchorId": null,
+      "IsSplitJoint": false,
+      "RigidEndA": 0,
+      "RigidEndB": 0,
+      "RigidFraction": 0.5,
+      "IsRigidSplit": false,
+      "SupportType": "None",
+      "PierBase": false,
+      "PierPart": false,
+      "Foundation": "None",
+      "TunnelPoint": true,
+      "TunnelJoint": 0
+    }
+  ],
+  "Members": [],
+  "NextNodeId": 5,
+  "NextMemberId": 1,
+  "SavedTotalCost": 0,
+  "DemolishedCount": 0,
+  "DemolitionCost": 0,
+  "RepairCost": 0,
+  "Mechanisms": {
+    "Leaves": [],
+    "Locks": [],
+    "Linkage": {
+      "Duration": 4,
+      "Drivers": []
+    },
+    "NextId": 1
+  },
+  "Tunnel": {
+    "MaterialId": "tunnel_floating",
+    "PointNodeIds": [
+      3,
+      4
+    ],
+    "Elements": [
+      {
+        "Grade": "reinforced",
+        "Reinforced": false,
+        "CableCount": 3,
+        "Cable": "standard",
+        "Buoyancy": "mid"
+      },
+      {
+        "Grade": "reinforced",
+        "Reinforced": false,
+        "CableCount": 3,
+        "Cable": "standard",
+        "Buoyancy": "mid"
+      },
+      {
+        "Grade": "reinforced",
+        "Reinforced": false,
+        "CableCount": 3,
+        "Cable": "standard",
+        "Buoyancy": "mid"
+      },
+      {
+        "Grade": "reinforced",
+        "Reinforced": true,
+        "CableCount": 3,
+        "Cable": "standard",
+        "Buoyancy": "mid"
+      },
+      {
+        "Grade": "reinforced",
+        "Reinforced": true,
+        "CableCount": 3,
+        "Cable": "standard",
+        "Buoyancy": "mid"
+      },
+      {
+        "Grade": "reinforced",
+        "Reinforced": false,
+        "CableCount": 3,
+        "Cable": "standard",
+        "Buoyancy": "mid"
+      },
+      {
+        "Grade": "reinforced",
+        "Reinforced": false,
+        "CableCount": 3,
+        "Cable": "standard",
+        "Buoyancy": "mid"
+      },
+      {
+        "Grade": "reinforced",
+        "Reinforced": false,
+        "CableCount": 3,
+        "Cable": "standard",
+        "Buoyancy": "mid"
+      }
+    ],
+    "Cost": 150780.9130558547,
+    "PortalRaise": 1.5
+  }
+}

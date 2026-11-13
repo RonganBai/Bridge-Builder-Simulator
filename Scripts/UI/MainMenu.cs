@@ -33,6 +33,13 @@ namespace BridgeArchitect3D.UI
 			content.AddChild(UiTheme.MakeLabel("BRIDGE ARCHITECT 3D",12,UiTheme.Accent));
 			content.AddChild(UiTheme.MakeLabel(Loc.T("桥梁建筑师"),32));
 			content.AddChild(UiTheme.MakeLabel(Loc.T("设计你的桥梁，让每一次通行更稳妥。"),13,UiTheme.Muted));
+			content.AddChild(UiTheme.MakeLabel(GameVersion.Display,11,UiTheme.Muted));
+			if(_gm?.UpdatedFrom!=null)
+			{
+				var upd=UiTheme.MakeLabel(Loc.F("已从 v{0} 更新到 {1}：新增水下隧道（沉管 / 悬浮 / 盾构）、统一天气、四阶段测试与工程积分。旧存档和进度照常可用，旧分数保留，重新通关记录工程积分。", (_gm.UpdatedFrom), (GameVersion.Display)),12,UiTheme.Good);
+				upd.AutowrapMode=TextServer.AutowrapMode.WordSmart;upd.CustomMinimumSize=new Vector2(360,0);content.AddChild(upd);
+				_gm.UpdatedFrom=null;_gm.SaveProgress();   // shown once; saving stamps the progress with the new version
+			}
 			content.AddChild(new Control {CustomMinimumSize=new Vector2(0,14)});
 			if(_gm?.Db==null)
 			{
@@ -72,13 +79,13 @@ namespace BridgeArchitect3D.UI
 			_levelBox.AddChild(UiTheme.MakeLabel(Loc.T("选择挑战，或读取已保存的桥梁方案。"),13,UiTheme.Muted));
 			for(int i=0;i<_gm.Db.Levels.Count;i++)
 			{
-				var level=_gm.Db.Levels[i];bool unlocked=_gm.IsUnlocked(i);int best=_gm.BestScoreFor(level.Id);
+				var level=_gm.Db.Levels[i];bool unlocked=_gm.IsUnlocked(i);int best=_gm.RecordFor(level.Id).BestScore;
 				var card=new PanelContainer();card.AddThemeStyleboxOverride("panel",UiTheme.Box(UiTheme.Surface,5,null,12));_levelBox.AddChild(card);
 				var row=new HBoxContainer();row.AddThemeConstantOverride("separation",14);card.AddChild(row);
 				row.AddChild(UiTheme.MakeLabel($"{i+1:00}",16,unlocked?UiTheme.Accent:UiTheme.Muted));
 				var info=new VBoxContainer {SizeFlagsHorizontal=SizeFlags.ExpandFill};info.AddThemeConstantOverride("separation",3);
 				var title=UiTheme.MakeLabel(level.Name,15,unlocked?UiTheme.Text:UiTheme.Muted);title.ClipText=true;title.TooltipText=level.Name;info.AddChild(title);
-				var description=UiTheme.MakeLabel(Loc.F("河宽 {0:0} m  ·  预算 ${1:N0}  ·  ", (level.Terrain.RiverWidth), (level.Budget))+(best>0?Loc.F("最高分 {0:N0}", (best)):Loc.T("未通关")),12,UiTheme.Muted);description.ClipText=true;info.AddChild(description);row.AddChild(info);
+				var description=UiTheme.MakeLabel(Loc.F("河宽 {0:0} m  ·  预算 ${1:N0}  ·  ", (level.Terrain.RiverWidth), (level.Budget))+(best>0?Loc.F("工程积分最高 {0:N0}", (best)):_gm.Progress.BestScores.ContainsKey(level.Id)?Loc.T("已通关（旧评分，重新通关记录工程积分）"):Loc.T("未通关")),12,UiTheme.Muted);description.ClipText=true;info.AddChild(description);var rec=_gm.RecordFor(level.Id);if(rec.BestScore>0){var recLabel=UiTheme.MakeLabel(Loc.F("最低造价 ${0:N0} · 最快 {1:0} s · 最高安全裕量 {2:0}% · 最低扰动 {3:0} m", (rec.LowestCost), (rec.FastestTime), (System.Math.Min(rec.BestMargin,9.99)*100), (System.Math.Max(0,rec.LowestDisturbance))),11,UiTheme.Muted);recLabel.ClipText=true;recLabel.TooltipText=Loc.T("每项最优方案都保存为“★”命名方案，进入关卡后用“读取命名方案”打开");info.AddChild(recLabel);}row.AddChild(info);
 				string id=level.Id;var play=UiTheme.MakeButton(unlocked?Loc.T("进入"):Loc.T("未解锁"),()=>_gm.StartLevel(id,false),66);play.Disabled=!unlocked;row.AddChild(play);
 				var load=UiTheme.MakeButton(Loc.T("读档"),()=>_gm.StartLevel(id,true),56);load.Disabled=!unlocked||!SaveManager.HasSave(id);row.AddChild(load);
 			}
@@ -88,8 +95,8 @@ namespace BridgeArchitect3D.UI
 		{
 			VBoxContainer content;(_settingsOverlay,content)=UiTheme.MakeDialog(this,Loc.T("设置"),Loc.IsEnglish?540:440);var settings=_gm.Settings;
 			// Language (always shown bilingually so it can be found in either language)
-			var langRow=new HBoxContainer();langRow.AddChild(new Label {Text="语言 / Language",CustomMinimumSize=new Vector2(130,0)});
-			var lang=new OptionButton {SizeFlagsHorizontal=SizeFlags.ExpandFill};lang.AddItem("中文");lang.AddItem("English");
+			var langRow=new HBoxContainer();langRow.AddChild(new Label {Text=Loc.T("语言 / Language"),CustomMinimumSize=new Vector2(130,0)});
+			var lang=new OptionButton {SizeFlagsHorizontal=SizeFlags.ExpandFill};lang.AddItem(Loc.T("中文"));lang.AddItem("English");
 			lang.Selected=settings.Language==Loc.English?1:0;langRow.AddChild(lang);content.AddChild(langRow);
 			content.AddChild(UiTheme.MakeLabel(Loc.T("切换语言后游戏会自动重启"),12,UiTheme.Muted));
 			content.AddChild(new HSeparator());

@@ -18,8 +18,45 @@ internal static class Program
         var db = GameDatabase.FromJson(
             File.ReadAllText(Path.Combine(_root, "Data/Materials/materials.json")),
             File.ReadAllText(Path.Combine(_root, "Data/Vehicles/vehicles.json")),
-            File.ReadAllText(Path.Combine(_root, "Data/Levels/levels.json")));
+            File.ReadAllText(Path.Combine(_root, "Data/Levels/levels.json")),
+            File.ReadAllText(Path.Combine(_root, "Data/Tunnels/tunnels.json")),
+            File.ReadAllText(Path.Combine(_root, "Data/Environment/weather.json")),
+            File.ReadAllText(Path.Combine(_root, "Data/Scoring/scoring.json")));
         Console.WriteLine($"数据加载：{db.Materials.Count} 种材料，{db.Vehicles.Count} 种车辆，{db.Levels.Count} 个关卡");
+        if(args.Contains("--lift-batch-only")){LiftBatchTests.Run(db,_root,Check);return _fail==0?0:1;}
+        // PLAYSAVE=<level>:<design.json>: run a player's save and print where it goes wrong (diagnostics only)
+        if (Environment.GetEnvironmentVariable("PLAYSAVE") is { Length: > 0 } playArg)
+        {
+            int c = playArg.IndexOf(':'); var plv = db.GetLevel(playArg[..c]);
+            var pd = GameDatabase.DeserializeDesign(File.ReadAllText(playArg[(c + 1)..]));
+            var psim = new BridgeSimulation(new DesignEditor(pd, plv, db).Design, plv, db);
+            psim.Initialize();
+            Console.WriteLine($"PLAYSAVE tunnelPath {(psim.TunnelPath != null)} geo {(psim.TunnelGeo != null)} complete {(psim.TunnelGeo != null && TunnelRules.Complete(psim.TunnelGeo, plv.Terrain))}");
+            for (int k = 0; k < 60 * 400 && psim.State == SimState.Running; k++)
+            {
+                psim.Step();
+                if (k % 600 == 0) Console.WriteLine($"PLAYSAVE t={psim.Time:0} " + string.Join(" | ", psim.Vehicles.Select(v => $"{v.Def.Id} s={v.FrontS:0.0} lane={v.Lane} lift={v.OnLift} wait={v.WaitingAtPortal}")) + " || " + string.Join(" ", psim.Lifts.Select(l => $"A={l.A:0.0} pos={l.Pos:0.00} rider={l.Rider?.Def.Id} riding={l.Riding}")));
+            }
+            var pr = psim.Result;
+            Console.WriteLine($"PLAYSAVE ok {pr.IsSuccess} {pr.FailureReason} {pr.FailureMessage} | {string.Join(", ", pr.VehicleResults.Select(v => v.Name + (v.Passed ? "+" : "-")))}");
+            return 0;
+        }
+
+        foreach (string id in new[] { "tunnel_immersed", "tunnel_shield", "tunnel_floating" })
+        {
+            var material = db.GetMaterial(id); var type = db.TunnelConfig.Type(material);
+            var grades = TunnelMaterialRatings.For(db.TunnelConfig, material);
+            Check($"Tunnel ratings: {id} exposes every grade and valid five-cell values", grades.Count == type.Grades.Count && grades.All(g => g.Stats.All(s => s.Cells >= 0 && s.Cells <= 5 && double.IsFinite(s.Value))));
+            Check($"Tunnel ratings: {id} includes supports only when supported", grades.All(g => g.Stats.Count == (type.HasSupports ? 5 : 4)));
+            Check($"Tunnel ratings: {id} pressure is kPa and joint tolerance is degrees", grades.All(g => Math.Abs(g.Stats[2].Value - type.Grades[g.Id].PressureCapacity / 1000) < 1e-8 && Math.Abs(g.Stats[3].Value - type.Grades[g.Id].JointRotation * 180 / Math.PI) < 1e-8));
+            var ordered = grades.OrderBy(g => g.Stats[2].Value).ToList();
+            Check($"Tunnel ratings: {id} increasing capacity never loses cells", ordered.Zip(ordered.Skip(1)).All(pair => pair.First.Stats[2].Cells <= pair.Second.Stats[2].Cells));
+        }
+        Check("Tunnel ratings: absent configuration is safe", TunnelMaterialRatings.For(null, db.GetMaterial("tunnel_immersed")).Count == 0);
+        if (args.Contains("--tunnel-guide-only")) return _fail == 0 ? 0 : 1;
+        TunnelAccessTests.Run(db,_root,Check);
+        if(args.Contains("--tunnel-access-only"))return _fail==0?0:1;
+        LiftBatchTests.Run(db,_root,Check);
 
         var diagnostic=DiagnosticTargets.Parse("液压杆 #71 暂不动作：构件 #31 附近约束冲突。\n构件 #52（钢梁）把活动段锁死：转轴节点 #31；节点 #999999999999999999。",71);
         Check("Diagnostic: blocker, source and pivot have separate identities",diagnostic.SourceMember==71 && diagnostic.BlockingMembers.SetEquals(new[]{52}) && diagnostic.Nodes.Contains(31) && diagnostic.Members.Contains(31) && !diagnostic.Members.Contains(71));
@@ -321,7 +358,7 @@ internal static class Program
             var deck7 = db.Materials["road"];
             Check($"第七关 净空：船顶 Y={shipTop:0.0} m 高于闭合桥面底面（Y={-deck7.VisualThickness / 2:0.00} m），不开桥就过不去", shipTop > 0);
             double rise = shipTop + deck7.VisualThickness / 2, run = ship7.LaneX - ship7.Width / 2;
-            Check($"第七关 固定桥面抬高到船顶以上需要坡度 {rise / run:P0}（> 30% 车辆爬不上去）", rise / run > 0.30);
+            Check($"第七关 固定桥面抬高到船顶以上需要坡度 {rise / run:P0}（> 30° 车辆爬不上去）", rise / run > BridgeArchitect3D.Traffic.RoadPath.MaxClimbGrade);
 
             var refD = LoadRef("level7");
             var plan = BasculePlanner.Plan(refD, db);
@@ -553,11 +590,11 @@ internal static class Program
         }
 
         // 单段桥面承载：两端有支撑时，每种桥面在自己的最大长度内都要能承载规定车辆
-        //（木桥面只要求轿车，钢桥面要求坦克，其余桥面要求重型货车）
+        //（木桥面只要求轿车，加劲钢桥面与预应力混凝土桥面要求坦克，其余桥面要求重型货车）
         foreach (var deck in db.Materials.Values.Where(m => m.IsDeck))
         {
             // Rail-only decks carry the freight train (road vehicles may not use them)
-            string veh = !deck.CarriesCars ? "train" : deck.MaterialId == "deck_wood" ? "car" : deck.MaterialId == "deck_steel" ? "tank" : "truck";
+            string veh = !deck.CarriesCars ? "train" : deck.MaterialId == "deck_wood" ? "car" : deck.MaterialId is "deck_steel" or "deck_psc" ? "tank" : "truck";
             double L = deck.MaximumLength;
             var lv = System.Text.Json.JsonSerializer.Deserialize<LevelDefinition>(System.Text.Json.JsonSerializer.Serialize(l1, GameDatabase.JsonOptions), GameDatabase.JsonOptions);
             lv.Terrain.RiverWidth = L; lv.AllowedMaterials = db.Materials.Keys.ToList();
@@ -576,26 +613,75 @@ internal static class Program
             Check($"教学 第一关起始桥试车失败并给出位置（“{r.Headline}” → {r.TopSuggestion}）",
                 !r.IsSuccess && r.InvolvedMemberIds.Count > 0 && !string.IsNullOrEmpty(r.Headline) && !string.IsNullOrEmpty(r.TopSuggestion), r.FailureMessage);
             foreach (var lv in db.Levels)
-                Check($"教学 {lv.Id} 只开放 {lv.AllowedMaterials.Count} 种材料且有思路提示", lv.AllowedMaterials.Count <= 9 && !string.IsNullOrEmpty(lv.ReferenceHint));
+                Check($"教学 {lv.Id} 只开放 {lv.AllowedMaterials.Count} 种材料且有思路提示", lv.AllowedMaterials.Count(id => db.GetMaterial(id) is { IsTunnel: false, IsLift: false }) <= 9 && !string.IsNullOrEmpty(lv.ReferenceHint));
             Check("教学 前几关只开放少量材料", db.Levels.Take(4).All(l => l.AllowedMaterials.Count <= 6));
             Check("教学 船只只在航道关（第七关）出现", db.Levels.Where(l => l.TrafficEvents.Any(e => e.Type == TrafficEventType.Ship)).Select(l => l.Id).SequenceEqual(new[] { "level7" }));
         }
 
-        // 评分：预算 : 时间 : 完整度 : 受力 = 6 : 2 : 1 : 1；受力取利用率与安全冗余（上限 150%）的较高者
+        // Engineering Score (version 2, uncapped): economy is nonlinear and weighs most, safety bonus is capped
         {
-            var a = new SimulationResult { IsSuccess = true, Budget = 10000, TotalCost = 10000, DeckIntegrity = 1, MaxUtilization = 0.3 };
-            BridgeSimulation.ComputeScore(a);
-            var b = new SimulationResult { IsSuccess = true, Budget = 10000, TotalCost = 10000, DeckIntegrity = 1, MaxUtilization = 0.9 };
-            BridgeSimulation.ComputeScore(b);
-            var c = new SimulationResult { IsSuccess = true, Budget = 10000, TotalCost = 10000, DeckIntegrity = 1, MaxUtilization = 0.5 };
-            BridgeSimulation.ComputeScore(c);
-            Check($"分 利用率 30% → 安全冗余封顶 150%（受力分 {a.StressScore}）", a.StressUsesMargin && a.StressScore == 1500);
-            Check($"分 利用率 90% → 取利用率（受力分 {b.StressScore}）", !b.StressUsesMargin && b.StressScore == 900);
-            Check($"分 利用率 50% → 冗余 100%（受力分 {c.StressScore}）", c.StressScore == 1000);
-            Check($"分 权重 6:2:1:1（预算分 {a.BudgetScore}、时间分 {a.TimeScore}、完整度分 {a.IntegrityScore}）", a.BudgetScore == 6000 && a.TimeScore == 2000 && a.IntegrityScore == 1000);
-            var slow = new SimulationResult { IsSuccess = true, Budget = 10000, TotalCost = 10000, DeckIntegrity = 1, MaxUtilization = 0.9, ReferenceTime = 20, CompletionTime = 40 };
-            BridgeSimulation.ComputeScore(slow);
-            Check($"分 用时是理想时间的 2 倍 → 时间分减半（{slow.TimeScore}）", slow.TimeScore == 1000);
+            SimulationResult R(double cost, double util, double t = 20, double wm = double.NaN, double integ = 1) =>
+                new SimulationResult { IsSuccess = true, Budget = 12000, ReferenceCost = 10000, TotalCost = cost, MaxUtilization = util,
+                    ReferenceTime = 20, CompletionTime = t, WeatherMargin = wm, DeckIntegrity = integ, RiverWidth = 30 };
+            var baseR = R(10000, 0.77); BridgeSimulation.ComputeScore(baseR);
+            Check($"分 参考造价、裕量 30%、不等待 → 约 1000 分（{baseR.Score}）", baseR.Score >= 950 && baseR.Score <= 1050);
+            var cheap = R(5000, 0.77); BridgeSimulation.ComputeScore(cheap);
+            var dear = R(20000, 0.77); BridgeSimulation.ComputeScore(dear);
+            Check($"分 经济性非线性、上不封顶：造价减半经济分 ×2.8（{cheap.EconomyPoints} / {baseR.EconomyPoints}），造价翻倍只剩约 35%（{dear.EconomyPoints}）",
+                Math.Abs(cheap.EconomyPoints / (double)baseR.EconomyPoints - Math.Pow(2, 1.5)) < 0.02 && Math.Abs(dear.EconomyPoints / (double)baseR.EconomyPoints - Math.Pow(0.5, 1.5)) < 0.02);
+            Check("分 经济性权重最高", db.Scoring.Weights.Economy > Math.Max(db.Scoring.Weights.Safety, Math.Max(db.Scoring.Weights.Weather, Math.Max(db.Scoring.Weights.Traffic, db.Scoring.Weights.Environment))));
+            var safe = R(10000, 0.3); BridgeSimulation.ComputeScore(safe);
+            var safer = R(10000, 0.1); BridgeSimulation.ComputeScore(safer);
+            Check($"分 安全裕量奖励到合理水平封顶（利用率 30% 与 10% 同分 {safe.SafetyPoints}）", safe.SafetyPoints == safer.SafetyPoints && safe.SafetyPoints > baseR.SafetyPoints);
+            var slow = R(10000, 0.77, t: 40); BridgeSimulation.ComputeScore(slow);
+            Check($"分 用时是理想时间的 2 倍 → 通行分减半（{slow.TrafficPoints} / {baseR.TrafficPoints}）", Math.Abs(slow.TrafficPoints * 2 - baseR.TrafficPoints) <= 1);
+            var broken = R(10000, 0.77, integ: 0.5); BridgeSimulation.ComputeScore(broken);
+            Check("分 桥面完整度按比例折算全部分项", Math.Abs(broken.BaseScore * 2 - baseR.BaseScore) <= 3);
+            var fail = R(10000, 0.5); fail.IsSuccess = false; BridgeSimulation.ComputeScore(fail);
+            Check("分 没通过全部测试没有正式分", fail.Score == 0);
+            var disturbed = R(10000, 0.77); disturbed.Disturbance = 30; BridgeSimulation.ComputeScore(disturbed);
+            Check("分 扰动整条河宽 → 环境系数降到下限", Math.Abs(disturbed.EnvironmentFactor - db.Scoring.EnvironmentFloor) < 1e-9 && baseR.EnvironmentFactor == 1);
+            var weak = R(10000, 0.77, wm: 0.05); BridgeSimulation.ComputeScore(weak);
+            Check("分 天气期间裕量小 → 天气分低", weak.WeatherPoints < baseR.WeatherPoints);
+            foreach (var lv in db.Levels)
+            {
+                var rr = new BridgeSimulation(LoadRef(lv.Id), lv, db).RunToEnd();
+                Check($"分 {lv.Id} 参考方案约 1000 分（{rr.Score}）", rr.IsSuccess && rr.Score >= 800 && rr.Score <= 1200 && rr.ScoreVersion == db.Scoring.Version);
+            }
+
+            // Achievements: configured per level (or chosen from its conditions), each counted once
+            var l13s = db.GetLevel("level13");
+            var ach = EngineeringScore.AchievementsFor(l13s);
+            Check("成就 洪水关提供极端洪水成就；不用星星或收集品", ach.Contains("extreme_flood") && ach.Distinct().Count() == ach.Count);
+            var s13 = new BridgeSimulation(LoadRef("level13"), l13s, db); s13.RunToEnd(); int base13 = s13.Result.BaseScore;
+            EngineeringScore.EvaluateAchievements(s13);
+            double mul = s13.Result.Achievements.Where(x => x.Earned).Aggregate(1.0, (m, x) => m * x.Multiplier);
+            Check($"成就 获得的倍率各乘一次（{string.Join("、", s13.Result.Achievements.Select(x => x.Name + (x.Earned ? "✔" : "✘")))}，{base13} → {s13.Result.Score}）",
+                s13.Result.Achievements.Count == ach.Count && s13.Result.Score == (int)Math.Round(base13 * mul));
+            EngineeringScore.EvaluateAchievements(s13);
+            Check("成就 重复评估不会叠加倍率", s13.Result.Score == (int)Math.Round(base13 * mul));
+            var flood = s13.Result.Achievements.First(x => x.Id == "extreme_flood");
+            Check($"成就 极端洪水用 ×1.4 洪水重测，只看管节强度：参考方案的加强管节扛得住（{flood.Note}）", flood.Earned, flood.Note);
+            var weak13 = new DesignEditor(LoadRef("level13"), l13s, db); weak13.SetTunnelGrade(-1, "normal");
+            var s13b = new BridgeSimulation(weak13.Design, l13s, db); s13b.RunToEnd();
+            Check("成就 普通管节在洪水里强度不够，不能通关", !s13b.Result.IsSuccess && s13b.Result.FailureMessage.Contains("压坏"), s13b.Result.FailureMessage);
+            var s1 = new BridgeSimulation(LoadRef("level1"), db.GetLevel("level1"), db); s1.RunToEnd(); EngineeringScore.EvaluateAchievements(s1);
+            Check("成就 只有轿车的第一关不提供额外重载（不公平）；有重型货车的第三关提供",
+                !EngineeringScore.AchievementsFor(db.GetLevel("level1")).Contains("heavy_load") && EngineeringScore.AchievementsFor(db.GetLevel("level3")).Contains("heavy_load"));
+            var s3 = new BridgeSimulation(LoadRef("level3"), db.GetLevel("level3"), db); s3.RunToEnd(); EngineeringScore.EvaluateAchievements(s3);
+            var heavy = s3.Result.Achievements.FirstOrDefault(x => x.Id == "heavy_load");
+            Check($"成就 额外重载用追加满载重卡重测（{heavy?.Note}）", heavy != null && heavy.Note.Length > 0);
+            foreach (var lv in db.Levels)
+                Check($"成就 {lv.Id} 至少提供两项成就", EngineeringScore.AchievementsFor(lv).Count >= 2);
+            Check("成就 第一关参考方案利用率 25% → 高可靠性", s1.Result.Achievements.Any(x => x.Id == "high_reliability" && x.Earned));
+
+            // Records: best score, lowest cost, fastest, highest margin are kept separately per scoring version
+            var rec = new LevelRecord { Version = db.Scoring.Version };
+            var k1 = rec.Improve(baseR);
+            var k2 = rec.Improve(cheap);
+            var k3 = rec.Improve(safe);
+            Check($"记录 第一次通过刷新五项；更便宜的方案只刷新最高分 / 最低造价；更安全的只刷新安全裕量（{string.Join(",", k2)} | {string.Join(",", k3)}）",
+                k1.Count == 5 && k2.SequenceEqual(new[] { "score", "cost" }) && k3.SequenceEqual(new[] { "margin" }));
         }
 
         // Custom levels (level design mode): build, validate, save round trip, and a playable bridge
@@ -701,7 +787,7 @@ internal static class Program
                 s8.Step();
                 if (trainDone < 0 && s8.Vehicles.Any(v => v.Def.Id == "train" && v.Finished)) trainDone = s8.Time;
                 bool empty = s8.Vehicles.All(v => v.Finished || v.Fallen);
-                idle = empty ? idle + BridgeSimulation.FixedDt : 0; worst = Math.Max(worst, idle);
+                idle = empty && s8.Time > BridgeSimulation.StaticPhaseTime ? idle + BridgeSimulation.FixedDt : 0;  // the static phase has no traffic by design worst = Math.Max(worst, idle);
             }
             Check($"火车 通过后后续车辆立即出发、测试正常结束（火车 {trainDone:0.0}s 离开，结束 {s8.Time:0.0}s，最长空等 {worst:0.00}s）", s8.State == SimState.Succeeded && trainDone > 0 && worst < 0.1);
         }
@@ -940,8 +1026,8 @@ internal static class Program
             var rP = new BridgeSimulation(e12.Design, l12, db).RunToEnd();
             Check($"洪水 冲刷区浅基础被掏空（{rS.Headline}），改桩基础后通过", !rS.IsSuccess && rP.IsSuccess, rS.FailureMessage + " / " + rP.FailureMessage);
         }
-        // 坡道：网格上“刚好 15%”的坡不能被误判；稍陡的坡减速爬上去；过陡才爬不上去
-        foreach (var (rise, expectPass) in new[] { (0.5, true), (0.75, true), (1.2, false) })
+        // 坡道：网格上“刚好 15%”的坡不能被误判；15%~30° 减速爬上去；超过 30°（≈57.7%）才爬不上去
+        foreach (var (rise, expectPass) in new[] { (0.5, true), (0.75, true), (1.2, true), (1.85, true), (2.2, false) })
         {
             var lv = System.Text.Json.JsonSerializer.Deserialize<LevelDefinition>(System.Text.Json.JsonSerializer.Serialize(db.GetLevel("level1"), GameDatabase.JsonOptions), GameDatabase.JsonOptions);
             lv.Terrain.RiverWidth = 10 / 3.0; lv.Terrain.RightBankHeight = rise; lv.AllowedMaterials = db.Materials.Keys.ToList();
@@ -992,6 +1078,487 @@ internal static class Program
                 ed2.Design.Nodes.Count == ed.Design.Nodes.Count && ed2.Design.Members.Count == ed.Design.Members.Count
                 && Math.Abs(ed2.UsedCost - ed.UsedCost) < 1e-6
                 && ed2.Design.Members.All(m => ed.Design.FindMember(m.Id)?.MaterialId == m.MaterialId));
+        }
+
+        // Deck ranking (load / self weight / cost) follows the design table:
+        // wood 2/1/1, grating 3/2/3, RC 4/5/2, prestressed 5/4/3, stiffened steel 5/2/4, FRP 3-5/1/5
+        {
+            double Cap(string id) => MaterialRatings.DeckCapacityTonnes(db.Materials[id]);
+            double W(string id) => db.Materials[id].MassPerMeter; double C(string id) => db.Materials[id].CostPerMeter;
+            Check("桥面 承载：木 < 格栅 < FRP / 钢筋混凝土 < 预应力 / 加劲钢", Cap("deck_wood") < Cap("deck_grating") && Cap("deck_grating") < Cap("deck_frp") && Cap("deck_grating") < Cap("road") && Cap("road") < Cap("deck_psc") && Cap("road") < Cap("deck_steel"));
+            Check("桥面 自重：FRP / 木最轻，格栅 / 加劲钢次之，预应力较重，钢筋混凝土最重", W("deck_frp") < W("deck_grating") && W("deck_wood") < W("deck_grating") && W("deck_steel") < W("deck_psc") && W("deck_psc") < W("road"));
+            Check("桥面 成本：木 < 钢筋混凝土 < 格栅 / 预应力 < 加劲钢 < FRP", C("deck_wood") < C("road") && C("road") < C("deck_grating") && C("road") < C("deck_psc") && C("deck_psc") < C("deck_steel") && C("deck_grating") < C("deck_steel") && C("deck_steel") < C("deck_frp"));
+        }
+
+        // Underwater tunnel (level 13: immersed tube)
+        {
+            var l13 = db.GetLevel("level13");
+            var tcfg = db.TunnelConfig;
+            LevelDefinition Copy(LevelDefinition lv, bool flood, params string[] vehicles)
+            {
+                var c = System.Text.Json.JsonSerializer.Deserialize<LevelDefinition>(System.Text.Json.JsonSerializer.Serialize(lv, GameDatabase.JsonOptions), GameDatabase.JsonOptions);
+                c.TrafficEvents.RemoveAll(e => (e.Type == TrafficEventType.Environment && !flood) || e.Type == TrafficEventType.Vehicle);
+                for (int i = 0; i < vehicles.Length; i++) c.TrafficEvents.Add(new TrafficEvent { Time = i, VehicleId = vehicles[i] });
+                return c;
+            }
+            // Full-width tube of one grade; elements whose middle lies in [r0, r1] get ground reinforcement
+            DesignEditor Tube(LevelDefinition lv, string grade, double r0 = 1, double r1 = 0)
+            {
+                var e = new DesignEditor(null, lv, db);
+                if (!e.AddTunnel(0, 60, "tunnel_immersed").Ok) return null;
+                e.SetTunnelGrade(-1, grade); e.SetPortalProtection(raise: 1.5);
+                var g = e.TunnelGeo;
+                for (int i = 0; i < g.Count; i++) if (g.MidX(i) >= r0 && g.MidX(i) <= r1) e.SetTunnelReinforced(i, true);
+                return e;
+            }
+            SimulationResult Run(DesignEditor e, LevelDefinition lv) => new BridgeSimulation(e.Design, lv, db).RunToEnd();
+
+            var refSim = new BridgeSimulation(new DesignEditor(LoadRef("level13"), l13, db).Design, l13, db);
+            var refRes = refSim.RunToEnd();
+            Check("隧道 参考方案的车辆都从隧道通过", refRes.IsSuccess && refSim.Vehicles.Count == 3 && refSim.Vehicles.All(v => v.Lane == TunnelRules.Lane && v.Finished), refRes.FailureMessage);
+            Check("隧道 参考方案在预算内", new DesignEditor(LoadRef("level13"), l13, db).UsedCost <= l13.Budget);
+            var old = GameDatabase.DeserializeDesign("{\"Version\":3,\"Nodes\":[],\"Members\":[]}");
+            Check("隧道 旧存档（版本 3）可读取，没有隧道", old.Tunnel == null && old.Version == BridgeDesign.CurrentVersion);
+            var v4 = GameDatabase.DeserializeDesign(File.ReadAllText(Path.Combine(_root, "Data/ReferenceDesigns/legacy/level13_reference_v_before_tunnel_types.json")));
+            var v4ed = new DesignEditor(v4, l13, db);
+            Check("隧道 旧版隧道段存档（版本 4）迁移为一条路线：钢筋混凝土段→加强、钢壳段→重型",
+                v4ed.Design.Tunnel != null && v4ed.TunnelGeo is { } vg && vg.Count == 6 && vg.GradeId[0] == "reinforced" && vg.GradeId[5] == "heavy" && TunnelRules.Complete(vg, l13.Terrain));
+
+            var ed = new DesignEditor(null, l13, db);
+            var e0 = new DesignEditor(null, l13, db); var any = e0.AddTunnel(-5, 10, "tunnel_immersed");
+            Check("隧道 点击一次就铺满整个河底，两端贴合岸壁", any.Ok && e0.TunnelGeo.Points[0].X == 0 && e0.TunnelGeo.Points[^1].X == 60, any.Message);
+            var endId = e0.Design.Tunnel.PointNodeIds.Select(e0.Design.FindNode).OrderBy(n => n.Position.X).First().Id;
+            var endMv = e0.MoveNode(endId, 12, TunnelRules.BedY(l13.Terrain) - 2);
+            Check("隧道 两端只能沿岸壁上下移动（横向拖动被拉回岸壁）", endMv.Ok && e0.Design.FindNode(endId).Position.X == 0 && Math.Abs(e0.Design.FindNode(endId).Position.Y - (TunnelRules.BedY(l13.Terrain) - 2)) < 1e-6, endMv.Message);
+            Check("隧道 不是隧道建材不能用隧道工具", !ed.AddTunnel(0, 10, "steel").Ok);
+            var t1 = ed.AddTunnel(0, 60, "tunnel_immersed");
+            var geo = ed.TunnelGeo;
+            var sup = ed.Design.Nodes.Where(n => n.IsTunnelSupport).OrderBy(n => n.Position.X).ToList();
+            double roof = TunnelRules.BedY(l13.Terrain) + geo.Type.TubeHeight;
+            Check("隧道 自动生成 10 m 标准管节，每道接缝一个支点（在管顶）", t1.Ok && geo.Count == 6 && sup.Count == 5 && Math.Abs(sup[0].Position.X - 10) < 1e-6 && Math.Abs(sup[0].Position.Y - roof) < 1e-6, t1.Message);
+            double lifts = TunnelRules.Shafts(l13, geo).Sum(s => TunnelRules.LiftCost(s.Height, geo.LiftLength));
+            Check("隧道 费用 = 标准管节 + 两岸电梯（井道高度 + 平台长度）", geo.GradeId.All(x => x == TunnelRules.DefaultGrade) && lifts > 0 && Math.Abs(ed.UsedCost - 60 * geo.Grade[0].CostPerMeter - lifts) < 1e-6, ed.UsedCost.ToString());
+            Check("隧道 只能有一条隧道", !ed.AddTunnel(10, 30, "tunnel_immersed").Ok);
+            Check("隧道 支点不能移动", !ed.MoveNode(sup[0].Id, 11, roof).Ok);
+            Check("隧道 支点只能接混凝土类建材（钢梁不行）", !ed.AddMemberToNewNode(sup[0].Id, 10, -1, "steel").Ok);
+            var col = ed.AddMemberToNewNode(sup[0].Id, 10, -1, "rc_column");
+            Check("隧道 钢筋混凝土柱可以立在隧道支点上（像桥墩一样）", col.Ok, col.Message);
+            Check("隧道 支点正上方可以在水下加节点，其他位置不行", roof < l13.Terrain.WaterLevel && ed.CheckNodePosition(10, -5) == null && ed.CheckNodePosition(12, -5) != null);
+            var model = StructuralModel.Build(ed.Design, l13, db);
+            int si = model.NodeIndex[sup[0].Id];
+            Check("隧道 支点在模型里是固定基础，承载力取管节等级（岩石）", model.FixX[si] && model.FixY[si] && model.FixRot[si] && model.AnchorMaxLoad[si] == geo.Grade[0].SupportLoad);
+            Check("隧道 支点承载力低于桥墩浅基础（岩石）", tcfg.Types.Values.SelectMany(t => t.Grades.Values).All(g => g.SupportLoad < FoundationRules.Capacity(new FoundationZone { Soil = "rock" }, FoundationType.Shallow)));
+            int ss = model.NodeIndex[sup[2].Id];   // x = 30, soft soil
+            Check("隧道 支点承载不受土质影响（软土上也是管节等级的承载）", Math.Abs(model.AnchorMaxLoad[ss] - geo.Grade[0].SupportLoad) < 1e-6);
+            Check("隧道 控制点不能接构件", !ed.AddMemberToNewNode(ed.Design.Tunnel.PointNodeIds[0], 0, -1, "rc_column").Ok);
+
+            // Immersed tubes are straight: no control points; lowering one end (trench) tilts the straight tube
+            double c0 = ed.UsedCost;
+            var ins = ed.InsertTunnelPoint(30);
+            Check("沉管 是直管，不能加控制点弯曲", !ins.Ok && ed.Design.Tunnel.PointNodeIds.Count == 2, ins.Message);
+            var endL = ed.Design.Tunnel.PointNodeIds.Select(ed.Design.FindNode).OrderBy(n => n.Position.X).First();
+            double ex = endL.Position.X;
+            var mv = ed.MoveNode(endL.Id, ex, TunnelRules.BedY(l13.Terrain) - 3);
+            var g2 = ed.TunnelGeo;
+            double mid30 = (g2.Points[0].Y + g2.Points[^1].Y) / 2, lin = g2.Points[0].Y + (g2.Points[^1].Y - g2.Points[0].Y) * (30 - g2.Points[0].X) / (g2.Points[^1].X - g2.Points[0].X);
+            Check("沉管 拖低一端后整条直管倾斜（仍是直线）、费用增加（开挖）、支点跟随", mv.Ok && g2.Points.Count == 2 && Math.Abs(g2.BottomAt(30) - lin) < 0.05 && g2.Points[0].Y < TunnelRules.BedY(l13.Terrain) - 2.9 && ed.UsedCost > c0 && ed.Design.Nodes.Count(n => n.IsTunnelSupport) == g2.Count - 1, $"{mv.Message} cost={ed.UsedCost}/{c0}");
+            Check("隧道 控制点不能低于最大开挖深度", !ed.MoveNode(endL.Id, ex, TunnelRules.BedY(l13.Terrain) - g2.Type.MaxTrenchDepth - 1).Ok);
+            ed.Undo();
+            Check("隧道 路线修改可撤销", ed.Design.Tunnel.PointNodeIds.Count == 2 && Math.Abs(ed.UsedCost - c0) < 1e-6);
+            var c1 = ed.UsedCost; var gr = ed.SetTunnelGrade(2, "heavy");
+            Check("隧道 单节升级管节等级，费用增加", gr.Ok && ed.TunnelGeo.GradeId[2] == "heavy" && ed.UsedCost > c0);
+            ed.SetTunnelReinforced(2, true);
+            var round = GameDatabase.DeserializeDesign(GameDatabase.SerializeDesign(ed.Design));
+            var rg = TunnelGeometry.Build(round, db);
+            Check("隧道 存档可保存 / 读取（路线、管节等级、地基加固、支点）", rg != null && rg.Count == 6 && rg.GradeId[2] == "heavy" && rg.Reinforced[2] && round.Nodes.Count(n => n.IsTunnelSupport) == 5);
+            var del = ed.DeleteTunnel();
+            Check("隧道 删除隧道连同支点和上面的构件，退还费用", del.Ok && ed.Design.Tunnel == null && !ed.Design.Nodes.Any(n => n.IsTunnelNode) && ed.Design.Members.Count == 0 && Math.Abs(ed.UsedCost) < 1e-6);
+            ed.Undo();
+            Check("隧道 删除可撤销", ed.Design.Tunnel != null && ed.Design.Members.Count == 1);
+
+            // Load models (each has its own failure message)
+            var press = Run(Tube(l13, "normal", 20, 60), l13);
+            Check("隧道 洪水抬高水位，普通管节水压超限进水", !press.IsSuccess && press.FailureReason == FailureReason.TunnelFlooded && press.FailureMessage.Contains("水压"), press.FailureMessage);
+            var calm = Copy(l13, false, "car", "truck", "semi_long");
+            var calmNormal = Run(Tube(calm, "normal", 20, 60), calm);
+            Check("隧道 没有洪水时普通管节水压够用", calmNormal.IsSuccess, calmNormal.FailureMessage);
+            var joint = Run(Tube(calm, "reinforced"), calm);
+            Check("隧道 软土与岩石交界不再因沉降 / 接缝漏水失败（只看材料强度）", joint.IsSuccess, joint.FailureMessage);
+            var light = Copy(l13, false, "car");
+            var lightRes = Run(Tube(light, "reinforced"), light);
+            Check("隧道 只有轿车时软土地基不加固也能通过", lightRes.IsSuccess, lightRes.FailureMessage);
+            var scour = Run(Tube(l13, "reinforced", 20, 40), l13);
+            Check("隧道 洪水冲刷不再掏空地基（只看材料强度）", scour.IsSuccess, scour.FailureMessage);
+            // Burying the scour-zone elements ≥ 2 m also protects them
+            var deep = Tube(l13, "reinforced", 20, 40);
+            deep.InsertTunnelPoint(40); deep.InsertTunnelPoint(56);
+            foreach (var pid in deep.Design.Tunnel.PointNodeIds.ToList())
+            {
+                var pn = deep.Design.FindNode(pid);
+                if (pn.Position.X > 39) deep.MoveNode(pid, pn.Position.X, TunnelRules.BedY(l13.Terrain) - 3);
+            }
+            var deepRes = Run(deep, l13);
+            Check("隧道 冲刷区管节埋深 ≥ 2 m 时不被掏空", deepRes.IsSuccess || !deepRes.FailureMessage.Contains("岩石承受不住"), deepRes.FailureMessage);
+
+            var part = new DesignEditor(null, l13, db); part.AddTunnel(0, 40, "tunnel_immersed"); part.SetTunnelGrade(-1, "reinforced");
+            var partRes = Run(part, l13);
+            Check("隧道 不会出现只建一半的隧道：总是贯通两岸并能通车", TunnelRules.Complete(part.TunnelGeo, l13.Terrain) && partRes.IsSuccess, partRes.FailureReason + " " + partRes.FailureMessage);
+            var st = TunnelAnalysis.Evaluate(Tube(l13, "normal").TunnelGeo, l13, tcfg, TunnelAnalysis.StaticEnvironment(l13, tcfg));
+            Check("隧道 风险分四档（绿 / 黄 / 橙 / 红）", TunnelRules.RiskBand(tcfg, 0.2) == 0 && TunnelRules.RiskBand(tcfg, 0.8) == 1 && TunnelRules.RiskBand(tcfg, 0.95) == 2 && TunnelRules.RiskBand(tcfg, 1.1) == 3 && st.MaxUtil < 1);
+            // Unified ground road: bridge and tunnel routes start and end at the same ground points
+            var refPath = refSim.TunnelPath;
+            var bridgeLvl = db.GetLevel("level1");
+            var b1 = new BridgeSimulation(LoadRef("level1"), bridgeLvl, db); b1.RunToEnd();
+            Check("道路 隧道关的车辆从固定地面起点出发、到固定终点结束", refPath != null && Math.Abs(refPath.PointX[0] - TunnelRules.GroundStartX(l13)) < 1e-6 && Math.Abs(refPath.PointX[^1] - TunnelRules.GroundEndX(l13)) < 1e-6);
+            Check("道路 没有隧道的关卡起点不变（锚点外 25 m）", Math.Abs(b1.Path.PointX[0] - (bridgeLvl.Anchors.First(a => a.IsRoadStart).Position.X - BridgeArchitect3D.Traffic.RoadPath.ApproachLength)) < 1e-6);
+            var mixed = Tube(l13, "reinforced", 20, 60);
+            mixed.AddMemberToNewNode(mixed.Design.Nodes.First(n => n.IsAnchor && n.Position.X < 1).Id, 5, 0, "road");
+            var mixedSim = new BridgeSimulation(mixed.Design, l13, db); mixedSim.RunToEnd();
+            Check("道路 同一关里桥面路线与隧道路线的起点相同", mixedSim.Path != null && Math.Abs(mixedSim.Path.PointX[0] - refPath.PointX[0]) < 1e-6);
+            double maxStep = 0;
+            for (int i = 1; i + 1 < refPath.PointX.Count; i++)
+            {
+                // Lifts are vertical rides, not road: only the drivable road is checked
+                if (refPath.LiftSegments.Contains(i - 1) || refPath.LiftSegments.Contains(i) || refPath.LiftSegments.Contains(i - 2) || refPath.LiftSegments.Contains(i + 1)) continue;
+                double sg1 = (refPath.PointY[i] - refPath.PointY[i - 1]) / Math.Max(1e-9, refPath.PointX[i] - refPath.PointX[i - 1]);
+                double sg2 = (refPath.PointY[i + 1] - refPath.PointY[i]) / Math.Max(1e-9, refPath.PointX[i + 1] - refPath.PointX[i]);
+                maxStep = Math.Max(maxStep, Math.Abs(sg2 - sg1));
+            }
+            Check("道路 坡道与平路之间是平滑竖曲线（相邻坡度变化 ≤ 2%）", maxStep <= 0.02 + 1e-9, $"{maxStep * 100:0.00}%");
+            Check("道路 所有车辆可爬升坡度都是 30°", db.Vehicles.Values.All(v => Math.Abs(Math.Atan(v.MaxRampGrade) * 180 / Math.PI - 30) < 0.01) && Math.Abs(TunnelRules.RampGrade(l13) - BridgeArchitect3D.Traffic.RoadPath.MaxClimbGrade) < 1e-3 && Math.Abs(Math.Atan(BridgeArchitect3D.Traffic.RoadPath.MaxClimbGrade) * 180 / Math.PI - 30) < 1e-9);
+            // The grade check itself still works: a level limiting tunnels to 5% rejects a 10% tube
+            var l13flat = Copy(l13, false, "car"); l13flat.Objectives.TunnelMaxGrade = 0.05;
+            var steep = Tube(l13flat, "reinforced", 20, 60);
+            // Straight immersed tube: drop the left end by the full trench depth (6 m over 60 m = 10% > 5%)
+            var spn = steep.Design.Tunnel.PointNodeIds.Select(steep.Design.FindNode).OrderBy(n => n.Position.X).First();
+            var spMove = steep.MoveNode(spn.Id, spn.Position.X, TunnelRules.BedY(l13.Terrain) - steep.TunnelGeo.Type.MaxTrenchDepth);
+            Check("道路 沉管一端拖到最深开挖（直管倾斜）", spMove.Ok, spMove.Message);
+            var steepRes = Run(steep, l13flat);
+            Check("道路 管身坡度超过车辆能力时车辆不能通行，并说明坡度", !steepRes.IsSuccess && steepRes.FailureMessage.Contains("坡度"), steepRes.FailureMessage);
+            var l11 = db.GetLevel("level11");
+            Check("隧道 没有开放隧道建材的关卡不能建隧道", !new DesignEditor(null, l11, db).AddTunnel(0, 10, "tunnel_immersed").Ok);
+        }
+
+        // Floating tunnel (level 14): buoyancy, anchor cables, current drag ∝ v², anchor scour
+        {
+            var l14 = db.GetLevel("level14");
+            var tcfg = db.TunnelConfig;
+            var ft = tcfg.Types["floating"];
+            LevelDefinition Copy14(bool flood, params string[] vehicles)
+            {
+                var c = System.Text.Json.JsonSerializer.Deserialize<LevelDefinition>(System.Text.Json.JsonSerializer.Serialize(l14, GameDatabase.JsonOptions), GameDatabase.JsonOptions);
+                c.TrafficEvents.RemoveAll(e => (e.Type == TrafficEventType.Environment && !flood) || e.Type == TrafficEventType.Vehicle);
+                for (int i = 0; i < vehicles.Length; i++) c.TrafficEvents.Add(new TrafficEvent { Time = i, VehicleId = vehicles[i] });
+                return c;
+            }
+            DesignEditor Float(LevelDefinition lv, string grade = "reinforced", string buoy = "mid", int cables = 3, string cable = "standard", bool reinforceScour = true)
+            {
+                var e = new DesignEditor(null, lv, db);
+                if (!e.AddTunnel(0, 80, "tunnel_floating").Ok) return null;
+                e.SetTunnelGrade(-1, grade); e.SetTunnelBuoyancy(-1, buoy); e.SetTunnelCables(-1, cables, cable); e.SetPortalProtection(raise: 1.5);
+                var g = e.TunnelGeo;
+                if (reinforceScour) for (int i = 0; i < g.Count; i++) if (g.MidX(i) > 30 && g.MidX(i) < 50) e.SetTunnelReinforced(i, true);
+                return e;
+            }
+            SimulationResult Run14(DesignEditor e, LevelDefinition lv) => new BridgeSimulation(e.Design, lv, db).RunToEnd();
+            TunnelState Static(DesignEditor e, LevelDefinition lv) => TunnelAnalysis.Evaluate(e.TunnelGeo, lv, tcfg, TunnelAnalysis.StaticEnvironment(lv, tcfg));
+
+            var refSim = new BridgeSimulation(new DesignEditor(LoadRef("level14"), l14, db).Design, l14, db);
+            var refRes = refSim.RunToEnd();
+            Check("悬浮 参考方案的车辆都从悬浮隧道通过", refRes.IsSuccess && refSim.Vehicles.Where(v => v.Def.Kind != "train").All(v => v.Lane == TunnelRules.Lane && v.Finished), refRes.FailureMessage);
+
+            var ed = Float(l14);
+            var g = ed.TunnelGeo;
+            TunnelRules.BottomRange(l14.Terrain, ft, out double lo, out double hi);
+            Check("悬浮 新建管节悬在水中（顶部离水面 1 m），没有接缝支点", g != null && Math.Abs(g.Points[0].Y - hi) < 1e-6 && hi + ft.TubeHeight <= l14.Terrain.WaterLevel - ft.MinCover + 1e-6 && !ed.Design.Nodes.Any(n => n.IsTunnelSupport));
+            int pid = ed.Design.Tunnel.PointNodeIds[0];
+            Check("悬浮 控制点不能高出最小覆盖水深，也不能贴近河床", !ed.MoveNode(pid, 0, hi + 1).Ok && !ed.MoveNode(pid, 0, lo - 1).Ok);
+            double rampShallow = TunnelRules.RampRun(l14, true, hi + ft.FloorHeight), rampBed = TunnelRules.RampRun(l14, true, TunnelRules.BedY(l14.Terrain) + 0.8);
+            Check("悬浮 浅悬浮的坡道比铺在 30 m 深河床上短得多", rampShallow < rampBed / 2);
+            var cheap = Float(l14, cables: 2); var many = Float(l14, cables: 4);
+            Check("悬浮 锚索按根数和长度计费（4 根比 2 根贵）", many.UsedCost > cheap.UsedCost);
+            var round = GameDatabase.DeserializeDesign(GameDatabase.SerializeDesign(ed.Design));
+            var rg = TunnelGeometry.Build(round, db);
+            Check("悬浮 存档保存浮力等级、锚索根数与种类", rg != null && rg.CableCount.All(c => c == 3) && rg.BuoyancyId.All(b => b == "mid") && rg.CableId.All(c => c == "standard"));
+
+            // Buoyancy physics
+            var s0 = Static(ed, l14);
+            var flooded = TunnelAnalysis.Evaluate(ed.TunnelGeo, l14, tcfg, new TunnelEnvironment { WaterY = l14.Terrain.WaterLevel + 3, Current = 0.5 });
+            Check("悬浮 完全浸没时水位上涨不增加浮力，只增加水压", Math.Abs(flooded.NetBuoyancy[0] - s0.NetBuoyancy[0]) < 1e-6 && flooded.Pressure[0] > s0.Pressure[0]);
+            var hiB = Static(Float(l14, buoy: "high"), l14);
+            Check("悬浮 浮力等级越高，净浮力和锚索拉力越大", hiB.NetBuoyancy[0] > s0.NetBuoyancy[0] && hiB.Tension[0] > s0.Tension[0]);
+            var fast = TunnelAnalysis.Evaluate(ed.TunnelGeo, l14, tcfg, new TunnelEnvironment { WaterY = l14.Terrain.WaterLevel, Current = 1.0 });
+            Check("悬浮 水流横推与流速平方成正比", Math.Abs(fast.Drag[0] / s0.Drag[0] - 4) < 1e-9);
+
+            // Failure modes (each its own message)
+            var press = Run14(Float(l14, grade: "normal"), l14);
+            Check("悬浮 洪水抬高水位，普通管节水压超限", !press.IsSuccess && press.FailureReason == FailureReason.TunnelFlooded && press.FailureMessage.Contains("水压"), press.FailureMessage);
+            var calm = Copy14(false, "car", "bus", "semi_long");
+            var slack = Run14(Float(calm, buoy: "low"), calm);
+            Check("悬浮 车辆超过净浮力不再导致下沉失败（只看材料强度）", !(slack.FailureMessage ?? "").Contains("净浮力"), slack.FailureReason + " " + slack.FailureMessage);
+            var snap = Run14(Float(calm, buoy: "high", cables: 2), calm);
+            Check("悬浮 高浮力只配 2 根钢绞线锚索，锚索被拉断", !snap.IsSuccess && snap.FailureMessage.Contains("拉断"), snap.FailureMessage);
+            var strongEd = Float(calm, buoy: "high", cables: 2, cable: "strong"); strongEd.SetTunnelReinforced(-1, true);
+            var strong = Run14(strongEd, calm);
+            Check("悬浮 高浮力换成高强复合锚索 + 加固锚点后 2 根够用（无洪水）", strong.IsSuccess, strong.FailureMessage);
+            var softAnchor = Run14(Float(calm, buoy: "high", cables: 2, cable: "strong"), calm);
+            Check("悬浮 锚点地基不再被拔出（只看锚索强度）", !(softAnchor.FailureMessage ?? "").Contains("锚固基础"), softAnchor.FailureMessage);
+            var sway = Run14(Float(l14, cables: 2), l14);
+            Check("悬浮 横向摆动不再导致失败（只看材料强度）", !(sway.FailureMessage ?? "").Contains("摆动"), sway.FailureMessage);
+            var scour = Run14(Float(l14, reinforceScour: false), l14);
+            Check("悬浮 冲刷区锚点不再被拔出（只看材料强度）", !(scour.FailureMessage ?? "").Contains("锚固基础"), scour.FailureMessage);
+            var none = Static(Float(l14, cables: 0), l14);
+            Check("悬浮 没有锚索的管节会漂走（静态检查就超限）", none.MaxUtil >= 1 && TunnelAnalysis.Describe(Float(l14, cables: 0).TunnelGeo, tcfg, l14, none, none.Worst).Contains("没有锚索"));
+
+            // Level balance: the immersed tube cannot take 30 m of water plus the flood
+            var imm = new DesignEditor(null, l14, db);
+            imm.AddTunnel(0, 80, "tunnel_immersed"); imm.SetTunnelGrade(-1, "heavy"); imm.SetTunnelReinforced(-1, true); imm.SetPortalProtection(raise: 1.5);
+            var immRes = Run14(imm, l14);
+            Check("悬浮 第十四关：沉管即使用重型管节也扛不住 30 m 深水加洪水", !immRes.IsSuccess && immRes.FailureMessage.Contains("水压"), immRes.FailureMessage);
+            var l13 = db.GetLevel("level13");
+            Check("悬浮 第十三关也开放悬浮隧道（2026-11 用户要求隧道关开放全部隧道类型）", l13.AllowedMaterials.Contains("tunnel_floating"));
+        }
+
+        // Shield tunnel (level 15): geology layers, minimum cover, groundwater + earth pressure, lagged groundwater
+        {
+            var l15 = db.GetLevel("level15");
+            var tcfg = db.TunnelConfig;
+            var stype = tcfg.Types["shield"];
+            DesignEditor Bore(LevelDefinition lv, double bottom, string grade = "reinforced", bool grout = false)
+            {
+                var e = new DesignEditor(null, lv, db);
+                if (!e.AddTunnel(0, 60, "tunnel_shield").Ok) return null;
+                e.SetTunnelGrade(-1, grade); e.SetPortalProtection(raise: 1.5);
+                foreach (var pid in e.Design.Tunnel.PointNodeIds.ToList()) { var pn = e.Design.FindNode(pid); e.MoveNode(pid, pn.Position.X, bottom); }
+                if (grout) e.SetTunnelReinforced(-1, true);
+                return e;
+            }
+            SimulationResult Run15(DesignEditor e) => new BridgeSimulation(e.Design, l15, db).RunToEnd();
+            TunnelState Static15(DesignEditor e) => TunnelAnalysis.Evaluate(e.TunnelGeo, l15, tcfg, TunnelAnalysis.StaticEnvironment(l15, tcfg));
+
+            var refSim = new BridgeSimulation(new DesignEditor(LoadRef("level15"), l15, db).Design, l15, db);
+            var refRes = refSim.RunToEnd();
+            Check("盾构 参考方案的车辆都从盾构隧道通过", refRes.IsSuccess && refSim.Vehicles.All(v => v.Lane == TunnelRules.Lane && v.Finished), refRes.FailureMessage);
+
+            var t = l15.Terrain;
+            Check("盾构 地层按关卡分层：淤泥 / 砂土 / 黏土 / 岩石", TunnelRules.SoilAt(t, 30, -13) == "silt" && TunnelRules.SoilAt(t, 30, -18) == "sand" && TunnelRules.SoilAt(t, 30, -24) == "clay" && TunnelRules.SoilAt(t, 30, -29) == "rock");
+            Check("盾构 最小覆土：岩石 3、黏土 6、砂土 9、淤泥 12 m（可配置）", tcfg.Geo("rock").MinCover == 3 && tcfg.Geo("clay").MinCover == 6 && tcfg.Geo("sand").MinCover == 9 && tcfg.Geo("silt").MinCover == 12);
+            var ed = new DesignEditor(null, l15, db);
+            var add = ed.AddTunnel(0, 60, "tunnel_shield");
+            var g = ed.TunnelGeo;
+            Check("盾构 新建隧道在河床以下（默认覆土 6 m），不扰动河床、没有支点", add.Ok && Math.Abs(g.Points[0].Y - (TunnelRules.BedY(t) - stype.TubeHeight - stype.DefaultCover)) < 1e-6 && !ed.Design.Nodes.Any(n => n.IsTunnelSupport), add.Message);
+            int p0 = ed.Design.Tunnel.PointNodeIds[0];
+            Check("盾构 控制点不能高出河床，也不能低于关卡最深处", !ed.MoveNode(p0, 0, TunnelRules.BedY(t) - 2).Ok && !ed.MoveNode(p0, 0, t.BuildMinY - 1).Ok);
+            Check("盾构 生态保护区不能建沉管或悬浮隧道", !new DesignEditor(null, l15, db).AddTunnel(0, 60, "tunnel_immersed").Ok && !new DesignEditor(null, l15, db).AddTunnel(0, 60, "tunnel_floating").Ok);
+
+            // Stability: crown in sand needs 9 m; grouting lowers it to 5.4 m
+            var shallow = Bore(l15, -24.5);   // crown −17.5 in sand, cover 5.5 m
+            var ss = Static15(shallow);
+            Check("盾构 覆土不足不再塌方：只看管片强度，覆土只作参考", ss.StabilityUtil[0] > 1 && Math.Abs(ss.Util[0] - ss.PressureUtil[0]) < 1e-12);
+            var grouted = Static15(Bore(l15, -24.5, grout: true));
+            Check("盾构 注浆加固把砂土的最小覆土降到 5.4 m，同一埋深变稳定", grouted.StabilityUtil[0] < 1);
+            // Lining: deeper means more groundwater and earth pressure, both reported separately
+            var deep = Static15(Bore(l15, -28.5)); var deeper = Static15(Bore(l15, -30));
+            Check("盾构 越深地下水压和土压越大（分别计算）", deeper.Pressure[0] > deep.Pressure[0] && deeper.EarthPressure[0] >= deep.EarthPressure[0] && deep.EarthPressure[0] > 0);
+            var normalDeep = Run15(Bore(l15, -28.5, "normal"));
+            Check("盾构 管顶在黏土里埋深足够，但普通管片外压超限", !normalDeep.IsSuccess && normalDeep.FailureReason == FailureReason.TunnelFlooded && normalDeep.FailureMessage.Contains("外压"), normalDeep.FailureMessage);
+            Check("盾构 掘进费随地层变化：岩石最贵", tcfg.Geology.Values.All(s => s.ExcavationCost <= tcfg.Geo("rock").ExcavationCost));
+            var rockCost = Bore(l15, -30).UsedCost; var clayCost = Bore(l15, -28.5).UsedCost;
+            Check("盾构 进入岩石的隧道更贵（掘进 + 更长坡道）", rockCost > clayCost);
+            // Groundwater follows the flood with the soil's delay: sand fast, clay slow
+            var sandRun = new BridgeSimulation(Bore(l15, -26, "normal", grout: true).Design, l15, db);
+            Check("盾构 浅埋注浆 + 普通管片：平时外压在承载以内", Static15(Bore(l15, -26, "normal", grout: true)).MaxUtil < 1);
+            var sandRes = sandRun.RunToEnd();
+            Check("盾构 洪水让砂层地下水快速上涨，浅埋注浆 + 普通管片外压超限", !sandRes.IsSuccess && sandRes.FailureMessage.Contains("外压"), sandRes.FailureMessage);
+            var sandOk = Run15(Bore(l15, -26, "reinforced", grout: true));
+            Check("盾构 同样浅埋注浆，加强管片能扛住洪水", sandOk.IsSuccess, sandOk.FailureMessage);
+            var clayRun = new BridgeSimulation(new DesignEditor(LoadRef("level15"), l15, db).Design, l15, db);
+            clayRun.RunToEnd();
+            Check("盾构 黏土地下水滞后：洪水 5 m 只传过去不到一半", clayRun.TunnelStatus.Groundwater.Length > 0 && clayRun.TunnelStatus.Groundwater.Max() < 2.5);
+            Check("盾构 地下水由河水连通而来，不再另加河水压力（只用地下水位）", Math.Abs(deep.Pressure[0] - tcfg.WaterDensity * tcfg.Gravity * (t.WaterLevel - (-28.5))) < 1e-6);
+        }
+
+        // Unified weather
+        {
+            var wc = db.Weather;
+            Check("天气 三种预设与规格一致（水位 0/2/5 m，流速 0.5/0.8/1.1 m/s，软化 0/10/25%）",
+                wc.Preset("normal").WaterRise == 0 && wc.Preset("rainstorm").WaterRise == 2 && wc.Preset("flood").WaterRise == 5 &&
+                wc.Preset("normal").Current == 0.5 && wc.Preset("rainstorm").Current == 0.8 && wc.Preset("flood").Current == 1.1 &&
+                wc.Preset("rainstorm").SoilSoftening == 0.1 && wc.Preset("flood").SoilSoftening == 0.25);
+            var legacy = new TrafficEvent { Type = TrafficEventType.Environment, Height = 3 };
+            Check("天气 旧洪水事件（只有 Height）按严重洪水处理、水位用 Height", wc.PresetOf(legacy).Scour && wc.RiseOf(legacy) == 3);
+            Check("天气 只有严重洪水冲刷河床", !wc.Preset("rainstorm").Scour && wc.Preset("flood").Scour);
+
+            var l13w = db.GetLevel("level13");
+            DesignEditor Prot(double raise, bool gate = false, bool pump = false)
+            {
+                var e = new DesignEditor(LoadRef("level13"), l13w, db); e.SetPortalProtection(raise, gate, pump); return e;
+            }
+            var bare = new BridgeSimulation(Prot(0).Design, l13w, db).RunToEnd();
+            Check("电梯 入口在岸上，洪水不会从入口倒灌：不做任何防护也通关", bare.IsSuccess, bare.FailureMessage);
+            Check("电梯 旧存档里的抬高入口 / 防洪闸 / 排水泵不再计费", Math.Abs(Prot(1.5, true, true).UsedCost - Prot(0).UsedCost) < 1e-6);
+            // One vehicle per trip: the next one waits in front of the lift; riders move with the platform
+            var ls = new BridgeSimulation(Prot(0).Design, l13w, db); ls.Initialize();
+            bool liftWait = false, rode = false; double lowest = 0;
+            while (ls.State == SimState.Running && ls.Time < 900)
+            {
+                ls.Step(); liftWait |= ls.Vehicles.Any(v => v.WaitingAtPortal);
+                foreach (var v in ls.Vehicles) if (v.OnLift) { rode = true; lowest = Math.Min(lowest, v.LiftDy); }
+            }
+            Check("电梯 一次运一辆车：后车在电梯前等候（不算失败）", ls.Result.IsSuccess && liftWait, ls.Result.FailureMessage);
+            Check("电梯 车辆随平台整车下到隧道底，再从另一岸升上来", rode && lowest < -(ls.Lifts[0].Height - 0.5) && ls.Result.VehicleResults.All(v => v.Passed), $"{lowest:0.0} / {ls.Lifts[0].Height:0.0}");
+            var lShort = Prot(0); lShort.SetLiftLength(8);
+            var rs = new BridgeSimulation(lShort.Design, l13w, db).RunToEnd();
+            Check("电梯 车身比平台长时开不上去，测试失败并说明", !rs.IsSuccess && rs.FailureReason == FailureReason.VehicleBlocked && rs.FailureMessage.Contains("电梯平台"), rs.FailureMessage);
+            var tankLvl = System.Text.Json.JsonSerializer.Deserialize<LevelDefinition>(System.Text.Json.JsonSerializer.Serialize(l13w, GameDatabase.JsonOptions), GameDatabase.JsonOptions);
+            tankLvl.TrafficEvents.RemoveAll(e => e.Type == TrafficEventType.Vehicle);
+            tankLvl.TrafficEvents.Add(new TrafficEvent { Time = 0, Type = TrafficEventType.Vehicle, VehicleId = "tank" });
+            var te9 = new DesignEditor(LoadRef("level13"), tankLvl, db); te9.SetLiftLength(9);
+            var rt9 = new BridgeSimulation(te9.Design, tankLvl, db).RunToEnd();
+            Check("电梯 平台太短承载不够：60 吨坦克压坏 9 m 平台", !rt9.IsSuccess && rt9.FailureReason == FailureReason.LiftOverload, rt9.FailureMessage);
+            Check("电梯 按本关车辆自动配：坦克需要更长（更结实）的平台，超长重卡需要 26 m", new DesignEditor(null, tankLvl, db).LiftLengthForLevel() > 9 && new DesignEditor(null, l13w, db).LiftLengthForLevel() == 26);
+            var te16 = new DesignEditor(LoadRef("level13"), tankLvl, db); te16.SetLiftLength(te16.LiftLengthForLevel());
+            var rt16 = new BridgeSimulation(te16.Design, tankLvl, db).RunToEnd();
+            Check("电梯 自动配的平台能运坦克", rt16.IsSuccess, rt16.FailureMessage);
+            var round2 = GameDatabase.DeserializeDesign(GameDatabase.SerializeDesign(lShort.Design));
+            Check("电梯 平台长度随方案保存；旧存档没有该字段时用最长平台", round2.Tunnel.LiftLength == 8 && TunnelGeometry.Build(LoadRef("level14"), db).LiftLength == TunnelRules.LiftCfg.MaxLength);
+
+            var l15w = db.GetLevel("level15");
+            var noPump = new BridgeSimulation(new DesignEditor(LoadRef("level15"), l15w, db).Design, l15w, db).RunToEnd();
+            Check("电梯 第十五关开局暴雨不再让入口积水（入口在岸上）", noPump.IsSuccess, noPump.FailureMessage);
+
+            // Softening acts on foundations, not on materials
+            var s12 = new BridgeSimulation(LoadRef("level12"), db.GetLevel("level12"), db); s12.Initialize();
+            int pier = -1; for (int i = 0; i < s12.Model.NodeCount; i++) if (s12.Model.PierFoundation[i] != FoundationType.None && s12.Model.AnchorMaxLoad[i] > 0) { pier = i; break; }
+            double cap0 = pier >= 0 ? s12.Model.AnchorMaxLoad[pier] : 0, capMin = cap0;
+            while (s12.State == SimState.Running && s12.Time < 120) { s12.Step(); if (pier >= 0) capMin = Math.Min(capMin, s12.Model.AnchorMaxLoad[pier]); }
+            Check("天气 洪水软化土体：桥墩地基承载下降 25%（材料强度不变）", pier < 0 || Math.Abs(capMin - cap0 * 0.75) < cap0 * 0.01, $"{capMin}/{cap0}");
+        }
+
+        // Engineering contracts: other weights + one condition, never other physics
+        {
+            var l1c = db.GetLevel("level1");
+            var c1 = EngineeringScore.ContractsFor(l1c); var c13 = EngineeringScore.ContractsFor(db.GetLevel("level13"));
+            Check($"合同 第一关提供低成本 / 高安全 / 环保合同，没有洪水与重载就不提供极端天气 / 重型物流（{string.Join(",", c1)}）",
+                c1.Contains("low_cost") && c1.Contains("high_safety") && c1.Contains("environment") && !c1.Contains("extreme_weather") && !c1.Contains("heavy_logistics"));
+            Check("合同 洪水关提供极端天气合同", c13.Contains("extreme_weather"));
+            SimulationResult RunC(string contract, out BridgeSimulation simOut)
+            {
+                var d = LoadRef("level1"); d.Contract = contract;
+                simOut = new BridgeSimulation(d, l1c, db); simOut.RunToEnd(); EngineeringScore.EvaluateAchievements(simOut); return simOut.Result;
+            }
+            var none = RunC(null, out var sn); var safeC = RunC("high_safety", out _); var cheapC = RunC("low_cost", out var sc);
+            Check("合同 物理结果不变（同一方案利用率、完成时间相同）", none.MaxUtilization == safeC.MaxUtilization && none.CompletionTime == safeC.CompletionTime && none.IsSuccess && safeC.IsSuccess);
+            Check($"合同 高安全合同：利用率 25% 满足条件，按合同权重并乘奖励（{none.Score} → {safeC.Score}）", safeC.ContractMet && safeC.Score > none.Score && safeC.SafetyPoints > none.SafetyPoints);
+            Check($"合同 低成本合同：参考方案造价没有低于 85%，合同未完成但仍通关（{cheapC.ContractNote}）", !cheapC.ContractMet && cheapC.IsSuccess && cheapC.Score > 0 && cheapC.ContractNote.Length > 0);
+            Check("合同 每个合同单独记录（排行榜按合同区分）", EngineeringScore.RecordKey("level1", "low_cost") != EngineeringScore.RecordKey("level1", null));
+            var dsave = LoadRef("level1"); dsave.Contract = "environment";
+            Check("合同 方案保存合同并能读回；旧存档没有合同", GameDatabase.DeserializeDesign(GameDatabase.SerializeDesign(dsave)).Contract == "environment" && LoadRef("level1").Contract == null);
+            var rec = new LevelRecord { Version = db.Scoring.Version };
+            Check("记录 最低环境影响单独记录", rec.Improve(none).Contains("env"));
+        }
+
+        if (Environment.GetEnvironmentVariable("AUDIT") == "1") foreach (var lv in db.Levels) { var sw = System.Diagnostics.Stopwatch.StartNew(); var s = new BridgeSimulation(LoadRef(lv.Id), lv, db); s.RunToEnd(); double t1 = sw.Elapsed.TotalMilliseconds; EngineeringScore.EvaluateAchievements(s); var r = s.Result; Console.WriteLine($"AUDIT {lv.Id} cost {r.TotalCost / lv.Budget:P0} util {r.MaxUtilization:P0} wm {r.WeatherMargin:0.00} T {r.CompletionTime:0}/{r.ReferenceTime:0} env {r.EnvironmentFactor:0.00} base {r.BaseScore} score {r.Score} ach {string.Join(",", r.Achievements.Select(a => a.Id + (a.Earned ? "+" : "-")))} contracts {string.Join(",", EngineeringScore.ContractsFor(lv))} sim {t1:0}ms total {sw.Elapsed.TotalMilliseconds:0}ms"); }
+        // Step 10 regression: approach fast-forward and background achievement evaluation
+        {
+            var l15q = db.GetLevel("level15");
+            var sq = new BridgeSimulation(LoadRef("level15"), l15q, db); sq.Initialize();
+            double quiet = 0; bool wrongQuiet = false,visibleFast=false;
+            while (sq.State == SimState.Running)
+            {
+                sq.Step();
+                if (!sq.QuietTraffic) continue;
+                quiet += BridgeSimulation.FixedDt;
+                if(sq.Vehicles.Any(v=>!v.Finished)||sq.Lifts.Any(l=>l.Phase!=BridgeSimulation.LiftPhase.Boarding||l.Riders.Count>0))visibleFast=true;
+                if (sq.WeatherName != null || sq.Time < BridgeSimulation.StaticPhaseTime) wrongQuiet = true;
+            }
+            Check("Playback: active traffic and lift operations never trigger idle fast-forward",!visibleFast);
+            Check("快进 静态测试、天气事件期间从不快进", !wrongQuiet);
+            var plain = new BridgeSimulation(LoadRef("level15"), l15q, db).RunToEnd();
+            Check("快进 只影响播放速度：判断它不改变测试结果", plain.IsSuccess == sq.Result.IsSuccess && plain.CompletionTime == sq.Result.CompletionTime && plain.MaxUtilization == sq.Result.MaxUtilization);
+
+            string[] ids = { "level3", "level12", "level13", "level14" };
+            int Eval(string id) { var s = new BridgeSimulation(LoadRef(id), db.GetLevel(id), db); s.RunToEnd(); EngineeringScore.EvaluateAchievements(s); return s.Result.Score; }
+            var seq = ids.Select(Eval).ToArray();
+            var par = new int[ids.Length];
+            System.Threading.Tasks.Parallel.For(0, ids.Length, i => par[i] = Eval(ids[i]));
+            Check($"后台 并行评估工程成就与顺序评估结果相同（{string.Join(",", seq)}）", seq.SequenceEqual(par), string.Join(",", par));
+        }
+
+        // Level settings and tunnel materials
+        {
+            var tunnelIds = new[] { "tunnel_immersed", "tunnel_floating", "tunnel_shield" };
+            foreach (var id in new[] { "level13", "level14", "level15" })
+                Check($"关卡设置 {id} 开放全部三种隧道", tunnelIds.All(t => db.GetLevel(id).AllowedMaterials.Contains(t)));
+            foreach (var t in tunnelIds)
+            {
+                var rows = TunnelRules.MaterialTable(db.TunnelConfig, db.GetMaterial(t));
+                Check($"关卡设置 {t} 有属性表（表头 + 3 个等级，每行列数一致）", rows.Count == 4 && rows.All(r => r.Length == rows[0].Length) && TunnelRules.MaterialNotes(db.TunnelConfig, db.GetMaterial(t)).Count >= 2);
+            }
+            bool allSame = true;
+            foreach (var lv in db.Levels)
+            {
+                var copy = GameDatabase.DeserializeLevel(GameDatabase.SerializeLevel(lv));
+                allSame &= db.LevelError(copy) == null && GameDatabase.SerializeLevel(copy) == GameDatabase.SerializeLevel(lv);
+            }
+            Check("关卡设置 每关的设置能完整保存并读回（JSON 往返不变）", allSame);
+            var l13 = GameDatabase.DeserializeLevel(GameDatabase.SerializeLevel(db.GetLevel("level13")));
+            var r13 = new BridgeSimulation(new DesignEditor(LoadRef("level13"), l13, db).Design, l13, db).RunToEnd();
+            Check("关卡设置 读回的第十三关参考方案照常通关", r13.IsSuccess, r13.FailureMessage);
+            l13.AllowedMaterials.Add("no_such_material");
+            Check("关卡设置 引用不存在的建材会被拒绝", db.LevelError(l13) != null);
+            var dry = GameDatabase.DeserializeLevel(GameDatabase.SerializeLevel(db.GetLevel("level13")));
+            dry.Terrain.BuildMinY = dry.Terrain.BuildMaxY + 1;
+            Check("关卡设置 最低建造标高高于最高时会被拒绝", db.LevelError(dry) != null);
+            var low = GameDatabase.DeserializeLevel(GameDatabase.SerializeLevel(db.GetLevel("level13")));
+            low.TrafficEvents.RemoveAll(e => e.Type == TrafficEventType.Environment);
+            var rl = new BridgeSimulation(new DesignEditor(LoadRef("level13"), low, db).Design, low, db).RunToEnd();
+            Check("关卡设置 去掉洪水后第十三关照常通关（改动在仿真里生效）", rl.IsSuccess, rl.FailureMessage);
+            var ed13 = new DesignEditor(LoadRef("level13"), db.GetLevel("level13"), db);
+            ed13.SetTunnelGrade(-1, "normal");
+            var rp = new BridgeSimulation(ed13.Design, db.GetLevel("level13"), db).RunToEnd();
+            Check($"关卡设置 第十三关普通管节的失败提示是强度不够（{rp.Headline}）", !rp.IsSuccess && rp.Headline.Contains("强度") && !rp.FailureMessage.Contains("进水"), rp.FailureMessage);
+        }
+
+        // Game version: one number everywhere, stamped into saves, old files still load
+        {
+            string Read(string rel) => File.ReadAllText(Path.Combine(_root, rel));
+            string v = GameVersion.Current, v4 = v + ".0";
+            Check($"版本 project.godot 的 config/version = {v}", Read("project.godot").Contains($"config/version=\"{v}\""));
+            Check($"版本 导出预设 file / product version = {v4}", Read("export_presets.cfg").Contains($"application/file_version=\"{v4}\"") && Read("export_presets.cfg").Contains($"application/product_version=\"{v4}\""));
+            Check($"版本 安装包 AppVersion = {v}", Read("installer/BridgeArchitect3D.iss").Contains($"#define AppVersion \"{v}\""));
+            Check($"版本 CHANGELOG.md 有 {v} 的条目", Read("CHANGELOG.md").Contains($"## {v}"));
+            Check("版本 比较：未记录版本 = 1.0.0，比当前旧；更新的版本能识别", GameVersion.IsOlder(null) && GameVersion.Compare(null, "1.0.0") == 0
+                && GameVersion.IsNewer("99.0.0") && !GameVersion.IsOlder(v) && GameVersion.Compare("1.10.0", "1.9.0") > 0 && GameVersion.Compare("v1.1.0", "1.1.0") == 0);
+            var d = LoadRef("level1");
+            Check("版本 旧存档没有游戏版本字段也能读", d.GameVersion == null);
+            GameVersion.Stamp(d);
+            var back = GameDatabase.DeserializeDesign(GameDatabase.SerializeDesign(d));
+            Check("版本 保存时写入游戏版本并能读回（与存档格式版本分开）", back.GameVersion == v && back.Version == BridgeDesign.CurrentVersion);
+        }
+
+        // Four-phase test
+        {
+            var l13p = db.GetLevel("level13");
+            var ps = new BridgeSimulation(LoadRef("level13"), l13p, db); ps.Initialize();
+            var seen = new System.Collections.Generic.List<TestPhase>(); bool carsInStatic = false;
+            while (ps.State == SimState.Running)
+            {
+                ps.Step();
+                if (seen.Count == 0 || seen[^1] != ps.Phase) seen.Add(ps.Phase);
+                if (ps.Time < BridgeSimulation.StaticPhaseTime - 1e-9 && ps.Vehicles.Count > 0) carsInStatic = true;
+            }
+            var pr = ps.Result;
+            Check("四阶段 静态测试在前，期间没有车辆和天气", seen.Count > 0 && seen[0] == TestPhase.Static && !carsInStatic && pr.PhaseMaxUtil[0] >= 0);
+            Check("四阶段 依次经过车辆测试、环境测试，最后是结果评估", seen.Contains(TestPhase.Vehicles) && seen.Contains(TestPhase.Environment) && seen[^1] == TestPhase.Result, string.Join(",", seen));
+            Check("四阶段 结果评估给出最薄弱位置、最大变形与天气期间安全裕量",
+                pr.IsSuccess && pr.WeakestText.Length > 0 && !double.IsNaN(pr.WeakestX) && pr.MaxTunnelMove > 0 && !double.IsNaN(pr.WeatherMargin) && pr.WeatherMargin > 0,
+                $"{pr.WeakestText} {pr.MaxTunnelMove} {pr.WeatherMargin}");
+            var pe2 = new DesignEditor(LoadRef("level13"), l13p, db); pe2.SetTunnelGrade(-1, "normal");
+            var pf = new BridgeSimulation(pe2.Design, l13p, db).RunToEnd();
+            Check("四阶段 洪水把普通管节压坏，记在环境测试阶段", !pf.IsSuccess && pf.FailurePhase == TestPhase.Environment, pf.FailurePhase.ToString());
+            var p1 = new BridgeSimulation(LoadRef("level1"), db.GetLevel("level1"), db).RunToEnd();
+            Check("四阶段 没有天气事件的关卡：环境阶段不进行、没有天气裕量", p1.IsSuccess && p1.PhaseMaxUtil[2] < 0 && double.IsNaN(p1.WeatherMargin) && p1.MaxDeckSag > 0);
         }
 
         // 测试 H：模拟一致性

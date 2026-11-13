@@ -112,6 +112,8 @@ namespace BridgeArchitect3D.Physics
             FailureReason.OverBudget => Loc.T("建造成本超出预算"),
             FailureReason.Derailed => Loc.T("列车脱轨（铁轨上下晃动太大）"),
             FailureReason.WrongSurface => Loc.T("车辆驶上了不能通行的路面"),
+            FailureReason.TunnelFlooded => Loc.T("隧道管节强度不够被压坏"),
+            FailureReason.LiftOverload => Loc.T("电梯平台超载"),
             _ => Loc.T("无"),
         };
 
@@ -130,6 +132,7 @@ namespace BridgeArchitect3D.Physics
             FailureReason.VehicleBlocked => new[] { Loc.T("保证车辆经过的桥面完整且坡度不过大") },
             FailureReason.Derailed => new[] { Loc.T("铁路桥要很刚：加高桁架、缩短桥面支点间距，减小列车经过时的下沉和起伏"), Loc.T("用更刚的桥面（钢铁轨桥面）或在桥面下加支柱 / 桥墩") },
             FailureReason.WrongSurface => new[] { Loc.T("火车只能走铁轨桥面或铁轨公路复合桥面"), Loc.T("汽车只能走公路桥面或铁轨公路复合桥面；两种都要过时用复合桥面") },
+            FailureReason.TunnelFlooded => new[] { Loc.T("选中管节升级为加强 / 重型，管片强度更高"), Loc.T("悬浮隧道：增加锚索或换高强复合锚索"), Loc.T("隧道越深水压 / 土压越大：在强度够的前提下抬浅一些") },
             FailureReason.ProgressiveCollapse => new[] { Loc.T("增加冗余构件，避免单根构件破坏引起连锁失效") },
             FailureReason.OverBudget => new[] { Loc.T("删除不必要的构件，或换用便宜材料") },
             _ => Array.Empty<string>(),

@@ -25,6 +25,7 @@ namespace BridgeArchitect3D.Core
             {
                 DirAccess.MakeDirRecursiveAbsolute(SaveDir);
                 design.SavedTotalCost = design.TotalCost();
+                GameVersion.Stamp(design);
                 using var f = Godot.FileAccess.Open(DesignPath(design.LevelId), Godot.FileAccess.ModeFlags.Write);
                 if (f == null) { error = Loc.T("无法写入存档：") + Godot.FileAccess.GetOpenError(); return false; }
                 f.StoreString(GameDatabase.SerializeDesign(design));
@@ -32,6 +33,11 @@ namespace BridgeArchitect3D.Core
             }
             catch (Exception e) { error = e.Message; return false; }
         }
+
+        /// <summary>Warning for a design saved by a newer game version (it still loads; unknown data is dropped).</summary>
+        public static string VersionWarning(BridgeDesign d) =>
+            d != null && GameVersion.IsNewer(d.GameVersion)
+                ? Loc.F("这个方案由更新的版本 v{0} 保存，当前是 {1}：新版本才有的内容可能会丢失", (d.GameVersion), (GameVersion.Display)) : null;
 
         public static BridgeDesign LoadDesign(string levelId, out string error)
         {
@@ -78,6 +84,7 @@ namespace BridgeArchitect3D.Core
                 DirAccess.MakeDirRecursiveAbsolute(NamedDir(design.LevelId));
                 design.SavedTotalCost = design.TotalCost();
                 design.Name = name.Trim();
+                GameVersion.Stamp(design);
                 using var f = Godot.FileAccess.Open(NamedPath(design.LevelId, name), Godot.FileAccess.ModeFlags.Write);
                 if (f == null) { error = Loc.T("无法写入存档：") + Godot.FileAccess.GetOpenError(); return false; }
                 f.StoreString(GameDatabase.SerializeDesign(design));
@@ -159,6 +166,44 @@ namespace BridgeArchitect3D.Core
             return DirAccess.RenameAbsolute(src, $"{CustomDir}/deleted/{id}_{DateTime.Now:yyyyMMddHHmmss}.json") == Error.Ok;
         }
 
+        // ---------------- Level settings overrides (user://level_overrides) ----------------
+        private const string OverrideDir = "user://level_overrides";
+
+        public static string LevelOverridePath(string levelId) => $"{OverrideDir}/{levelId}.json";
+        public static bool HasLevelOverride(string levelId) => Godot.FileAccess.FileExists(LevelOverridePath(levelId));
+
+        public static LevelDefinition LoadLevelOverride(string levelId)
+        {
+            try { return HasLevelOverride(levelId) ? GameDatabase.DeserializeLevel(Godot.FileAccess.GetFileAsString(LevelOverridePath(levelId))) : null; }
+            catch (Exception e) { GD.PushWarning(Loc.F("读取 {0} 失败：{1}", (LevelOverridePath(levelId)), (e.Message))); return null; }
+        }
+
+        public static bool SaveLevelOverride(LevelDefinition level, out string error)
+        {
+            error = null;
+            if (WritesSuspended) return true;
+            try
+            {
+                DirAccess.MakeDirRecursiveAbsolute(OverrideDir);
+                // Keep the previous override (recoverable) before replacing it
+                if (HasLevelOverride(level.Id)) BackupOverride(level.Id);
+                using var f = Godot.FileAccess.Open(LevelOverridePath(level.Id), Godot.FileAccess.ModeFlags.Write);
+                if (f == null) { error = Loc.T("无法写入关卡设置：") + Godot.FileAccess.GetOpenError(); return false; }
+                f.StoreString(GameDatabase.SerializeLevel(level));
+                return true;
+            }
+            catch (Exception e) { error = e.Message; return false; }
+        }
+
+        /// <summary>"Restore defaults": the override moves to user://level_overrides/deleted (not destroyed).</summary>
+        public static bool RemoveLevelOverride(string levelId) => !WritesSuspended && HasLevelOverride(levelId) && BackupOverride(levelId);
+
+        private static bool BackupOverride(string levelId)
+        {
+            DirAccess.MakeDirRecursiveAbsolute($"{OverrideDir}/deleted");
+            return DirAccess.RenameAbsolute(LevelOverridePath(levelId), $"{OverrideDir}/deleted/{levelId}_{DateTime.Now:yyyyMMddHHmmss}.json") == Error.Ok;
+        }
+
         public static T ReadUserJson<T>(string path) where T : class
         {
             try
@@ -175,7 +220,7 @@ namespace BridgeArchitect3D.Core
             try
             {
                 using var f = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Write);
-                f?.StoreString(JsonSerializer.Serialize(data, GameDatabase.JsonOptions));
+                f?.StoreString(JsonSerializer.Serialize(GameVersion.Stamp(data), GameDatabase.JsonOptions));
             }
             catch (Exception e) { GD.PushWarning(Loc.F("写入 {0} 失败：{1}", (path), (e.Message))); }
         }

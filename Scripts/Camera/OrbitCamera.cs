@@ -17,6 +17,7 @@ namespace BridgeArchitect3D.CameraControl
         private float _yawGoal, _pitchGoal, _distGoal;
         private Vector3 _homeTarget;
         private float _homeDist = 30;
+        private float _zoomLimit = 150;
         private bool _ortho;
         private float _rightDrag;
         private const float RotateThreshold = 12f;   // 右键拖动超过多少像素才开始旋转
@@ -34,6 +35,7 @@ namespace BridgeArchitect3D.CameraControl
 
         public void ResetView(bool snap = false)
         {
+            _zoomLimit = Mathf.Max(150, _homeDist);
             _ortho = false;
             _targetGoal = _homeTarget; _yawGoal = 0.35f; _pitchGoal = -0.25f; _distGoal = _homeDist;
             if (snap) { _target = _targetGoal; _yaw = _yawGoal; _pitch = _pitchGoal; _dist = _distGoal; }
@@ -42,17 +44,38 @@ namespace BridgeArchitect3D.CameraControl
         /// <summary>正交侧视（建造默认视角）。snap=true 时立即到位，不做过渡。</summary>
         public void SideView(bool snap = false)
         {
+            _zoomLimit = Mathf.Max(150, _homeDist);
             _ortho = true; _targetGoal = _homeTarget; _yawGoal = 0; _pitchGoal = 0; _distGoal = _homeDist;
             if (snap) { _target = _targetGoal; _yaw = 0; _pitch = 0; _dist = _distGoal; }
         }
         /// <summary>Frame affected geometry in the usable center area, without changing the home view.</summary>
-        public void FrameDiagnostic(Vector3 center,Vector3 extent)
+        public void FrameDiagnostic(Vector3 center,Vector3 extent,float maxDistance = 150)
         {
             _ortho=true; _targetGoal=center; _yawGoal=0; _pitchGoal=0;
+            _zoomLimit = Mathf.Max(maxDistance, _homeDist);
+            Far = Mathf.Max(Far, _zoomLimit + 200);
             var viewport=GetViewport().GetVisibleRect().Size;
             float aspect=Mathf.Max(0.4f,(viewport.X-480)/Mathf.Max(1,viewport.Y));
-            _distGoal=Mathf.Clamp(Mathf.Max(extent.Y+4,(extent.X+4)/aspect)*1.35f/0.85f,8,150);
+            _distGoal=Mathf.Clamp(Mathf.Max(extent.Y+4,(extent.X+4)/aspect)*1.35f/0.85f,8,_zoomLimit);
         }
+
+        public void RememberFrameAsHome() {_homeTarget=_targetGoal;_homeDist=_distGoal;}
+        public void RememberBoundsAsHome(Vector3 center,Vector3 extent)
+        {
+            var viewport=GetViewport().GetVisibleRect().Size;
+            float aspect=Mathf.Max(0.4f,(viewport.X-480)/Mathf.Max(1,viewport.Y));
+            _homeTarget=center;_homeDist=Mathf.Clamp(Mathf.Max(extent.Y+4,(extent.X+4)/aspect)*1.35f/0.85f,8,2000);
+            Far=Mathf.Max(Far,_homeDist+200);
+        }
+
+        private bool _following;
+        /// <summary>Follow a moving point in perspective (the first call frames it; scroll zoom still works).</summary>
+        public void Follow(Vector3 p)
+        {
+            if (!_following) { _following = true; _ortho = false; _distGoal = 22f; _pitchGoal = -0.3f; }
+            _targetGoal = p + new Vector3(0, 1.5f, 0);
+        }
+        public void StopFollow() { if (_following) { _following = false; _targetGoal = _homeTarget; } }
 
         public void TopView() { _ortho = true; _targetGoal = _homeTarget; _yawGoal = 0; _pitchGoal = -1.5533f; _distGoal = _homeDist; }
         public void PerspectiveView() { _ortho = false; _yawGoal = 0.6f; _pitchGoal = -0.45f; _distGoal = _homeDist * 0.9f; }
@@ -84,7 +107,7 @@ namespace BridgeArchitect3D.CameraControl
             else if (e is InputEventMouseButton mb && mb.Pressed)
             {
                 if (mb.ButtonIndex == MouseButton.WheelUp) _distGoal = Mathf.Max(5, _distGoal * 0.9f);
-                else if (mb.ButtonIndex == MouseButton.WheelDown) _distGoal = Mathf.Min(150, _distGoal * 1.1f);
+                else if (mb.ButtonIndex == MouseButton.WheelDown) _distGoal = Mathf.Min(_zoomLimit, _distGoal * 1.1f);
             }
             else if (e is InputEventKey k && k.Pressed && !k.Echo)
             {

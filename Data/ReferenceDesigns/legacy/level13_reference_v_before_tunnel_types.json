@@ -1,0 +1,84 @@
+{
+  "Version": 4,
+  "LevelId": "level13",
+  "Nodes": [
+    {
+      "Id": 1,
+      "Position": {
+        "X": 0,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "L1",
+      "SupportType": "Pinned"
+    },
+    {
+      "Id": 2,
+      "Position": {
+        "X": 60,
+        "Y": 0,
+        "Z": 0
+      },
+      "IsAnchor": true,
+      "AnchorId": "R1",
+      "SupportType": "Pinned"
+    },
+    {
+      "Id": 3,
+      "Position": {
+        "X": 10,
+        "Y": -11,
+        "Z": 0
+      },
+      "TunnelId": 1
+    },
+    {
+      "Id": 4,
+      "Position": {
+        "X": 30,
+        "Y": -11,
+        "Z": 0
+      },
+      "TunnelId": 2
+    },
+    {
+      "Id": 5,
+      "Position": {
+        "X": 40,
+        "Y": -11,
+        "Z": 0
+      },
+      "TunnelId": 2
+    },
+    {
+      "Id": 6,
+      "Position": {
+        "X": 50,
+        "Y": -11,
+        "Z": 0
+      },
+      "TunnelId": 2
+    }
+  ],
+  "Members": [],
+  "NextNodeId": 7,
+  "NextMemberId": 1,
+  "Tunnels": [
+    {
+      "Id": 1,
+      "MaterialId": "tunnel_rc",
+      "X0": 0,
+      "X1": 20,
+      "Cost": 24000
+    },
+    {
+      "Id": 2,
+      "MaterialId": "tunnel_steel",
+      "X0": 20,
+      "X1": 60,
+      "Cost": 76000
+    }
+  ],
+  "NextTunnelId": 3
+}

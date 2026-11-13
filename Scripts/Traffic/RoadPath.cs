@@ -19,8 +19,8 @@ namespace BridgeArchitect3D.Traffic
         public const double StepTolerance = 0.6;   // 可衔接的高度差 m
         /// <summary>坡度比较容差（避免网格节点“刚好 15%”因浮点误差被判超限）。</summary>
         public const double SlopeTolerance = 0.005;
-        /// <summary>超过建议坡度时车辆仍可减速爬坡，超过此倍数才爬不上去。</summary>
-        public const double MaxSlopeFactor = 2.0;
+        /// <summary>Steepest grade any vehicle can climb: 30° (tan 30° ≈ 57.7%). Above the suggested grade vehicles slow down.</summary>
+        public const double MaxClimbGrade = 0.57735026918962573;
 
         // 路径点：位置 = 节点 A、B 位移按 T 插值（A=-1 表示地面固定点）
         private readonly List<int> _pa = new(), _pb = new();
@@ -70,7 +70,8 @@ namespace BridgeArchitect3D.Traffic
 
             var p = new RoadPath { Lane = lane };
             var roadNodes = new HashSet<int> { start };
-            p.AddPoint(-1, -1, 0, m.X[start] - ApproachLength, m.Y[start]);
+            // Main road: all vehicles start at the level's fixed ground start (shared with the tunnel route)
+            p.AddPoint(-1, -1, 0, lane == 0 ? Math.Min(m.X[start] - ApproachLength, TunnelRules.GroundStartX(level)) : m.X[start] - ApproachLength, m.Y[start]);
             p.AddPoint(start, start, 0, m.X[start], m.Y[start]);
             p.AddSegment(-1, 0, 0);
 
@@ -93,7 +94,7 @@ namespace BridgeArchitect3D.Traffic
                     double ye = m.Y[lo] + (m.Y[hi] - m.Y[lo]) * (xe - xl) / (xh - xl);
                     if (Math.Abs(ye - cy) > StepTolerance) continue;
                     double grade=Math.Abs((m.Y[hi]-m.Y[lo])/(xh-xl));
-                    bool valid=m.Length[k]<=m.Mat[k].MaximumLength+1e-6 && grade<=level.Objectives.MaxDeckSlope*MaxSlopeFactor+SlopeTolerance;
+                    bool valid=m.Length[k]<=m.Mat[k].MaximumLength+1e-6 && grade<=MaxClimbGrade+SlopeTolerance;
                     bool startsHere=Math.Abs(xl-cx)<1e-6;
                     if(best>=0)
                     {
@@ -113,10 +114,10 @@ namespace BridgeArchitect3D.Traffic
                 int h2 = l2 == m.A[k2] ? m.B[k2] : m.A[k2];
                 double dx = m.X[h2] - m.X[l2], dy = m.Y[h2] - m.Y[l2];
                 double slope = Math.Abs(dy / dx), limit = level.Objectives.MaxDeckSlope;
-                if (slope > limit * MaxSlopeFactor + SlopeTolerance)
+                if (slope > MaxClimbGrade + SlopeTolerance)
                 {
                     reason = FailureReason.VehicleBlocked; involved.Add(m.MemberIds[k2]);
-                    error = Loc.F("桥面 #{0} 坡度 {1:0}% 太陡，车辆爬不上去（最多 {2:0}%，建议不超过 {3:0}%）", (m.MemberIds[k2]), (slope * 100), (limit * MaxSlopeFactor * 100), (limit * 100));
+                    error = Loc.F("桥面 #{0} 坡度 {1:0}% 太陡，车辆爬不上去（最多 30°≈{2:0}%，建议不超过 {3:0}%）", (m.MemberIds[k2]), (slope * 100), (MaxClimbGrade * 100), (limit * 100));
                     break;
                 }
                 if (slope > limit + SlopeTolerance) p.SteepMemberIds.Add(m.MemberIds[k2]);
@@ -153,7 +154,7 @@ namespace BridgeArchitect3D.Traffic
                     p.AddPoint(end, end, 0, m.X[end], m.Y[end]);
                     p.AddSegment(-1, 0, 0);
                 }
-                p.AddPoint(-1, -1, 0, m.X[end] + ApproachLength, m.Y[end]);
+                p.AddPoint(-1, -1, 0, lane == 0 ? Math.Max(m.X[end] + ApproachLength, TunnelRules.GroundEndX(level)) : m.X[end] + ApproachLength, m.Y[end]);
                 p.AddSegment(-1, 0, 0);
             }
             else if (reason == FailureReason.None)
@@ -171,6 +172,29 @@ namespace BridgeArchitect3D.Traffic
             }
             p.TotalLength = s;
             p.RoadNodeIndices = roadNodes.ToArray();
+            return p;
+        }
+
+        /// <summary>A fixed ground route (underwater tunnel): no deck members, always complete.</summary>
+        /// <summary>Lift segments of a ground route (they run backwards in x: the vehicle rides a lift, it does not drive them).</summary>
+        public readonly HashSet<int> LiftSegments = new();
+
+        public static RoadPath FromGround(IReadOnlyList<(double x, double y)> pts, int lane)
+        {
+            var p = new RoadPath { Lane = lane };
+            for (int i = 0; i < pts.Count; i++)
+            {
+                p.AddPoint(-1, -1, 0, pts[i].x, pts[i].y);
+                if (i > 0) { p.AddSegment(-1, 0, 0); if (pts[i].x < pts[i - 1].x - 1e-6) p.LiftSegments.Add(i - 1); }
+            }
+            p.Complete = true;
+            double s = 0;
+            for (int i = 0; i < p.SegmentMember.Count; i++)
+            {
+                p.SegmentStartS.Add(s);
+                s += Math.Sqrt(Sq(p.PointX[i + 1] - p.PointX[i]) + Sq(p.PointY[i + 1] - p.PointY[i]));
+            }
+            p.TotalLength = s;
             return p;
         }
 

@@ -24,6 +24,17 @@ namespace BridgeArchitect3D.Data
         /// <summary>桥墩上的支点（中部 / 顶部）：可以位于水面以下。</summary>
         public bool PierPart { get; set; }
         public FoundationType Foundation { get; set; } = FoundationType.None;
+        /// <summary>Control point of the underwater tunnel route (Y = tube bottom). Moved by dragging.</summary>
+        public bool TunnelPoint { get; set; }
+        /// <summary>Support point on the tunnel roof at element joint TunnelJoint (1-based; 0 = not a support).</summary>
+        public int TunnelJoint { get; set; }
+        /// <summary>Save version 4 tunnel section id (read only, cleared by TunnelRules.MigrateLegacy).</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("TunnelId")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+        public int TunnelLegacyId { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore] public bool IsTunnelSupport => TunnelJoint > 0;
+        /// <summary>Any node owned by the tunnel (control point or support): not an ordinary member end.</summary>
+        [System.Text.Json.Serialization.JsonIgnore] public bool IsTunnelNode => TunnelPoint || TunnelJoint > 0;
 
         public BridgeNode Clone() => (BridgeNode)MemberwiseClone();
     }
@@ -126,14 +137,20 @@ namespace BridgeArchitect3D.Data
     }
 
     /// <summary>玩家建造方案。建造与测试状态独立：测试只读取方案的副本，不会修改原始方案。</summary>
-    public class BridgeDesign
+    public class BridgeDesign : IVersionStamped
     {
-        /// <summary>Save format version. 1 = no mechanisms; 2 = bascule settings; 3 = optional pin-jointed linkage drivers.</summary>
-        public const int CurrentVersion = 3;
+        /// <summary>Game version that last saved this design (null = saved before versioning, i.e. 1.0.0).
+        /// Separate from Version, which is the save format.</summary>
+        public string GameVersion { get; set; }
+        /// <summary>Save format version. 1 = no mechanisms; 2 = bascule settings; 3 = optional pin-jointed linkage drivers;
+        /// 4 = underwater tunnel sections; 5 = tunnel route with graded elements (version 4 migrates).</summary>
+        public const int CurrentVersion = 5;
         public int Version { get; set; } = CurrentVersion;
         public string LevelId { get; set; }
         /// <summary>Player-given design name (named saves); empty for the auto save.</summary>
         public string Name { get; set; }
+        /// <summary>Optional engineering contract (scoring.json Contracts id); null = no contract. Old saves have none.</summary>
+        public string Contract { get; set; }
         public List<BridgeNode> Nodes { get; set; } = new();
         public List<BridgeMember> Members { get; set; } = new();
         public int NextNodeId { get; set; } = 1;
@@ -148,12 +165,19 @@ namespace BridgeArchitect3D.Data
         /// <summary>Movable-bridge mechanisms. Never null after loading (see EnsureMechanisms).</summary>
         public MechanismData Mechanisms { get; set; } = new();
         public MechanismData EnsureMechanisms() => Mechanisms ??= new MechanismData();
+        /// <summary>Underwater tunnel sections. Never null after loading.</summary>
+        /// <summary>The underwater tunnel (null = none).</summary>
+        public TunnelRoute Tunnel { get; set; }
+        /// <summary>Save version 4 tunnel sections (read only, migrated on load).</summary>
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public List<TunnelSegment> Tunnels { get; set; }
 
         public BridgeNode FindNode(int id) => Nodes.FirstOrDefault(n => n.Id == id);
         public BridgeMember FindMember(int id) => Members.FirstOrDefault(m => m.Id == id);
         /// <summary>总花费 = 新建构件费用 + 拆除费 + 修复费（旧桥原有构件不计费）。</summary>
         public double TotalCost() => Members.Sum(m => m.EffectiveCost()) + DemolitionCost + RepairCost
-                                     + Nodes.Sum(n => n.PierBase ? FoundationRules.Cost(n.Foundation) : 0);
+                                     + Nodes.Sum(n => n.PierBase ? FoundationRules.Cost(n.Foundation) : 0)
+                                     + (Tunnel?.Cost ?? 0);
 
         public BridgeDesign Clone()
         {
@@ -164,6 +188,8 @@ namespace BridgeArchitect3D.Data
                 Nodes = Nodes.Select(n => n.Clone()).ToList(),
                 Members = Members.Select(m => m.Clone()).ToList(),
                 Mechanisms = (Mechanisms ?? new MechanismData()).Clone(),
+                Tunnel = Tunnel?.Clone(),
+                Name = Name, Contract = Contract,
             };
         }
 

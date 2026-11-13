@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using BridgeArchitect3D.Data;
 
 namespace BridgeArchitect3D.Physics
@@ -132,6 +133,7 @@ namespace BridgeArchitect3D.Physics
             m.IsFoundation = new bool[n];
             m.PierFoundation = new FoundationType[n];
             m.ScourZone = new bool[n];
+            m.TunnelOf = new int[n];
             // 桥墩墩底：固定支座（约束 X、Y 与转角），承载力取决于地基（软土 / 岩石）与基础类型（浅基础 / 桩基础）
             for (int i = 0; i < n; i++)
             {
@@ -144,6 +146,22 @@ namespace BridgeArchitect3D.Physics
                 m.AnchorMaxLoad[i] = FoundationRules.Capacity(zone, node.Foundation);
                 m.PierFoundation[i] = node.Foundation;
                 m.ScourZone[i] = zone.Scour;
+            }
+            // Underwater tunnel support points (element joints): fixed like a pier foundation; capacity from the
+            // weaker of the two joined elements and the soil
+            var tgeo = TunnelGeometry.Build(design, db);
+            for (int i = 0; i < n && tgeo != null; i++)
+            {
+                var node = design.Nodes[i];
+                if (!node.IsTunnelSupport || node.TunnelJoint >= tgeo.Count) continue;
+                int j = node.TunnelJoint;
+                var grade = tgeo.Grade[j - 1].SupportLoad <= tgeo.Grade[j].SupportLoad ? tgeo.Grade[j - 1] : tgeo.Grade[j];
+                var zone = level.Terrain.ZoneAt(node.Position.X);
+                m.FixX[i] = true; m.FixY[i] = true; m.FixRot[i] = true;
+                m.IsAnchor[i] = true;
+                m.AnchorIds[i] = Loc.F("隧道支点 #{0}（{1}，{2}）", (node.Id), (grade.Name), (zone.Name));
+                m.AnchorMaxLoad[i] = TunnelRules.SupportCapacity(db.TunnelConfig, grade, zone);
+                m.TunnelOf[i] = j;
             }
             for (int k = 0; k < c; k++)
             {
@@ -186,7 +204,7 @@ namespace BridgeArchitect3D.Physics
             AnchorMaxLoad = Grow(AnchorMaxLoad, 0.0); AnchorIds = Grow(AnchorIds, (string)null);
             Alias = Grow(Alias, -1); AliasRot = Grow(AliasRot, false);
             FixRot = Grow(FixRot, false); IsFoundation = Grow(IsFoundation, false);
-            PierFoundation = Grow(PierFoundation, FoundationType.None); ScourZone = Grow(ScourZone, false);
+            PierFoundation = Grow(PierFoundation, FoundationType.None); ScourZone = Grow(ScourZone, false); TunnelOf = Grow(TunnelOf, 0);
             NodeIndex[-NodeIds[i]] = j;
             foreach (int k in memberIndices)
             {
@@ -211,6 +229,8 @@ namespace BridgeArchitect3D.Physics
         public FoundationType[] PierFoundation;
         /// <summary>墩底位于冲刷区（洪水时浅基础会被掏空）。</summary>
         public bool[] ScourZone;
+        /// <summary>Tunnel section id of a tunnel support node (0 = none).</summary>
+        public int[] TunnelOf;
 
         /// <summary>节点转角被约束（立柱刚接基础）。</summary>
         public bool[] FixRot;
