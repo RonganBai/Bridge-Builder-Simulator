@@ -26,9 +26,21 @@ namespace BridgeArchitect3D.Data
             Converters = { new JsonStringEnumConverter() },
         };
 
-        public static GameDatabase FromJson(string materialsJson, string vehiclesJson, string levelsJson)
+        /// <summary>Underwater tunnel numbers (Data/Tunnels/tunnels.json); null = tunnels unavailable.</summary>
+        public TunnelConfig TunnelConfig { get; set; }
+        /// <summary>Unified weather (weather.json); built-in defaults when the file is not given.</summary>
+        public WeatherConfig Weather { get; set; } = WeatherConfig.Default();
+        /// <summary>Engineering Score settings (scoring.json); built-in defaults when the file is not given.</summary>
+        public ScoringConfig Scoring { get; set; } = ScoringConfig.Default();
+
+        public static GameDatabase FromJson(string materialsJson, string vehiclesJson, string levelsJson, string tunnelsJson = null, string weatherJson = null, string scoringJson = null)
         {
             var db = new GameDatabase();
+            if (scoringJson != null) db.Scoring = JsonSerializer.Deserialize<ScoringConfig>(scoringJson, JsonOptions) ?? ScoringConfig.Default();
+            if (weatherJson != null) db.Weather = JsonSerializer.Deserialize<WeatherConfig>(weatherJson, JsonOptions) ?? WeatherConfig.Default();
+            if (tunnelsJson != null) db.TunnelConfig = JsonSerializer.Deserialize<TunnelConfig>(tunnelsJson, JsonOptions);
+            TunnelRules.Bind(db);
+            EngineeringScore.Bind(db);
             var mats = JsonSerializer.Deserialize<MaterialFile>(materialsJson, JsonOptions) ?? throw new Exception(Loc.T("材料数据为空"));
             foreach (var m in mats.Materials) db.Materials[m.MaterialId] = m;
             var veh = JsonSerializer.Deserialize<VehicleFile>(vehiclesJson, JsonOptions) ?? throw new Exception(Loc.T("车辆数据为空"));
@@ -43,15 +55,38 @@ namespace BridgeArchitect3D.Data
         private void Validate()
         {
             foreach (var l in Levels)
-            {
-                foreach (var id in l.AllowedMaterials)
-                    if (!Materials.ContainsKey(id)) throw new Exception(Loc.F("关卡 {0} 引用了不存在的材料 {1}", (l.Id), (id)));
-                foreach (var e in l.TrafficEvents)
-                    if (e.Type == TrafficEventType.Vehicle && !Vehicles.ContainsKey(e.VehicleId))
-                        throw new Exception(Loc.F("关卡 {0} 引用了不存在的车辆 {1}", (l.Id), (e.VehicleId)));
-                if (!l.Anchors.Any(a => a.IsRoadStart) || !l.Anchors.Any(a => a.IsRoadEnd))
-                    throw new Exception(Loc.F("关卡 {0} 缺少道路起点/终点锚点", (l.Id)));
-            }
+                if (LevelError(l) is { } err) throw new Exception(err);
+        }
+
+        /// <summary>Why a level definition cannot be played (null = valid). Used for built-in data and level settings.</summary>
+        public string LevelError(LevelDefinition l)
+        {
+            if (l == null) return Loc.T("关卡数据为空");
+            if (l.Terrain == null || l.Objectives == null || l.Anchors == null || l.AllowedMaterials == null || l.TrafficEvents == null)
+                return Loc.F("关卡 {0} 缺少地形 / 目标 / 锚点 / 建材 / 事件", (l.Id));
+            foreach (var id in l.AllowedMaterials)
+                if (!Materials.ContainsKey(id)) return Loc.F("关卡 {0} 引用了不存在的材料 {1}", (l.Id), (id));
+            foreach (var e in l.TrafficEvents)
+                if ((e.Type == TrafficEventType.Vehicle || e.Type == TrafficEventType.Train) && (e.VehicleId == null || !Vehicles.ContainsKey(e.VehicleId)))
+                    return Loc.F("关卡 {0} 引用了不存在的车辆 {1}", (l.Id), (e.VehicleId));
+            if (!l.Anchors.Any(a => a.IsRoadStart) || !l.Anchors.Any(a => a.IsRoadEnd))
+                return Loc.F("关卡 {0} 缺少道路起点/终点锚点", (l.Id));
+            if (l.Terrain.RiverBedDepth > l.Terrain.WaterLevel && l.Terrain.HasWater)
+                return Loc.T("河床不能高于水位");
+            if (l.Terrain.BuildMinY >= l.Terrain.BuildMaxY) return Loc.T("最低建造标高要低于最高建造标高");
+            return null;
+        }
+
+        public static string SerializeLevel(LevelDefinition l) => JsonSerializer.Serialize(l, JsonOptions);
+        public static LevelDefinition DeserializeLevel(string json) => JsonSerializer.Deserialize<LevelDefinition>(json, JsonOptions);
+
+        /// <summary>Replace a built-in level (level settings override); false when no level has that id.</summary>
+        public bool ReplaceLevel(LevelDefinition l)
+        {
+            int i = LevelIndex(l?.Id);
+            if (i < 0) return false;
+            Levels[i] = l;
+            return true;
         }
 
         public MaterialDefinition GetMaterial(string id) => id != null && Materials.TryGetValue(id, out var m) ? m : null;
@@ -68,6 +103,7 @@ namespace BridgeArchitect3D.Data
             var d = JsonSerializer.Deserialize<BridgeDesign>(json, JsonOptions);
             if (d == null) return null;
             var mechanisms=d.EnsureMechanisms();
+            TunnelRules.MigrateLegacy(d);
             if(mechanisms.Linkage?.Drivers!=null)
                 foreach(var driver in mechanisms.Linkage.Drivers)
                 {

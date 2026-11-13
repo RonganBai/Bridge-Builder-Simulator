@@ -27,6 +27,11 @@ namespace BridgeArchitect3D.Physics
         public double FinishTime;
         /// <summary>正在液压活动段前停车等候（液压装置动作期间，不算卡住）。</summary>
         public bool WaitingForBridge;
+        /// <summary>Waiting at a tunnel portal (closed flood gate or ponding water); not a failure.</summary>
+        public bool WaitingAtPortal;
+        /// <summary>Riding a bank lift: vertical offset from the path (display only, the path position does not change while riding).</summary>
+        public double LiftDy;
+        public bool OnLift;
         public double RearOffset => Def.Axles.Count == 0 ? 0 : Def.Axles.Min(a => a.Offset);
         /// <summary>Train offsets use the locomotive nose; other vehicles use the leading axle.</summary>
         public double FrontOverhang => Def.Kind == "train" ? 0.2 : Math.Max(0, (Def.Length + RearOffset) / 2);
@@ -75,6 +80,8 @@ namespace BridgeArchitect3D.Physics
         public bool[] Broken;
         public float[] Utilization;
         public double[] VehicleS;
+        public double[] VehicleLiftDy;
+        public double[] LiftPlatformDy, LiftDoorOpen;
         public bool[] VehicleActive;
         public void CopyFrom(SimFrame o)
         {
@@ -86,6 +93,9 @@ namespace BridgeArchitect3D.Physics
             Array.Copy(o.Broken, Broken, Broken.Length);
             Array.Copy(o.Utilization, Utilization, Utilization.Length);
             Array.Copy(o.VehicleS, VehicleS, VehicleS.Length);
+            Array.Copy(o.VehicleLiftDy, VehicleLiftDy, VehicleLiftDy.Length);
+            if(o.LiftPlatformDy!=null&&LiftPlatformDy!=null)Array.Copy(o.LiftPlatformDy,LiftPlatformDy,Math.Min(o.LiftPlatformDy.Length,LiftPlatformDy.Length));
+            if(o.LiftDoorOpen!=null&&LiftDoorOpen!=null)Array.Copy(o.LiftDoorOpen,LiftDoorOpen,Math.Min(o.LiftDoorOpen.Length,LiftDoorOpen.Length));
             Array.Copy(o.VehicleActive, VehicleActive, VehicleActive.Length);
         }
     }
@@ -95,13 +105,17 @@ namespace BridgeArchitect3D.Physics
     /// 每个固定时间步：推进车辆 → 车轴载荷分配到桥面节点 → 求解结构 → 检测失效 → 断裂后重新求解。
     /// 模拟只操作方案副本，原始建造方案不会被修改。固定步长 + 无随机数，保证结果可重复。
     /// </summary>
-    public class BridgeSimulation
+    public partial class BridgeSimulation
     {
         public const double FixedDt = 1.0 / 60.0;
         public const double StuckLimit = 3.0;     // 车辆被卡住多久判定失败 s
         private const double HistoryInterval = 0.1;
         private const int HistoryFrames = 60;      // 约 6 秒回放
         private const double MaxTestTime = 240;
+        /// <summary>Timeout: 240 s, or twice the ideal finish time plus a minute on long routes (deep tunnels with
+        /// long ramps, waiting at closed portals), so a slow but working design is not cut off.</summary>
+        private double _timeLimit = -1;
+        private double TimeLimit => _timeLimit >= 0 ? _timeLimit : _timeLimit = Math.Max(MaxTestTime, 2 * IdealFinishTime() + 60);
 
         public BridgeDesign Design { get; }          // 测试副本
         public LevelDefinition Level { get; }
@@ -110,8 +124,115 @@ namespace BridgeArchitect3D.Physics
         public RoadPath Path { get; private set; }
         /// <summary>各层道路的行驶路径（索引 = 道路层号顺序）。</summary>
         public readonly List<RoadPath> Paths = new();
-        public RoadPath PathFor(int lane) => Paths.FirstOrDefault(p => p.Lane == lane) ?? Path;
+        public RoadPath PathFor(int lane) => lane == TunnelRules.Lane && TunnelPath != null ? TunnelPath : Paths.FirstOrDefault(p => p.Lane == lane) ?? Path;
+        /// <summary>Vehicle route through a complete underwater tunnel (null when there is none).</summary>
+        public RoadPath TunnelPath { get; private set; }
+        /// <summary>The tube cracked and flooded (any element over 100%).</summary>
+        public bool TunnelFlooded { get; private set; }
+        public bool TunnelOpen => TunnelPath != null && !TunnelFlooded;
+        /// <summary>Tube geometry and its latest check (pressure, bearing, settlement, joints) for display.</summary>
+        public TunnelGeometry TunnelGeo { get; private set; }
+        public TunnelState TunnelStatus { get; } = new();
+        /// <summary>Peak tube utilization during the test.</summary>
+        public double TunnelPeakUtil { get; private set; }
+        private bool _tunnelScouring;
+        private readonly List<(double x, double force)> _tunnelLoads = new();
+        /// <summary>Shield: groundwater rise around each element, lagging behind the flood (per soil).</summary>
+        private double[] _groundwater;
+        /// <summary>Road vehicles of the main road take a complete, intact tunnel; trains always use the bridge.</summary>
+        private int LaneFor(int lane, VehicleDefinition def) => lane == 0 && TunnelOpen && !RailTrack.IsTrain(def) ? TunnelRules.Lane : lane;
+
+        /// <summary>Highest water rise any environment event of this test reaches, m.</summary>
+        private double PeakFloodRise()
+        {
+            double m = 0;
+            foreach (var e in Level.TrafficEvents)
+                if (e.Type == TrafficEventType.Environment)
+                    m = Math.Max(m, e.Weather == null ? e.Height : e.Rise ?? Db.Weather?.Preset(e.Weather)?.WaterRise ?? 0);
+            return m;
+        }
+
+        private void FloodTunnel(string text)
+        {
+            if (TunnelFlooded) return;
+            TunnelFlooded = true;
+            RecordIssue(FailureReason.TunnelFlooded, text, null);
+            // The tube no longer carries its support points
+            for (int i = 0; i < Model.NodeCount; i++)
+            {
+                if (Model.TunnelOf[i] == 0) continue;
+                Model.FixX[i] = false; Model.FixY[i] = false; Model.FixRot[i] = false; Model.AnchorMaxLoad[i] = 0; Model.IsAnchor[i] = false;
+            }
+            var ev = new StructureEvent { Time = Time, MemberId = -1, Mode = FailureReason.TunnelFlooded, Text = text };
+            Events.Add(ev); MemberBroken?.Invoke(ev);
+            var trapped = Vehicles.FirstOrDefault(v => v.Lane == TunnelRules.Lane && !v.Finished && !v.Fallen);
+            if (trapped != null && State == SimState.Running)
+            {
+                trapped.Fallen = true; _failVehicle = trapped;
+                Fail(FailureReason.TunnelFlooded, Loc.F("{0}\n结果：{1} 在损坏的隧道里无法继续行驶", (_issueText), (trapped.Def.Name)), _issueMembers);
+            }
+        }
+
+        /// <summary>Check the tube under the current water level, scour and vehicle axles; over 100% floods it.</summary>
+        private void CheckTunnel()
+        {
+            if (TunnelGeo == null || Db.TunnelConfig == null) return;
+            _tunnelLoads.Clear();
+            double floor = TunnelGeo.Type.FloorHeight;
+            foreach (var v in Vehicles)
+            {
+                if (v.Lane != TunnelRules.Lane || v.Finished || v.Fallen) continue;
+                foreach (var axle in v.Def.Axles)
+                {
+                    v.Path.Evaluate(v.FrontS + axle.Offset, null, 1, out double x, out double y);
+                    double b = TunnelGeo.BottomAt(x);
+                    if (double.IsNaN(b) || y > b + floor + 0.05) continue;   // on a ramp inside the bank
+                    _tunnelLoads.Add((x, v.Def.Mass * axle.LoadFraction * StructuralModel.Gravity));
+                }
+            }
+            var tc = Db.TunnelConfig;
+            double share0 = 1;
+            if (TunnelGeo.Type.IsShield)
+            {
+                if (_groundwater == null || _groundwater.Length != TunnelGeo.Count) _groundwater = new double[TunnelGeo.Count];
+                double dt = Time > 0 ? FixedDt : 0;
+                for (int i = 0; i < _groundwater.Length; i++)
+                {
+                    var (share, lag) = TunnelAnalysis.GroundwaterResponse(TunnelGeo, Level, tc, i);
+                    // River rise and rain soaking in both reach the tunnel through its most permeable layer, delayed
+                    _groundwater[i] += (share * (FloodRise + GroundwaterDirect) - _groundwater[i]) * Math.Min(1, dt / lag);
+                }
+            }
+            var env = new TunnelEnvironment { WaterY = Level.Terrain.WaterLevel + FloodRise, Scouring = _tunnelScouring,
+                Current = Time > 0 || FloodFraction > 0 ? Current * share0 : Db.Weather.Normal.Current, GroundwaterRise = _groundwater, Softening = Softening };
+            TunnelAnalysis.Evaluate(TunnelGeo, Level, Db.TunnelConfig, env, _tunnelLoads, TunnelStatus);
+            TunnelPeakUtil = Math.Max(TunnelPeakUtil, TunnelStatus.MaxUtil);
+            if (!TunnelFlooded)
+            {
+                double tu = Math.Min(1, TunnelStatus.MaxUtil);
+                if (tu > Result.MaxUtilization && TunnelStatus.Worst >= 0)
+                {
+                    Result.WeakestMemberId = -1;
+                    Result.WeakestText = Loc.F("隧道管节 #{0}", (TunnelStatus.Worst + 1));
+                    Result.WeakestX = TunnelGeo.MidX(TunnelStatus.Worst);
+                }
+                Result.MaxUtilization = Math.Max(Result.MaxUtilization, tu);
+                NotePhaseUtil(tu);
+                for (int i = 0; i < TunnelStatus.Count; i++)
+                    Result.MaxTunnelMove = Math.Max(Result.MaxTunnelMove, Math.Max(i < TunnelStatus.Settle.Length ? TunnelStatus.Settle[i] : 0, i < TunnelStatus.Sway.Length ? TunnelStatus.Sway[i] : 0));
+            }
+            if (TunnelStatus.MaxUtil >= 1 && !TunnelFlooded) FloodTunnel(TunnelStatus.WorstText);
+        }
+
         public SolveOutput Output { get; } = new();
+
+        /// <summary>
+        /// Idle intervals only. Approaching, waiting and lifted vehicles remain visible at the selected playback rate.
+        /// </summary>
+        public bool QuietTraffic => State == SimState.Running && Time >= StaticPhaseTime && _axleCount == 0 && _tunnelLoads.Count == 0
+            && !Vehicles.Any(v=>!v.Finished)
+            && Lifts.All(l=>l.Phase==LiftPhase.Boarding&&l.Riders.Count==0)
+            && WeatherName == null && HydraulicFactor <= 0 && !(Bascule.Active&&Bascule.TrafficStopped) && !Ships.Any(s => s.Spawned && !s.Done);
         public MemberStatus[] Status { get; private set; } = Array.Empty<MemberStatus>();
         public SimState State { get; private set; } = SimState.NotStarted;
         public SimulationResult Result { get; } = new();
@@ -221,31 +342,73 @@ namespace BridgeArchitect3D.Physics
             foreach (var m in Design.Members) m.DamageState = DamageState.Intact;
             Level = level; Db = db;
             _solver = solver ?? new StructureSolver();
-            _traffic = new TrafficEventSystem(level.TrafficEvents.Where(e => e.Type == TrafficEventType.Vehicle));
+            // Phase 1 (static) comes first: every vehicle, ship and weather event starts StaticPhaseTime later
+            TestEvents = level.TrafficEvents.Select(e => e.Shifted(StaticPhaseTime)).ToList();
+            _traffic = new TrafficEventSystem(TestEvents.Where(e => e.Type == TrafficEventType.Vehicle));
             _totalVehicles = _traffic.Count;
-            foreach (var e in level.TrafficEvents.Where(e => e.Type == TrafficEventType.Ship).OrderBy(e => e.Time))
+            foreach (var e in TestEvents.Where(e => e.Type == TrafficEventType.Ship).OrderBy(e => e.Time))
                 Ships.Add(new ShipState { Ev = e, Z = ShipState.StartZ });
+        }
+
+        /// <summary>Length of phase 1: the structure stands alone (self weight, normal weather) before any traffic.</summary>
+        public const double StaticPhaseTime = 1.0;
+        /// <summary>The level's events shifted behind the static phase.</summary>
+        public List<TrafficEvent> TestEvents { get; }
+        /// <summary>Current test phase (weather has priority over vehicles while an event is active).</summary>
+        public TestPhase Phase => State is SimState.Succeeded or SimState.Failed ? TestPhase.Result
+            : Time < StaticPhaseTime ? TestPhase.Static : WeatherName != null ? TestPhase.Environment : TestPhase.Vehicles;
+        private TestPhase LivePhase => Time < StaticPhaseTime ? TestPhase.Static : WeatherName != null ? TestPhase.Environment : TestPhase.Vehicles;
+        private void NotePhaseUtil(double u)
+        {
+            int p = (int)LivePhase;
+            Result.PhaseMaxUtil[p] = Math.Max(Result.PhaseMaxUtil[p], u);
         }
 
         /// <summary>当前洪水水位上涨量 m（显示用）。</summary>
         public double FloodRise { get; private set; }
+        /// <summary>How far the strongest flood is towards its peak (0..1); drives the river current.</summary>
+        public double FloodFraction { get; private set; }
+        /// <summary>Unified weather right now (shared by bridges and tunnels).</summary>
+        public double Current { get; private set; }
+        public double GroundwaterDirect { get; private set; }
+        public double Softening { get; private set; }
+        public double PondRate { get; private set; }
+        /// <summary>Name of the strongest active weather event (null = normal).</summary>
+        public string WeatherName { get; private set; }
+        // Tunnel portals: ponding depth (m), gate state, traffic blocked at the entrance
+        public double PortalPond { get; private set; }
+        public bool GateClosed { get; private set; }
+        public bool PortalBlocked => GateClosed || PortalPond > Db.Weather.Portal.PondBlockDepth;
+        private double[] _pierCap;
         public const double FloodRampTime = 2.0;
         private readonly HashSet<TrafficEvent> _floodHit = new(), _floodScoured = new();
 
         private void UpdateFlood()
         {
-            FloodRise = 0;
-            foreach (var e in Level.TrafficEvents)
+            var wc = Db.Weather; var normal = wc.Normal;
+            FloodRise = 0; FloodFraction = 0;
+            Current = normal.Current; GroundwaterDirect = normal.GroundwaterRise; Softening = normal.SoilSoftening; PondRate = normal.PondRate; WeatherName = null;
+            double strongest = 0;
+            foreach (var e in TestEvents)
             {
                 if (e.Type != TrafficEventType.Environment) continue;
                 double t = Time - e.Time;
                 if (t < 0 || t > e.Duration + 2 * FloodRampTime) continue;
                 double f = t < FloodRampTime ? t / FloodRampTime : t < FloodRampTime + e.Duration ? 1 : 1 - (t - FloodRampTime - e.Duration) / FloodRampTime;
-                FloodRise = Math.Max(FloodRise, e.Height * f);
-                double floodY = Level.Terrain.WaterLevel + e.Height;
+                var preset = wc.PresetOf(e);
+                double height = wc.RiseOf(e);
+                FloodRise = Math.Max(FloodRise, height * f);
+                FloodFraction = Math.Max(FloodFraction, f);
+                // Every weather quantity ramps with the event; the strongest event of each quantity counts
+                Current = Math.Max(Current, normal.Current + (preset.Current - normal.Current) * f);
+                GroundwaterDirect = Math.Max(GroundwaterDirect, preset.GroundwaterRise * f);
+                Softening = Math.Max(Softening, preset.SoilSoftening * f);
+                PondRate = Math.Max(PondRate, preset.PondRate * (f > 0 ? 1 : 0));
+                if (f * (1 + preset.WaterRise) > strongest) { strongest = f * (1 + preset.WaterRise); WeatherName = e.Name ?? preset.Name; }
+                double floodY = Level.Terrain.WaterLevel + height;
                 // Flood-vulnerable (wooden) piers are washed away once the rising water reaches them: when it covers
                 // the member, or at the flood peak for members that stand higher than the peak
-                double waterNow = Level.Terrain.WaterLevel + e.Height * f;
+                double waterNow = Level.Terrain.WaterLevel + height * f;
                 if (t <= FloodRampTime + e.Duration && !_floodHit.Contains(e))
                 {
                     if (t >= FloodRampTime) _floodHit.Add(e);
@@ -261,7 +424,7 @@ namespace BridgeArchitect3D.Physics
                     }
                 }
                 // 水位达到峰值：冲刷区的浅基础被掏空，失去支撑（桩基础不受影响）
-                if (t >= FloodRampTime && _floodScoured.Add(e))
+                if (t >= FloodRampTime && preset.Scour && _floodScoured.Add(e))
                 {
                     for (int i = 0; i < Model.NodeCount; i++)
                     {
@@ -272,8 +435,39 @@ namespace BridgeArchitect3D.Physics
                         var ev = new StructureEvent { Time = Time, MemberId = -1, Mode = FailureReason.FloodScour, Text = text };
                         Events.Add(ev); MemberBroken?.Invoke(ev);
                     }
+                    // Scour also reaches the bed under the tunnel (checked in CheckTunnel)
+                    _tunnelScouring = true;
                 }
             }
+            // Softer ground lowers what pier foundations and tunnel supports carry (not the materials themselves)
+            if (_pierCap != null)
+                for (int i = 0; i < _pierCap.Length && i < Model.NodeCount; i++)
+                    if (_pierCap[i] > 0 && Model.AnchorMaxLoad[i] > 0) Model.AnchorMaxLoad[i] = _pierCap[i] * (1 - Softening);
+            UpdatePortals();
+        }
+
+        /// <summary>
+        /// Tunnel portals: rain ponds in the ramps (pumps drain it); a flood above the entrance pours in unless
+        /// flood gates hold it (closed gates stop tunnel traffic). Ponding deeper than PondBlockDepth stops vehicles
+        /// at the entrance without damaging the tunnel.
+        /// </summary>
+        private void UpdatePortals()
+        {
+            // Bank lifts replaced the portals: no gate, no ponding, no water pouring in
+            return;
+        }
+
+        /// <summary>Arc length on the tunnel route where vehicles wait before the left portal.</summary>
+        private static double StopBefore(RoadPath p, double x)
+        {
+            for (int i = 0; i + 1 < p.PointX.Count; i++)
+                if (p.PointX[i + 1] >= x)
+                {
+                    double dx = p.PointX[i + 1] - p.PointX[i], seg = Math.Sqrt(dx * dx + Math.Pow(p.PointY[i + 1] - p.PointY[i], 2));
+                    double t = dx > 1e-9 ? Math.Clamp((x - p.PointX[i]) / dx, 0, 1) : 0;
+                    return p.SegmentStartS[i] + seg * t;
+                }
+            return p.TotalLength;
         }
         /// <summary>
         /// Legacy automatic retraction was removed: hydraulics only move through a valid movable-bridge mechanism,
@@ -298,6 +492,11 @@ namespace BridgeArchitect3D.Physics
             Result.Budget = Level.Budget;
             Result.TotalCost = Design.TotalCost();
             Model = StructuralModel.Build(Design, Level, Db);
+            // Foundation capacities before any weather softening (pier bases and tunnel supports)
+            _pierCap = new double[Model.NodeCount];
+            for (int i = 0; i < Model.NodeCount; i++)
+                // Soil softening weakens pier foundations only; tunnel supports ignore the soil
+                if (Model.PierFoundation[i] != FoundationType.None) _pierCap[i] = Model.AnchorMaxLoad[i];
             // Movable bridge: plan leaves / seams and split the released seams (node count may grow)
             Bascule.Prepare(Model, Design, Db, Level);
             FillStrokes();
@@ -317,6 +516,26 @@ namespace BridgeArchitect3D.Physics
             FailureSnapshot = NewFrame();
 
 
+            // Underwater tunnel: checked at once (static test); a complete tube with drivable grades is a road
+            TunnelGeo = TunnelGeometry.Build(Design, Db);
+            CheckTunnel();
+            if (TunnelGeo != null && TunnelRules.Complete(TunnelGeo, Level.Terrain))
+            {
+                // Ramps are built at the grade the weakest vehicle can climb; the tube itself must not be steeper
+                double grade = TunnelRules.MaxGrade(TunnelGeo), lim = TunnelRules.RampGrade(Level, out var weakest);
+                if (grade > lim + RoadPath.SlopeTolerance)
+                    RecordIssue(FailureReason.VehicleBlocked, weakest != null
+                        ? Loc.F("隧道管身坡度 {0:0.0}% 太陡，{1}最多只能爬 {2:0.0}%（上下拖动接缝圆点让路线更平缓）", (grade * 100), (weakest.Name), (lim * 100))
+                        : Loc.F("隧道管身坡度 {0:0.0}% 太陡，车辆最多只能爬 {1:0.0}%（上下拖动接缝圆点让路线更平缓）", (grade * 100), (lim * 100)), null);
+                else
+                {
+                    TunnelPath = RoadPath.FromGround(TunnelRules.Route(Level, TunnelGeo), TunnelRules.Lane);
+                    BuildLifts();
+                }
+            }
+            // Only trains still need the main-road bridge when road vehicles can take the tunnel
+            bool trainsOnMain = TestEvents.Any(e => e.Type == TrafficEventType.Vehicle && e.Lane == 0 && Db.Vehicles.TryGetValue(e.VehicleId, out var vd) && RailTrack.IsTrain(vd));
+
             // 每一层道路各建一条行驶路径（立交桥有上下两层）
             foreach (int lane in Level.Anchors.Where(a => a.IsRoadStart).Select(a => a.RoadLane).Distinct().OrderBy(x => x))
             {
@@ -324,7 +543,7 @@ namespace BridgeArchitect3D.Physics
                 if (path == null) { Fail(reason, err, involved); return; }
                 Paths.Add(path);
                 // 道路问题只记录，不立即判负：车辆照常出发，开到断口处才会被卡住 / 坠落
-                if (reason != FailureReason.None) RecordIssue(reason, err, involved);
+                if (reason != FailureReason.None && !(lane == 0 && TunnelOpen && !trainsOnMain)) RecordIssue(reason, err, involved);
             }
             Path = Paths.FirstOrDefault();
             if (Path == null) { Fail(FailureReason.RoadNotConnected, Loc.T("关卡缺少道路锚点"), null); return; }
@@ -409,6 +628,8 @@ namespace BridgeArchitect3D.Physics
             Broken = new bool[Model.MemberCount],
             Utilization = new float[Model.MemberCount],
             VehicleS = new double[Math.Max(1, _totalVehicles)],
+            VehicleLiftDy = new double[Math.Max(1, _totalVehicles)],
+            LiftPlatformDy = new double[2],LiftDoorOpen = new double[]{1,1},
             VehicleActive = new bool[Math.Max(1, _totalVehicles)],
         };
 
@@ -423,17 +644,18 @@ namespace BridgeArchitect3D.Physics
             while ((ev = _traffic.PopDue(Time)) != null) _waitingSpawn.Add(ev);
             // Nothing on the road and no ship pending: start the next vehicle now instead of idling until its
             // scheduled time (e.g. the truck after the freight train), so the test never appears to hang
-            if (_waitingSpawn.Count == 0 && _traffic.PeekNext() != null && Vehicles.All(v => v.Finished || v.Fallen) && Ships.All(s => s.Done))
+            if (Time >= StaticPhaseTime && _waitingSpawn.Count == 0 && _traffic.PeekNext() != null && Vehicles.All(v => v.Finished || v.Fallen) && Ships.All(s => s.Done))
                 _waitingSpawn.Add(_traffic.PopNext());
             // 起点被同层前车占用时，后车排队等待，避免车辆重叠
             for (int w = 0; w < _waitingSpawn.Count; w++)
             {
                 var e = _waitingSpawn[w];
                 var def = Db.Vehicles[e.VehicleId];
-                var vs = new VehicleState { Def = def, Lane = e.Lane, Path = PathFor(e.Lane) };
+                int vLane = LaneFor(e.Lane, def);
+                var vs = new VehicleState { Def = def, Lane = vLane, Path = PathFor(vLane) };
                 // Keep existing short-vehicle staging; a long train enters nose-first from the left approach.
                 vs.FrontS = def.Kind is "train" or "semi" ? 1.0 - vs.FrontOverhang : -vs.RearOffset + 1.0;
-                var last = Vehicles.LastOrDefault(v => v.Lane == e.Lane && !v.Finished && !v.Fallen);
+                var last = Vehicles.LastOrDefault(v => v.Lane == vLane && !v.Finished && !v.Fallen);
                 if (last != null && last.BodyRearS - def.FollowGap < vs.BodyFrontS) break;
                 Vehicles.Add(vs);
                 _waitingSpawn.RemoveAt(w); w--;
@@ -453,6 +675,7 @@ namespace BridgeArchitect3D.Physics
 
             // 1b2. 洪水：水位上涨；木桥墩被冲毁；冲刷区里的浅基础被掏空
             UpdateFlood();
+            if (State != SimState.Running) return;
 
             // 1c. 液压杆按船只时间表自动收缩 / 恢复
             HydraulicFactor = ComputeHydraulicFactor(Time);
@@ -494,11 +717,18 @@ namespace BridgeArchitect3D.Physics
                     double stop = zone.Value.s0 - BasculeSystem.StopMargin - v.FrontOverhang;
                     if (v.FrontS <= stop + 1e-9 && next > stop) { next = Math.Max(v.FrontS, stop); v.WaitingForBridge = true; }
                 }
+                // Bank lifts: wait for the platform, drive onto it, ride it (the lift moves the vehicle)
+                v.WaitingAtPortal = false;
+                if (v.Lane == TunnelRules.Lane && Lifts.Count > 0)
+                {
+                    if (v.OnLift) continue;
+                    if (!LiftGate(v, ref next)) return;
+                }
                 for (int j = vi - 1; j >= 0; j--)
                 {
                     var ahead = Vehicles[j];
                     if (ahead.Finished || ahead.Fallen || ahead.Lane != v.Lane) continue;
-                    double limit = ahead.BodyRearS - v.Def.FollowGap - v.FrontOverhang;
+                    double limit = ahead.BodyRearS - LiftFollowingGap(v,ahead) - v.FrontOverhang;
                     if (next > limit) next = Math.Max(v.FrontS, limit);
                     break;
                 }
@@ -542,6 +772,10 @@ namespace BridgeArchitect3D.Physics
                 }
             }
 
+            UpdateLifts();
+            CheckTunnel();
+            if (State != SimState.Running) return;
+
             // 3. 求解 + 失效检测
             SolveAndCheck();
             if (State != SimState.Running) return;
@@ -566,7 +800,7 @@ namespace BridgeArchitect3D.Physics
                 if (HasFatalIssue) Fail(_issueReason, _issueText + Loc.T("\n车辆虽已通过，但结构出现了致命问题"), _issueMembers);
                 else Succeed();
             }
-            else if (Time > MaxTestTime) Fail(FailureReason.VehicleBlocked, Loc.T("测试超时，车辆或船只未能通过") +
+            else if (Time > TimeLimit) Fail(FailureReason.VehicleBlocked, Loc.T("测试超时，车辆或船只未能通过") +
                 (Bascule.Fault == null ? "" : Loc.T("\n开启桥：") + Bascule.Fault), null);
         }
 
@@ -643,7 +877,16 @@ namespace BridgeArchitect3D.Physics
                 }
 
                 CurrentMaxUtilization = util;
+                if (worst >= 0 && util > Result.MaxUtilization)
+                {
+                    Result.WeakestMemberId = Model.MemberIds[worst];
+                    var wm = Design.FindMember(Model.MemberIds[worst]);
+                    var wa = wm != null ? Design.FindNode(wm.StartNodeId) : null; var wb = wm != null ? Design.FindNode(wm.EndNodeId) : null;
+                    Result.WeakestX = wa != null && wb != null ? (wa.Position.X + wb.Position.X) / 2 : double.NaN;
+                    Result.WeakestText = Loc.F("构件 #{0}（{1}）", (Model.MemberIds[worst]), (wm != null && Db.Materials.TryGetValue(wm.MaterialId, out var wmat) ? wmat.Name : "?"));
+                }
                 Result.MaxUtilization = Math.Max(Result.MaxUtilization, util);
+                NotePhaseUtil(util);
                 // 开裂提示（钢筋混凝土类）：先开裂、再破坏，反馈更有层次
                 for (int ck = 0; ck < Model.MemberCount; ck++)
                 {
@@ -676,6 +919,7 @@ namespace BridgeArchitect3D.Physics
                     double s = -(Output.Displacement[2 * i + 1] - _prestrainKin[2 * i + 1]);
                     if (s > sag) { sag = s; sagNode = i; }
                 }
+                Result.MaxDeckSag = Math.Max(Result.MaxDeckSag, sag);
                 if (sag > Level.Objectives.MaxDeckDeflection)
                 {
                     _deflectionRecorded = true;
@@ -863,6 +1107,7 @@ namespace BridgeArchitect3D.Physics
         private void Fail(FailureReason reason, string message, List<int> involved, FailureReason secondary = FailureReason.None)
         {
             if (State == SimState.Failed) return;
+            Result.FailurePhase = LivePhase;
             State = SimState.Failed;
             Result.IsSuccess = false;
             Result.FailureReason = reason;
@@ -930,10 +1175,18 @@ namespace BridgeArchitect3D.Physics
                 case FailureReason.ShipCollision:
                     r.Headline = Loc.F("船撞上了{0}的{1}", (where), (what)); r.TopSuggestion = Loc.T("把航道（橙色框）里的构件移走或抬高到船高以上，或改用液压杆让路"); break;
                 case FailureReason.AnchorOverload:
-                    if (r.FailureMessage.Contains(Loc.T("桥墩")))
+                    if (r.FailureMessage.Contains(Loc.T("隧道支点")))
+                    { r.Headline = Loc.T("隧道支点承受不住，失效了"); r.TopSuggestion = Loc.T("隧道支点承载力比桥墩低：把荷载分给更多支点，或换用支点承载更高的隧道建材"); }
+                    else if (r.FailureMessage.Contains(Loc.T("桥墩")))
                     { r.Headline = Loc.T("桥墩下的地基承受不住，基础失效了"); r.TopSuggestion = Loc.T("软土上的桥墩改用桩基础，或把桥墩建在岩石区"); }
                     else { r.Headline = Loc.T("一个锚点承受不住，被拉脱了"); r.TopSuggestion = Loc.T("把载荷分给更多锚点，或减轻桥的自重"); }
                     break;
+                case FailureReason.TunnelFlooded:
+                    r.Headline = Loc.T("隧道管节强度不够，被压坏了");
+                    r.TopSuggestion = Loc.T("选中变红的管节升级为加强 / 重型（强度更高）；悬浮隧道加锚索或换高强锚索；也可以把隧道抬浅一些减小水压");
+                    break;
+                case FailureReason.LiftOverload:
+                    r.Headline = Loc.T("电梯平台承受不住，被压坏了"); r.TopSuggestion = Loc.T("选中隧道，在属性栏把电梯平台加长：平台越长越结实"); break;
                 case FailureReason.FloodScour:
                     r.Headline = Loc.T("洪水冲坏了桥墩"); r.TopSuggestion = Loc.T("冲刷区的桥墩改用桩基础或移到岩石区；洪水关不要用木桥墩"); break;
                 case FailureReason.DeckDeflectionExceeded:
@@ -952,12 +1205,28 @@ namespace BridgeArchitect3D.Physics
         private double IdealFinishTime()
         {
             double t = 0;
-            foreach (var e in Level.TrafficEvents)
+            // Conservative serial reference includes door operation and unloading. Pooled trips can finish sooner.
+            var lifts = Lifts.OrderBy(l => l.A).ToList();
+            var liftFree = new double[lifts.Count];
+            foreach (var e in TestEvents.OrderBy(ev => ev.Time))
             {
                 if (e.Type == TrafficEventType.Vehicle && Db.Vehicles.TryGetValue(e.VehicleId, out var def) && def.Speed > 0)
                 {
-                    var path = PathFor(e.Lane);
-                    if (path != null) t = Math.Max(t, e.Time + (path.DeckEndS + 8 + def.Length) / def.Speed);
+                    var path = PathFor(LaneFor(e.Lane, def));
+                    if (path == null) continue;
+                    if (path != TunnelPath || lifts.Count == 0) { t = Math.Max(t, e.Time + (path.DeckEndS + 8 + def.Length) / def.Speed); continue; }
+                    double clock = e.Time, s = -def.Length;
+                    for (int k = 0; k < lifts.Count; k++)
+                    {
+                        var l = lifts[k]; double ride = l.Height / l.Speed;
+                        clock += Math.Max(0, l.A - s) / def.Speed;
+                        double start = Math.Max(clock, liftFree[k]);
+                        clock = start + l.BoardingSeconds + 2*l.DoorSeconds + ride;
+                        double clear=(l.Length+def.Length+TunnelRules.LiftCfg.Margin)/def.Speed;
+                        liftFree[k] = clock + clear + 2*l.DoorSeconds + ride;
+                        s = l.A + l.Shift;
+                    }
+                    t = Math.Max(t, clock + Math.Max(0, path.DeckEndS + 8 - s) / def.Speed);
                 }
                 else if (e.Type == TrafficEventType.Ship && e.Speed > 0) t = Math.Max(t, e.Time + (ShipState.EndZ - ShipState.StartZ) / e.Speed);
             }
@@ -970,6 +1239,8 @@ namespace BridgeArchitect3D.Physics
             Result.IsSuccess = true;
             Result.CompletionTime = Time;
             Result.ReferenceTime = IdealFinishTime();
+            double wu = Result.PhaseMaxUtil[(int)TestPhase.Environment];
+            if (wu >= 0) Result.WeatherMargin = wu > 1e-9 ? 1 / wu - 1 : 9.99;
             FillVehicleResults();
             double total = 0, intact = 0;
             for (int k = 0; k < Model.MemberCount; k++)
@@ -979,34 +1250,30 @@ namespace BridgeArchitect3D.Physics
                 if (!Model.Broken[k]) intact += Model.Length[k];
             }
             Result.DeckIntegrity = total > 0 ? intact / total : 1;
+            Result.ReferenceCost = Level.Objectives.ReferenceCost;
+            Result.RiverWidth = Level.Terrain.RiverWidth;
+            Result.Disturbance = Disturbance();
+            Result.Contract = EngineeringScore.Config.Contract(Design.Contract) != null ? Design.Contract : null;
             ComputeScore(Result);
         }
 
-        public const double BudgetWeight = 6, TimeWeight = 2, IntegrityWeight = 1, StressWeight = 1;  // budget : time : integrity : stress = 6 : 2 : 1 : 1
-        public const double MaxSafetyMargin = 1.5;   // 安全冗余加分上限 150%
-
-        /// <summary>
-        /// 最终评分（上不封顶，通关后才计算），三项权重 7 : 2 : 1：
-        /// 预算分 = 7000 × 提供预算 / 使用预算（用得越少越高，不封顶）；
-        /// 完整度分 = 2000 × 通过后桥面完整度；
-        /// 受力分 = 1000 × max(最大受力利用率, 安全冗余)，
-        ///   利用率 = 峰值需求 / 承载力（≤ 100%），安全冗余 = 承载力 / 峰值需求 − 1（上限 150%），取两者中得分高的一项。
-        /// </summary>
-        public static void ComputeScore(SimulationResult r)
+        /// <summary>Riverbed / ground disturbance length (m) for the environment factor.</summary>
+        private double Disturbance()
         {
-            if (!r.IsSuccess) { r.Score = 0; return; }
-            double util = Math.Clamp(r.MaxUtilization, 0, 1);
-            r.SafetyMargin = util > 1e-9 ? Math.Min(1 / util - 1, MaxSafetyMargin) : MaxSafetyMargin;
-            r.StressUsesMargin = r.SafetyMargin > util;
-            r.BudgetScore = (int)Math.Round(1000 * BudgetWeight * r.Budget / Math.Max(r.TotalCost, 1));
-            // Time: ideal / actual finish time (waiting at a closed bridge, slow climbs or queues cost points)
-            double tr = r.ReferenceTime > 0 && r.CompletionTime > 0 ? Math.Min(1, r.ReferenceTime / r.CompletionTime) : 1;
-            r.TimeScore = (int)Math.Round(1000 * TimeWeight * tr);
-            r.IntegrityScore = (int)Math.Round(1000 * IntegrityWeight * r.DeckIntegrity);
-            r.StressScore = (int)Math.Round(1000 * StressWeight * Math.Max(util, r.SafetyMargin));
-            r.Score = r.BudgetScore + r.TimeScore + r.IntegrityScore + r.StressScore;
+            var c = EngineeringScore.Config; double d = 0;
+            for (int i = 0; i < Model.NodeCount; i++) if (Model.PierFoundation[i] != FoundationType.None) d += c.PierDisturbance;
+            if (TunnelGeo != null)
+            {
+                double len = 0; for (int i = 0; i < TunnelGeo.Count; i++) len += TunnelGeo.Len[i];
+                if (TunnelGeo.Type.IsFloating) { for (int i = 0; i < TunnelGeo.Count; i++) d += TunnelGeo.CableCount[i] * c.CableDisturbance; }
+                else if (TunnelGeo.Type.IsShield) d += len * c.ShieldDisturbance;
+                else d += len * c.ImmersedDisturbance;
+            }
+            return d;
         }
 
+        /// <summary>Engineering Score base (uncapped, only for passed tests); achievements are added by EngineeringScore.EvaluateAchievements.</summary>
+        public static void ComputeScore(SimulationResult r) => EngineeringScore.ComputeBase(r);
         private void FillVehicleResults()
         {
             Result.VehicleResults.Clear();
@@ -1028,6 +1295,8 @@ namespace BridgeArchitect3D.Physics
             f.Time = Time;
             Array.Copy(DisplayDisplacement, f.Displacement, Math.Min(DisplayDisplacement.Length, f.Displacement.Length));
             f.BridgeState = Bascule.StatusText;
+            for(int i=0;i<f.LiftPlatformDy.Length;i++)
+            {f.LiftPlatformDy[i]=i<Lifts.Count?Lifts[i].Dy:0;f.LiftDoorOpen[i]=i<Lifts.Count?Lifts[i].DoorOpen:1;}
             Array.Copy(KinematicDisplacement, f.Kinematic, Math.Min(KinematicDisplacement.Length, f.Kinematic.Length));
             for (int i = 0; i < Ships.Count && i < f.ShipZ.Length; i++) f.ShipZ[i] = Ships[i].Spawned && !Ships[i].Done ? Ships[i].Z : double.NaN;
             for (int k = 0; k < Model.MemberCount; k++) { f.Broken[k] = Model.Broken[k]; f.Utilization[k] = (float)Status[k].Utilization; }
@@ -1035,6 +1304,7 @@ namespace BridgeArchitect3D.Physics
             {
                 f.VehicleActive[i] = i < Vehicles.Count && !Vehicles[i].Finished;
                 f.VehicleS[i] = i < Vehicles.Count ? Vehicles[i].FrontS : 0;
+                f.VehicleLiftDy[i] = i < Vehicles.Count ? Vehicles[i].LiftDy : 0;
             }
         }
 

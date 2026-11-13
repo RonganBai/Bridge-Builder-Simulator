@@ -16,6 +16,10 @@ namespace BridgeArchitect3D.Traffic
         public BridgeSimulation Sim { get; private set; }
         public bool Paused { get; set; }
         public int SpeedMultiplier { get; set; } = 1;
+        /// <summary>Fast-forward only empty intervals; visible road traffic and lift operations keep the selected rate.</summary>
+        public bool AutoFast { get; set; } = true;
+        public const int AutoFastFactor = 8;
+        public bool FastForwarding { get; private set; }
         public bool ShowStress { get; set; } = true;
         public float DeformationScale { get; set; } = 30f;
         public int SelectedMember { get; set; } = -1;
@@ -32,11 +36,21 @@ namespace BridgeArchitect3D.Traffic
         private readonly List<VehicleController> _vehicles = new();
         private Node3D _debris;
         private double _acc;
+        private double _accRate=1;
         private bool _finishedRaised;
         private float[] _util = Array.Empty<float>();
         private readonly Queue<StructureEvent> _pendingBreaks = new();
 
         public void Init(BridgeRenderer renderer) { _renderer = renderer; }
+
+        /// <summary>Position of the first vehicle still on its way (follow camera); null when none is driving.</summary>
+        public Vector3? LeadVehiclePosition()
+        {
+            if (Sim == null) return null;
+            for (int i = 0; i < _vehicles.Count && i < Sim.Vehicles.Count; i++)
+                if (!Sim.Vehicles[i].Finished && !Sim.Vehicles[i].Fallen && _vehicles[i].Visible) return _vehicles[i].GlobalPosition;
+            return null;
+        }
 
         // Building a procedural vehicle model takes tens of milliseconds, which used to stall the frame in which
         // the vehicle entered. Each vehicle type is now built once (ideally while the level loads, see Prewarm)
@@ -76,7 +90,7 @@ namespace BridgeArchitect3D.Traffic
             Sim.Initialize();
             _util = new float[Sim.Model.MemberCount];
             _shipZ = new double[Sim.Ships.Count];
-            Paused = false; _acc = 0; _finishedRaised = false; _replayMode = ReplayMode.None; _seeking = false;
+            Paused = false; _acc = 0; _accRate=Math.Max(1,SpeedMultiplier);FastForwarding=false;_finishedRaised = false; _replayMode = ReplayMode.None; _seeking = false;
             FlushBreaks();
             UpdateVisuals();
         }
@@ -101,12 +115,18 @@ namespace BridgeArchitect3D.Traffic
             if (_replayMode != ReplayMode.None) { ProcessReplay(delta); return; }
             if (Sim.State == SimState.Running && !Paused)
             {
-                _acc += delta * SpeedMultiplier;
+                double rate=AutoFast&&Sim.QuietTraffic?Math.Max(SpeedMultiplier,AutoFastFactor):Math.Max(1,SpeedMultiplier);
+                _acc*=rate/_accRate;_accRate=rate;
+                _acc += delta * rate;
                 int steps = 0;
                 while (_acc >= BridgeSimulation.FixedDt && steps < 16 && Sim.State == SimState.Running)
                 {
                     Sim.Step(); _acc -= BridgeSimulation.FixedDt; steps++;
+                    // A vehicle may spawn within this frame. Rescale remaining wall time immediately.
+                    double nextRate=AutoFast&&Sim.QuietTraffic?Math.Max(SpeedMultiplier,AutoFastFactor):Math.Max(1,SpeedMultiplier);
+                    if(nextRate!=_accRate){_acc=Math.Max(0,_acc)*nextRate/_accRate;_accRate=nextRate;}
                 }
+                FastForwarding=_accRate>SpeedMultiplier;
                 if (steps >= 16) _acc = 0;   // 防止卡顿后积累过多步数
                 FlushBreaks();
                 UpdateVisuals();
@@ -142,14 +162,15 @@ namespace BridgeArchitect3D.Traffic
             for (int k = 0; k < m.MemberCount; k++) _util[k] = (float)Sim.Status[k].Utilization;
             for (int i = 0; i < Sim.Ships.Count && i < _shipZ.Length; i++)
                 _shipZ[i] = Sim.Ships[i].Spawned && !Sim.Ships[i].Done ? Sim.Ships[i].Z : double.NaN;
-            ApplyState(Sim.DisplayDisplacement, Sim.KinematicDisplacement, m.Broken, _util, Sim.Vehicles.Count, i => Sim.Vehicles[i].FrontS, i => !Sim.Vehicles[i].Finished, _shipZ);
+            ApplyState(Sim.DisplayDisplacement, Sim.KinematicDisplacement, m.Broken, _util, Sim.Vehicles.Count, i => Sim.Vehicles[i].FrontS, i => !Sim.Vehicles[i].Finished, _shipZ, i => Sim.Vehicles[i].LiftDy);
+            _renderer?.SetLiftPositions(Sim.Lifts.ConvertAll(l=>l.Dy),Sim.Lifts.ConvertAll(l=>l.DoorOpen));
         }
 
         private double[] _display = Array.Empty<double>();
         private double[] _shipZ = Array.Empty<double>();
         private readonly List<ShipController> _ships = new();
 
-        private void ApplyState(double[] disp, double[] kin, bool[] broken, float[] util, int vehicleCount, Func<int, double> frontS, Func<int, bool> active, double[] shipZ)
+        private void ApplyState(double[] disp, double[] kin, bool[] broken, float[] util, int vehicleCount, Func<int, double> frontS, Func<int, bool> active, double[] shipZ, Func<int, double> liftDy = null)
         {
             var m = Sim.Model;
             // Preserve true geometry for mechanisms; apply optional elastic magnification to static bridges.
@@ -179,7 +200,9 @@ namespace BridgeArchitect3D.Traffic
                 float off = BridgeRenderer.DeckSurfaceOffset + (RailTrack.IsTrain(Sim.Vehicles[i].Def) ? (float)RailTrack.Height : 0);
                 var d2 = disp;
                 // 多节车辆（火车）与行人队伍：每一节 / 每个人分别沿路径摆放
-                vc.PlaceAlongPath(sv => { path.Evaluate(sv, d2, 1, out double x, out double y); return new Vector3((float)x, (float)y + off, 0); }, s);
+                // Riding a bank lift: the whole vehicle moves with the platform
+                float lift = (float)(liftDy?.Invoke(i) ?? 0);
+                vc.PlaceAlongPath(sv => { path.Evaluate(sv, d2, 1, out double x, out double y); return new Vector3((float)x, (float)y + off + lift, 0); }, s);
             }
         }
 
@@ -322,7 +345,8 @@ namespace BridgeArchitect3D.Traffic
 
         private void ApplyFrame(SimFrame f)
         {
-            ApplyState(f.Displacement, f.Kinematic, f.Broken, f.Utilization, f.VehicleS.Length, i => f.VehicleS[i], i => f.VehicleActive[i], f.ShipZ);
+            ApplyState(f.Displacement, f.Kinematic, f.Broken, f.Utilization, f.VehicleS.Length, i => f.VehicleS[i], i => f.VehicleActive[i], f.ShipZ, i => f.VehicleLiftDy != null && i < f.VehicleLiftDy.Length ? f.VehicleLiftDy[i] : 0);
+            _renderer?.SetLiftPositions(f.LiftPlatformDy??Array.Empty<double>(),f.LiftDoorOpen);
         }
 
         public double ReplayFrameTime => _seeking ? _seekTime : Sim != null && Sim.HistoryCount > 0 ? Sim.GetHistoryFrame(Math.Min((int)(_replayTime / 0.1), Sim.HistoryCount - 1)).Time : 0;

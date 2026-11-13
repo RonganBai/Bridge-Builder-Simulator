@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="Bridge Architect 3D"
+config/version="1.1.0"
 config/description="3D å»ºæ¡¥ç‰©ç†æ¨¡æ‹Ÿæ¸¸æˆï¼ˆåˆç‰ˆï¼‰"
 run/main_scene="res://Scenes/MainMenu.tscn"
 config/icon="res://icon.png"

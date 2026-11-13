@@ -13,8 +13,8 @@ namespace BridgeArchitect3D.UI
 		void Undo(); void Redo(); void ResetLevel(); void SaveDesign(); void LoadDesign(); void LoadReference();
 		/// <summary>Named design saves (several per level).</summary>
 		void SaveDesignAs(string name); System.Collections.Generic.IReadOnlyList<string> NamedDesigns(); void LoadNamedDesign(string name);
-		void BackToMenu(); void OpenLevelSelect();
-		void SelectTool(BuildTool tool, string materialId); void SetStressView(bool on); void DeleteSelected(); void RepairSelected(); void SetFoundationSelected(FoundationType type);
+		void BackToMenu(); void OpenLevelSelect(); void OpenLevelSettings();
+		void SelectTool(BuildTool tool, string materialId); void SetStressView(bool on); void DeleteSelected(); void RepairSelected(); void SetFoundationSelected(FoundationType type); void TunnelAction(string action);
 		/// <summary>Movable-bridge / editing actions on the selection: "lock", "unlock", "leaf", "unleaf", "angle+", "angle-", "split".</summary>
 		void MechanismAction(string action);
 		void LocateDiagnostic(); void ClearDiagnostic();
@@ -23,6 +23,8 @@ namespace BridgeArchitect3D.UI
 		/// <summary>Progress bar drag: show the recorded test state at this time.</summary>
 		void SeekTest(double time);
 		void ApplySettings(double deformationScale, bool showGrid, double sensitivity, bool fullscreen);
+		/// <summary>Engineering contract of the design (null = none), underground cutaway, follow-the-vehicle camera.</summary>
+		void SetContract(string id); void SetCutaway(bool on); void SetFollowCamera(bool on); void SetAutoFast(bool on);
 	}
 
 	/// <summary>
@@ -132,6 +134,83 @@ namespace BridgeArchitect3D.UI
 			desc.CustomMinimumSize = new Vector2(300, 0);
 			_matInfoBox.AddChild(desc);
 
+			if (m.IsLift)
+			{
+				// Lift: 5-cell bars like the other materials (platform range, load, speed, price)
+				var lc = TunnelRules.LiftCfg;
+				var lg = MakeGrid(detail);
+				AddStatRow(lg, Loc.T("最长平台"), MaterialRatings.LinearCells(lc.MaxLength, 30), UiTheme.Accent, Loc.F("{0:0}~{1:0} m", (lc.MinLength), (lc.MaxLength)));
+				AddStatRow(lg, Loc.T("最大载重"), MaterialRatings.LinearCells(TunnelRules.LiftCapacity(lc.MaxLength) / 9810, 100), UiTheme.Accent, Loc.F("{0:0} 吨", (TunnelRules.LiftCapacity(lc.MaxLength) / 9810)));
+				AddStatRow(lg, Loc.T("升降速度"), MaterialRatings.LinearCells(lc.Speed, 5), UiTheme.Accent, Loc.F("{0:0.#} m/s", (lc.Speed)));
+				AddStatRow(lg, Loc.T("井道价格"), MaterialRatings.LinearCells(lc.ShaftCostPerMeter, 1000), UiTheme.Warn, Loc.F("${0:0}/m 高", (lc.ShaftCostPerMeter)));
+				AddStatRow(lg, Loc.T("平台价格"), MaterialRatings.LinearCells(lc.PlatformCostPerMeter, 1000), UiTheme.Warn, Loc.F("${0:0}/m 长", (lc.PlatformCostPerMeter)));
+				_matInfoBox.AddChild(lg);
+				if (_levelVehicles.Count > 0)
+				{
+					_matInfoBox.AddChild(new HSeparator());
+					_matInfoBox.AddChild(UiTheme.MakeLabel(Loc.T("本关车辆需要的平台长度"), 13, UiTheme.Muted));
+					var vg = MakeGrid(detail);
+					foreach (var v in _levelVehicles)
+					{
+						double rear = v.Axles.Count == 0 ? 0 : v.Axles.Min(a => a.Offset), body = 2 * System.Math.Max(0, (v.Length + rear) / 2) - rear;
+						double need = body + 2 * lc.Margin;
+						AddStatRow(vg, v.Name, MaterialRatings.LinearCells(need, lc.MaxLength), need <= lc.MaxLength ? UiTheme.Good : UiTheme.Bad, Loc.F("{0:0.#} m", (need)));
+					}
+					_matInfoBox.AddChild(vg);
+				}
+				if (!detail) _matInfoBox.AddChild(UiTheme.MakeLabel(Loc.T("在设置中勾选“显示数值”可查看具体数字"), 11, UiTheme.Muted));
+				PlaceMaterialInfo(button);
+				return;
+			}
+			if (m.IsTunnel)
+			{
+				// Tunnel strength: 5-cell bars for the strongest grade, then the per-grade table
+				var tc0 = Core.GameManager.Instance?.Db?.TunnelConfig?.Type(m);
+				if (tc0 != null && tc0.Grades.Count > 0)
+				{
+					var top = tc0.Grades.Values.OrderBy(g0 => g0.PressureCapacity).Last();
+					var cg = MakeGrid(detail);
+					AddStatRow(cg, Loc.T("管片强度"), MaterialRatings.LinearCells(top.PressureCapacity / 1e6, 0.6), UiTheme.Accent, Loc.F("{0:0.00} MPa", (top.PressureCapacity / 1e6)));
+					AddStatRow(cg, Loc.T("自重"), MaterialRatings.LinearCells(top.MassPerMeter / 1000, 80), UiTheme.Accent, Loc.F("{0:0} 吨/m", (top.MassPerMeter / 1000)));
+					AddStatRow(cg, Loc.T("价格"), MaterialRatings.LinearCells(top.CostPerMeter, 3000), UiTheme.Warn, Loc.F("${0:0}/m", (top.CostPerMeter)));
+					_matInfoBox.AddChild(cg);
+				}
+				// Tunnel-specific properties use the same five-cell visuals as other materials.
+				var tcfg = Core.GameManager.Instance?.Db?.TunnelConfig;
+				var grades = TunnelMaterialRatings.For(tcfg, m);
+				if (grades.Count > 0)
+				{
+					var tg = new GridContainer { Columns = grades.Count + 1, MouseFilter = MouseFilterEnum.Ignore };
+					tg.AddThemeConstantOverride("h_separation", 12);
+					tg.AddThemeConstantOverride("v_separation", 3);
+					tg.AddChild(UiTheme.MakeLabel(Loc.T("属性"),12,UiTheme.Muted));
+					foreach(var grade in grades)tg.AddChild(UiTheme.MakeLabel(grade.Name,12,UiTheme.Text));
+					for(int index=0;index<grades[0].Stats.Count;index++)
+					{
+						tg.AddChild(UiTheme.MakeLabel(grades[0].Stats[index].Label,13,UiTheme.Text));
+						foreach(var grade in grades)
+						{
+							var stat=grade.Stats[index];var cell=new VBoxContainer {MouseFilter=MouseFilterEnum.Ignore};
+							cell.AddThemeConstantOverride("separation",2);cell.AddChild(MakeCells(stat.Cells,UiTheme.Accent));
+							if(detail)cell.AddChild(UiTheme.MakeLabel($"{Num(stat.Value)} {stat.Unit}",12,UiTheme.Muted));
+							tg.AddChild(cell);
+						}
+					}
+					_matInfoBox.AddChild(new HSeparator());
+					_matInfoBox.AddChild(tg);
+				}
+				var legend=UiTheme.MakeLabel(Loc.T("统一刻度：价格、自重格数越多越高；承载与容差格数越多越强。"),11,UiTheme.Muted);
+				legend.AutowrapMode=TextServer.AutowrapMode.WordSmart;legend.CustomMinimumSize=new Vector2(360,0);_matInfoBox.AddChild(legend);
+				foreach (var note in TunnelRules.MaterialNotes(tcfg, m))
+				{
+					var nl = UiTheme.MakeLabel("· " + note, 12, UiTheme.Muted);
+					nl.AutowrapMode = TextServer.AutowrapMode.WordSmart; nl.CustomMinimumSize = new Vector2(360, 0);
+					_matInfoBox.AddChild(nl);
+				}
+				if(!detail)_matInfoBox.AddChild(UiTheme.MakeLabel(Loc.T("设置中开启“显示数值”可查看具体数字"),11,UiTheme.Muted));
+				PlaceMaterialInfo(button);
+				return;
+			}
 			var grid = MakeGrid(detail);
 			foreach (var s in MaterialRatings.StatsFor(m, _catalog))
 				AddStatRow(grid, s.Label, s.Cells, UiTheme.Accent, s.Value > 0 ? $"{Num(s.Value)} {s.Unit}" : "—");
@@ -158,6 +237,11 @@ namespace BridgeArchitect3D.UI
 			}
 			if (!detail) _matInfoBox.AddChild(UiTheme.MakeLabel(Loc.T("在设置中勾选“显示数值”可查看具体数字"), 11, UiTheme.Muted));
 
+			PlaceMaterialInfo(button);
+		}
+
+		private void PlaceMaterialInfo(Control button)
+		{
 			_matInfo.Size = Vector2.Zero; // 收缩到内容大小
 			var min = _matInfo.GetCombinedMinimumSize();
 			var r = button.GetGlobalRect();
@@ -297,7 +381,7 @@ namespace BridgeArchitect3D.UI
 			pm.AddItem(Loc.T("参考方案提示"), 0); pm.AddItem(Loc.T("重置关卡"), 1); pm.AddSeparator();
 			pm.AddItem(Loc.T("保存方案"), 2); pm.AddItem(Loc.T("加载方案"), 3);
 			pm.AddItem(Loc.T("方案另存为（命名）…"), 6); pm.AddItem(Loc.T("读取命名方案…"), 7); pm.AddSeparator();
-			pm.AddItem(Loc.T("设置"), 4); pm.AddItem(Loc.T("返回主菜单"), 5);
+			pm.AddItem(Loc.T("关卡设置…"), 8); pm.AddItem(Loc.T("设置"), 4); pm.AddItem(Loc.T("返回主菜单"), 5);
 			pm.IdPressed += id =>
 			{
 				switch (id)
@@ -309,6 +393,7 @@ namespace BridgeArchitect3D.UI
 					case 4: HideToast(); _settingsOverlay.Visible = true; break;
 					case 5: _ctl.BackToMenu(); break;
 					case 6: case 7: HideToast(); ShowNamedDesigns(); break;
+					case 8: HideToast(); _ctl.OpenLevelSettings(); break;
 				}
 			};
 			hb.AddChild(_menu);
@@ -351,12 +436,19 @@ namespace BridgeArchitect3D.UI
 		{
 			_leftBar = new PanelContainer();
 			AddChild(_leftBar);
-			Place(_leftBar, 0, 0, 0, 0, 12, 66, 172, 265);
+			Place(_leftBar, 0, 0, 0, 0, 12, 66, 172, 360);
 			var vb = new VBoxContainer(); vb.AddThemeConstantOverride("separation", 6);
 			_leftBar.AddChild(vb);
 			_stress = new CheckButton { Text = Loc.T("受力显示") };
 			_stress.Toggled += on => _ctl.SetStressView(on);
 			vb.AddChild(_stress);
+			_cutawayBuild = new CheckButton { Text = Loc.T("结构剖视"), TooltipText = Loc.T("切开前侧地形和隧道外壳，保留岸线、水位与地层，查看内部结构") };
+			_cutawayBuild.Toggled += on => { _ctl.SetCutaway(on); if (_cutawayTest != null) _cutawayTest.SetPressedNoSignal(on); };
+			vb.AddChild(_cutawayBuild);
+			vb.AddChild(UiTheme.MakeLabel(Loc.T("工程合同"), 12, UiTheme.Muted));
+			_contract = new OptionButton { CustomMinimumSize = new Vector2(150, 30) };
+			_contract.ItemSelected += i => _ctl.SetContract(i <= 0 || i > _contractIds.Count ? null : _contractIds[(int)i - 1]);
+			vb.AddChild(_contract);
 			vb.AddChild(new HSeparator());
 			var help = UiTheme.MakeLabel(Loc.T("从已有节点开始建造\n长按节点拖动\nCtrl 暂停节点吸附\nX 删除所选\nEsc 取消 · 空格测试"), 12, UiTheme.Muted);
 			help.AutowrapMode = TextServer.AutowrapMode.WordSmart;
@@ -495,6 +587,47 @@ namespace BridgeArchitect3D.UI
 			_foundRow.AddChild(_shallowBtn); _foundRow.AddChild(_pileBtn);
 			_foundRow.Visible = false;
 			vb.AddChild(_foundRow);
+			// Tube element: grade buttons, ground reinforcement, apply to every element
+			_tunnelBox = new VBoxContainer { Visible = false };
+			var tunnelFocus = new HBoxContainer();
+			foreach (var item in new[] { (Loc.T("入口"), "entry"), (Loc.T("全线"), "route"), (Loc.T("出口"), "exit") })
+			{
+				string destination = item.Item2;
+				var focus = UiTheme.MakeButton(Loc.T(item.Item1), () => _ctl.TunnelAction("focus:" + destination), 80);
+				focus.TooltipText = Loc.T("定位实际通行路线及岸上出入口");
+				tunnelFocus.AddChild(focus);
+			}
+			_tunnelBox.AddChild(tunnelFocus);
+			_tunnelGrades = new VBoxContainer();
+			_tunnelBox.AddChild(_tunnelGrades);
+			_tunnelReinforce = UiTheme.MakeButton(Loc.T("加固地基"), () => _ctl.TunnelAction("reinforce"), 240);
+			_tunnelReinforce.TooltipText = Loc.T("软土承载力提高，冲刷区不再被掏空；按管节长度计费");
+			_tunnelBox.AddChild(_tunnelReinforce);
+			// Floating tunnel: buoyancy level, cable count and cable kind
+			_tunnelBuoy = new HBoxContainer();
+			_tunnelBox.AddChild(_tunnelBuoy);
+			_tunnelCableRow = new HBoxContainer();
+			_tunnelCableRow.AddChild(UiTheme.MakeButton("−", () => _ctl.TunnelAction("cables:-1"), 36));
+			_tunnelCableLabel = UiTheme.MakeLabel("", 13, UiTheme.Text);
+			_tunnelCableRow.AddChild(_tunnelCableLabel);
+			_tunnelCableRow.AddChild(UiTheme.MakeButton("+", () => _ctl.TunnelAction("cables:+1"), 36));
+			_tunnelBox.AddChild(_tunnelCableRow);
+			_tunnelCableKinds = new VBoxContainer();
+			_tunnelBox.AddChild(_tunnelCableKinds);
+			_tunnelAll = new CheckBox { Text = Loc.T("应用到全部管节") };
+			_tunnelBox.AddChild(_tunnelAll);
+			// Bank lifts (whole tunnel, both banks): platform length
+			_tunnelPortalRow = new HBoxContainer();
+			_tunnelPortalRow.AddChild(UiTheme.MakeButton("−", () => _ctl.TunnelAction("lift:-1"), 36));
+			_tunnelRaiseLabel = new Label();
+			_tunnelPortalRow.AddChild(_tunnelRaiseLabel);
+			_tunnelPortalRow.AddChild(UiTheme.MakeButton("+", () => _ctl.TunnelAction("lift:+1"), 36));
+			_tunnelGate = UiTheme.MakeButton(Loc.T("电梯按本关车辆自动配"), () => _ctl.TunnelAction("liftauto"), 240);
+			_tunnelGate.TooltipText = Loc.T("选能装下并承载本关所有车辆的最短平台（最省钱）");
+			_tunnelPump = new Button { Visible = false };
+			_tunnelBox.AddChild(_tunnelPortalRow);
+			_tunnelBox.AddChild(_tunnelGate);
+			vb.AddChild(_tunnelBox);
 			// Movable bridge: deck lock on a node, bascule leaf on a hydraulic member, split a member at its midpoint
 			_lockBtn = UiTheme.MakeButton(Loc.T("设为中央锁扣"), () => _ctl.MechanismAction(_lockIsSet ? "unlock" : "lock"), 240);
 			_lockBtn.TooltipText = Loc.T("把桥面接缝节点拆成左右两个节点：闭合时锁扣传递力，解锁后两侧完全分开");
@@ -570,6 +703,107 @@ namespace BridgeArchitect3D.UI
 
 		private Button _repairBtn, _shallowBtn, _pileBtn;
 		private HBoxContainer _foundRow;
+		private VBoxContainer _tunnelBox;
+		private VBoxContainer _tunnelGrades;
+		private Button _tunnelReinforce;
+		private CheckBox _tunnelAll;
+		private HBoxContainer _tunnelBuoy, _tunnelCableRow;
+		private VBoxContainer _tunnelCableKinds;
+		private Label _tunnelCableLabel, _tunnelRaiseLabel;
+		private HBoxContainer _tunnelPortalRow;
+		private Button _tunnelGate, _tunnelPump;
+
+		/// <summary>Portal protection readout of the tunnel row.</summary>
+		/// <summary>Lift row: platform length, what fits and what it carries.</summary>
+		public void SetLiftRow(double length)
+		{
+			if (_tunnelRaiseLabel == null) return;
+			var lc = TunnelRules.LiftCfg;
+			_tunnelRaiseLabel.Text = Loc.F("平台 {0:0} m\n总载重 {1:0} 吨\n支持多车合乘",length,TunnelRules.LiftCapacity(length)/9810);
+			_tunnelRaiseLabel.TooltipText = Loc.F("两岸各一部，平台 {0:0}~{1:0} m，速度 {2:0.#} m/s；费用 = 井道 ${3:0}/m（高度）+ 平台 ${4:0}/m（长度）", (lc.MinLength), (lc.MaxLength), (lc.Speed), (lc.ShaftCostPerMeter), (lc.PlatformCostPerMeter));
+		}
+		private TunnelTypeConfig _tunnelRowType;
+		public bool TunnelApplyAll => _tunnelAll?.ButtonPressed ?? false;
+
+		public void SetTunnelRow(bool visible, TunnelTypeConfig type = null, string grade = null, bool reinforced = false,
+			int cables = 0, string cable = null, string buoyancy = null)
+		{
+			_tunnelBox.Visible = visible;
+			if (!visible) return;
+			if (_tunnelRowType != type)
+			{
+				_tunnelRowType = type;
+				void Fill(BoxContainer box, string meta, System.Collections.Generic.IEnumerable<(string id, string text)> items, string prefix)
+				{
+					foreach (var c in box.GetChildren()) c.QueueFree();
+					foreach (var (id, text) in items)
+					{
+						var b = UiTheme.MakeButton(text, () => _ctl.TunnelAction(prefix + id), 80);
+						b.SetMeta(meta, id);
+						box.AddChild(b);
+					}
+				}
+				Fill(_tunnelGrades, "grade", type.Grades.Select(kv => (kv.Key, Loc.F("{0} ${1:0}/m", (kv.Value.Name), (kv.Value.CostPerMeter)))), "grade:");
+				Fill(_tunnelBuoy, "buoy", type.Buoyancy.Select(kv => (kv.Key, kv.Value.Name)), "buoy:");
+				Fill(_tunnelCableKinds, "cable", type.Cables.Select(kv => (kv.Key, Loc.F("{0} ${1:0}/m", (kv.Value.Name), (kv.Value.CostPerMeter)))), "cable:");
+			}
+			void Mark(BoxContainer box, string meta, string current)
+			{
+				foreach (var c in box.GetChildren())
+					if (c is Button b && b.HasMeta(meta)) b.Disabled = (string)b.GetMeta(meta) == current && !TunnelApplyAll;
+			}
+			Mark(_tunnelGrades, "grade", grade);
+			_tunnelBuoy.Visible = _tunnelCableRow.Visible = _tunnelCableKinds.Visible = type.IsFloating;
+			if (type.IsFloating)
+			{
+				Mark(_tunnelBuoy, "buoy", buoyancy);
+				Mark(_tunnelCableKinds, "cable", cable);
+				_tunnelCableLabel.Text = Loc.F("  锚索 {0} 根  ", (cables));
+
+			}
+			else if (type.IsShield)
+			{
+				_tunnelReinforce.Text = reinforced ? Loc.T("取消注浆加固") : Loc.F("注浆加固地层 ${0:0}/m", (type.ReinforceCostPerMeter));
+				_tunnelReinforce.TooltipText = Loc.T("降低作用在管片上的土压；按管节长度计费");
+			}
+			// Only material strength damages a tunnel now: ground / anchor improvement only matters for the shield (earth pressure)
+			_tunnelReinforce.Visible = type.IsShield;
+		}
+
+		/// <summary>Properties of one tube element: load breakdown from the latest tunnel check.</summary>
+		public static string TunnelElementProperties(TunnelGeometry g, int i, Physics.TunnelState st, LevelDefinition level, TunnelConfig cfg, string caseName)
+		{
+			var sb = new StringBuilder();
+			sb.Append(Loc.F("[b]管节 #{0}（{1}）[/b]\n", (i + 1), (g.Grade[i].Name)));
+			if (g.Type.IsShield) sb.Append(Loc.F("长度 {0:0.0} m · 底部标高 {1:0.0} m{2}\n", (g.Len[i]), (System.Math.Min(g.Y0[i], g.Y1[i])), (g.Reinforced[i] ? Loc.T(" · 已注浆加固") : "")));
+			else sb.Append(Loc.F("长度 {0:0.0} m · 底部标高 {1:0.0} m\n", (g.Len[i]), (System.Math.Min(g.Y0[i], g.Y1[i]))));
+			sb.Append(caseName).Append('\n');
+			if (st != null && i < st.Count && g.Type.IsFloating)
+			{
+				string Pf(double u) => $"[color={(u >= 1 ? "#e04436" : u >= cfg.RiskOrange ? "#ef8a2e" : u >= cfg.RiskYellow ? "#e8c33a" : "#4caf50")}]{u * 100:0}%[/color]";
+				double t = 1000 * cfg.Gravity;
+				sb.Append(Loc.F("{0} · {1} 根{2}\n", (g.Buoy[i].Name), (g.CableCount[i]), (g.Cable[i].Name)));
+				sb.Append(Loc.F("水压 {0:0} / {1:0} kPa  {2}\n", (st.Pressure[i] / 1000), (g.Grade[i].PressureCapacity / 1000), Pf(st.PressureUtil[i])));
+				sb.Append(Loc.F("锚索拉力 {0:0} / {1:0} 吨（每根）  {2}\n", (st.Tension[i] / t), (g.Cable[i].Capacity / t), Pf(st.CableUtil[i])));
+				sb.Append(Loc.F("强度利用率 {0}", Pf(st.Util[i])));
+			}
+			else if (st != null && i < st.Count && g.Type.IsShield)
+			{
+				string Ps(double u) => $"[color={(u >= 1 ? "#e04436" : u >= cfg.RiskOrange ? "#ef8a2e" : u >= cfg.RiskYellow ? "#e8c33a" : "#4caf50")}]{u * 100:0}%[/color]";
+				var gs = cfg.Geo(st.CrownSoil[i]);
+				sb.Append(Loc.F("地下水压 {0:0} kPa（地下水上涨 {1:0.00} m）\n", (st.Pressure[i] / 1000), (st.Groundwater[i])));
+				sb.Append(Loc.F("土压 {0:0} kPa\n", (st.EarthPressure[i] / 1000)));
+				sb.Append(Loc.F("管片外压 {0:0} / {1:0} kPa  {2}\n", ((st.Pressure[i] + st.EarthPressure[i]) / 1000), (g.Grade[i].PressureCapacity / 1000), Ps(st.PressureUtil[i])));
+				sb.Append(Loc.F("强度利用率 {0}", Ps(st.Util[i])));
+			}
+			else if (st != null && i < st.Count)
+			{
+				string Pct(double u) => $"[color={(u >= 1 ? "#e04436" : u >= cfg.RiskOrange ? "#ef8a2e" : u >= cfg.RiskYellow ? "#e8c33a" : "#4caf50")}]{u * 100:0}%[/color]";
+				sb.Append(Loc.F("水压 {0:0} / {1:0} kPa  {2}\n", (st.Pressure[i] / 1000), (g.Grade[i].PressureCapacity / 1000), Pct(st.PressureUtil[i])));
+				sb.Append(Loc.F("强度利用率 {0}", Pct(st.Util[i])));
+			}
+			return sb.ToString();
+		}
 
 		public void SetFoundationRow(bool visible, FoundationType current)
 		{
@@ -648,6 +882,15 @@ namespace BridgeArchitect3D.UI
 			_stressTest = new CheckButton { Text = Loc.T("受力显示"), ButtonPressed = true };
 			_stressTest.Toggled += on => _ctl.SetStressView(on);
 			hb.AddChild(_stressTest);
+			_cutawayTest = new CheckButton { Text = Loc.T("结构剖视"), TooltipText = Loc.T("切开前侧地形和隧道外壳，保留岸线、水位与地层，查看内部结构") };
+			_cutawayTest.Toggled += on => { _ctl.SetCutaway(on); _cutawayBuild?.SetPressedNoSignal(on); };
+			hb.AddChild(_cutawayTest);
+			_follow = new CheckButton { Text = Loc.T("跟车视角"), TooltipText = Loc.T("相机跟着最前面还在行驶的车辆（滚轮仍可缩放）") };
+			_follow.Toggled += on => _ctl.SetFollowCamera(on);
+			hb.AddChild(_follow);
+			var fast = new CheckButton { Text = Loc.T("空闲快进"), ButtonPressed = true, TooltipText = Loc.T("没有活动车辆、升降作业、船只和天气事件时快进；岸上、隧道内与电梯上的车辆保持所选播放倍率") };
+			fast.Toggled += on => _ctl.SetAutoFast(on);
+			hb.AddChild(fast);
 			var vb = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
 			_progressLabel = UiTheme.MakeLabel(Loc.T("测试进度"), 13, UiTheme.Muted);
 			_progress = new HSlider { MinValue = 0, MaxValue = 1, Step = 0.1, CustomMinimumSize = new Vector2(160, 18), TooltipText = Loc.T("测试结束后可拖动，查看对应时刻的实际情况") };
@@ -661,7 +904,7 @@ namespace BridgeArchitect3D.UI
 			var vb2 = new VBoxContainer { CustomMinimumSize = new Vector2(180, 0) };
 			vb2.SizeFlagsHorizontal=SizeFlags.ExpandFill;
 			_vehicleLabel = UiTheme.MakeLabel(Loc.T("当前车辆：—"), 13);_vehicleLabel.ClipText=true;
-			_statusLabel = UiTheme.MakeLabel(Loc.T("结构状态：—"), 14);
+			_statusLabel = UiTheme.MakeLabel(Loc.T("结构状态：—"), 14);_statusLabel.ClipText=true;_statusLabel.TextOverrunBehavior=TextServer.OverrunBehavior.TrimEllipsis;_vehicleLabel.TextOverrunBehavior=TextServer.OverrunBehavior.TrimEllipsis;
 			_statusLabel.ClipText = true;
 			vb2.AddChild(_vehicleLabel); vb2.AddChild(_statusLabel);
 			hb.AddChild(vb2);
@@ -790,6 +1033,7 @@ namespace BridgeArchitect3D.UI
 		}
 
 		public void SetStressChecked(bool on) { _stress.SetPressedNoSignal(on); _stressTest?.SetPressedNoSignal(on); }
+		public void SetCutawayChecked(bool on) {_cutawayBuild?.SetPressedNoSignal(on);_cutawayTest?.SetPressedNoSignal(on);}
 		private CheckButton _stressTest;
 
 		/// <summary>切换建造 / 测试模式的界面外观（测试模式橙色强调、锁定工具栏）。</summary>
@@ -905,15 +1149,49 @@ namespace BridgeArchitect3D.UI
 			_preview.Visible = !string.IsNullOrEmpty(text);
 			if (!_preview.Visible) return;
 			_preview.Text = text;
+			_preview.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+			var font = _preview.GetThemeFont("font"); int fontSize = _preview.GetThemeFontSize("font_size");
+			float textWidth = text.Split('\n').Select(line => font.GetStringSize(line, HorizontalAlignment.Left, -1, fontSize).X).DefaultIfEmpty(0).Max() + 12;
+			_preview.CustomMinimumSize = new Vector2(Mathf.Min(Mathf.Min(420, Mathf.Max(180, Size.X - 32)), Mathf.Max(80, textWidth)), 0);
 			_preview.AddThemeColorOverride("font_color", ok ? UiTheme.Good : UiTheme.Bad);
-			_preview.Position = pos + new Vector2(18, 18);
 			_preview.ResetSize();
+			var minimum = _preview.GetCombinedMinimumSize();
+			_preview.Position = new Vector2(Mathf.Clamp(pos.X + 18, 8, Mathf.Max(8, Size.X - minimum.X - 8)),
+				Mathf.Clamp(pos.Y + 18, 62, Mathf.Max(62, Size.Y - minimum.Y - 112)));
 		}
 
 		// ---------------- 结算弹窗 ----------------
 		private void ClearBox(VBoxContainer box)
 		{
 			foreach (var c in box.GetChildren().Skip(1)) c.QueueFree();   // 保留标题
+		}
+
+		public static string PhaseName(TestPhase p) => p switch
+		{
+			TestPhase.Static => Loc.T("① 静态测试"), TestPhase.Vehicles => Loc.T("② 车辆测试"),
+			TestPhase.Environment => Loc.T("③ 环境测试"), _ => Loc.T("④ 结果评估"),
+		};
+
+		/// <summary>Phase-4 evaluation: one line per phase plus the weakest place, deformation and weather margin.</summary>
+		public static string PhaseReport(SimulationResult r)
+		{
+			var sb = new StringBuilder();
+			for (int p = 0; p < 3; p++)
+			{
+				var ph = (TestPhase)p; double u = r.PhaseMaxUtil[p];
+				bool failedHere = !r.IsSuccess && r.FailurePhase == ph;
+				bool after = !r.IsSuccess && (int)r.FailurePhase < p;
+				string state = failedHere ? Loc.T("[color=#f09797]✘ 失败[/color]")
+					: after || u < 0 ? (ph == TestPhase.Environment && u < 0 && !after ? Loc.T("[color=#a3afbf]本关没有天气事件[/color]") : Loc.T("[color=#a3afbf]未进行[/color]"))
+					: Loc.F("[color=#8ecdb1]✔ 通过[/color]　最大利用率 {0:0}%", (u * 100));
+				sb.Append(PhaseName(ph)).Append("　").Append(state).Append('\n');
+			}
+			if (!string.IsNullOrEmpty(r.WeakestText)) sb.Append(Loc.F("最薄弱位置：{0}（利用率 {1:0}%）", (r.WeakestText), (r.MaxUtilization * 100))).Append('\n');
+			sb.Append(Loc.F("最大变形：桥面下沉 {0:0.000} m", (r.MaxDeckSag)));
+			if (r.MaxTunnelMove > 0) sb.Append(Loc.F(" · 隧道位移 {0:0.000} m", (r.MaxTunnelMove)));
+			sb.Append('\n');
+			if (!double.IsNaN(r.WeatherMargin)) sb.Append(Loc.F("天气期间安全裕量：{0:0}%", (System.Math.Min(r.WeatherMargin, 9.99) * 100))).Append('\n');
+			return sb.ToString();
 		}
 
 		public void ShowFailure(SimulationResult r, bool canReplay)
@@ -946,9 +1224,10 @@ namespace BridgeArchitect3D.UI
 			_failBox.AddChild(toggle);
 			var sb = new StringBuilder();
 			sb.Append($"[color=#f09797]{FailureDetector.ReasonText(r.FailureReason)}[/color]\n{r.FailureMessage}\n\n");
-			sb.Append(Loc.F("[color=#a3afbf]发生时间：[/color]{0:0.00} s\n", (r.FailureTime)));
+			sb.Append(Loc.F("[color=#a3afbf]发生时间：[/color]{0:0.00} s（{1}）", (r.FailureTime), PhaseName(r.FailurePhase))).Append('\n');
 			sb.Append(Loc.F("[color=#a3afbf]涉及构件：[/color]{0}\n", ((r.InvolvedMemberIds.Count > 0 ? string.Join(", ", r.InvolvedMemberIds.Distinct().Select(i => "#" + i)) : "—"))));
 			sb.Append(Loc.F("[color=#a3afbf]通过车辆：[/color]{0}/{1}\n\n", (r.PassedVehicles), (r.VehicleResults.Count)));
+			sb.Append(PhaseReport(r)).Append('\n');
 			sb.Append(Loc.T("[b]其他改进方向：[/b]\n"));
 			foreach (var s in r.Suggestions.Distinct()) sb.Append($" • {s}\n");
 			details.AddChild(new RichTextLabel { BbcodeEnabled = true, FitContent = true, Text = sb.ToString(), CustomMinimumSize = new Vector2(560, 0) });
@@ -963,34 +1242,39 @@ namespace BridgeArchitect3D.UI
 			_failOverlay.Visible = true;
 		}
 
-		public void ShowSuccess(SimulationResult r, bool hasNext, int previousBest)
+		public void ShowSuccess(SimulationResult r, bool hasNext, int previousBest, System.Collections.Generic.List<string> records = null)
 		{
 			HideToast();
 			ClearBox(_successBox);
-			_successBox.AddChild(UiTheme.MakeLabel(Loc.F("{0:N0} 分", (r.Score)), 32, UiTheme.Accent));
+			_successBox.AddChild(UiTheme.MakeLabel(Loc.F("工程积分 {0:N0}", (r.Score)), 32, UiTheme.Accent));
 			if (r.Score > previousBest) _successBox.AddChild(UiTheme.MakeLabel(previousBest > 0 ? Loc.F("新纪录！（原最高 {0:N0}）", (previousBest)) : Loc.T("首次通关！"), 16, UiTheme.Good));
 			else _successBox.AddChild(UiTheme.MakeLabel(Loc.F("本关最高分 {0:N0}", (previousBest)), 14, UiTheme.Muted));
-			// 三项目标分开列出，玩家能看懂下一次要改什么
-			bool inBudget = r.TotalCost <= r.Budget + 1e-6, intact = r.DeckIntegrity >= 0.999;
-			var checks = new RichTextLabel { BbcodeEnabled = true, FitContent = true, CustomMinimumSize = new Vector2(480, 0) };
-			checks.Text = Loc.T("[color=#8ecdb1]✔ 通关[/color]　　")
-				+ (inBudget ? Loc.T("[color=#8ecdb1]✔ 预算内[/color]") : Loc.F("[color=#f09797]✘ 超预算 ${0:N0}[/color]", (r.TotalCost - r.Budget))) + "　　"
-				+ (intact ? Loc.T("[color=#8ecdb1]✔ 桥面完整[/color]") : Loc.F("[color=#e3c384]△ 桥面完整度 {0:0}%[/color]", (r.DeckIntegrity * 100)));
-			_successBox.AddChild(checks);
+			if (records is { Count: > 0 })
+				_successBox.AddChild(UiTheme.MakeLabel(Loc.T("已保存为命名方案：") + string.Join(Loc.T("、"), records.Select(LevelRecord.KindName)), 13, UiTheme.Good));
+			// Where the points come from: five base items, then the achievements that multiply them
 			var sb = new StringBuilder();
-			double ratio = r.Budget > 0 ? r.TotalCost / r.Budget : 0;
-			sb.Append(Loc.F("预算分（×6）：{0:N0}　使用 ${1:N0} / ${2:N0} = {3:0}%，越省越高\n", (r.BudgetScore), (r.TotalCost), (r.Budget), (ratio * 100)));
-			sb.Append(r.ReferenceTime > 0
-				? Loc.F("时间分（×2）：{0:N0}　完成 {1:0.0} s，理想 {2:0.0} s（车船全速不等待），越快越高\n", (r.TimeScore), (r.CompletionTime), (r.ReferenceTime))
-				: Loc.F("时间分（×2）：{0:N0}\n", (r.TimeScore)));
-			sb.Append(Loc.F("完整度分（×1）：{0:N0}　通过后桥面完整 {1:0}%\n", (r.IntegrityScore), (r.DeckIntegrity * 100)));
-			sb.Append(r.StressUsesMargin
-				? Loc.F("受力分（×1）：{0:N0}　取安全冗余 {1:0}%（利用率 {2:0}%，冗余上限 150%）\n\n", (r.StressScore), (r.SafetyMargin * 100), (r.MaxUtilization * 100))
-				: Loc.F("受力分（×1）：{0:N0}　取利用率 {1:0}%（安全冗余 {2:0}%）\n\n", (r.StressScore), (r.MaxUtilization * 100), (r.SafetyMargin * 100)));
-			sb.Append(Loc.F("成功通过车辆：{0}/{1}", (r.PassedVehicles), (r.VehicleResults.Count)));
-			if (r.TotalShips > 0) sb.Append(Loc.F("　船只：{0}/{1}", (r.ShipsPassed), (r.TotalShips)));
-			sb.Append(Loc.F("\n完成时间：{0:0.0} s\n", (r.CompletionTime)));
-			_successBox.AddChild(UiTheme.MakeLabel(sb.ToString(), 16));
+			double refCost = r.ReferenceCost > 0 ? r.ReferenceCost : r.Budget * EngineeringScore.Config.ReferenceCostRatio;
+			sb.Append(Loc.F("经济性 {0:N0}　造价 ${1:N0}，参考 ${2:N0}（越省越高，不封顶）\n", (r.EconomyPoints), (r.TotalCost), (refCost)));
+			sb.Append(Loc.F("结构安全 {0:N0}　安全裕量 {1:0}%（最大利用率 {2:0}%）\n", (r.SafetyPoints), (System.Math.Min(r.SafetyMargin, 9.99) * 100), (r.MaxUtilization * 100)));
+			sb.Append(double.IsNaN(r.WeatherMargin)
+				? Loc.F("天气适应 {0:N0}　本关没有天气事件，按结构安全计\n", (r.WeatherPoints))
+				: Loc.F("天气适应 {0:N0}　天气期间安全裕量 {1:0}%\n", (r.WeatherPoints), (System.Math.Min(r.WeatherMargin, 9.99) * 100)));
+			sb.Append(Loc.F("通行效率 {0:N0}　完成 {1:0.0} s，理想 {2:0.0} s\n", (r.TrafficPoints), (r.CompletionTime), (r.ReferenceTime)));
+			sb.Append(Loc.F("环境影响 {0:N0}　河床扰动 {1:0} m / 河宽 {2:0} m\n", (r.EnvironmentPoints), (r.Disturbance), (r.RiverWidth)));
+			if (r.DeckIntegrity < 0.999) sb.Append(Loc.F("[color=#e3c384]桥面完整度 {0:0}%，以上各项按比例折算[/color]\n", (r.DeckIntegrity * 100)));
+			sb.Append(Loc.F("[b]基础分 {0:N0}[/b]\n", (r.BaseScore)));
+			foreach (var a in r.Achievements)
+				sb.Append(a.Earned ? Loc.F("[color=#8ecdb1]✔ {0} ×{1:0.00}[/color]　{2}\n", (a.Name), (a.Multiplier), (a.Note))
+					: Loc.F("[color=#a3afbf]✘ {0} ×{1:0.00}　{2}[/color]\n", (a.Name), (a.Multiplier), (a.Note)));
+			if (r.Achievements.Count > 0) sb.Append(Loc.F("[b]成就倍率 ×{0:0.00}[/b]\n", (r.AchievementMultiplier)));
+			if (!string.IsNullOrEmpty(r.ContractNote)) sb.Append(r.ContractMet ? $"[color=#8ecdb1]✔ {r.ContractNote}[/color]\n" : $"[color=#e3c384]✘ {r.ContractNote}[/color]\n");
+			sb.Append(Loc.F("[b]工程积分 {0:N0}[/b]\n", (r.Score)));
+			if (r.TotalCost > r.Budget + 1e-6) sb.Append(Loc.F("[color=#f09797]超预算 ${0:N0}[/color]\n", (r.TotalCost - r.Budget)));
+			sb.Append(Loc.F("通过车辆 {0}/{1}", (r.PassedVehicles), (r.VehicleResults.Count)));
+			if (r.TotalShips > 0) sb.Append(Loc.F("　船只 {0}/{1}", (r.ShipsPassed), (r.TotalShips)));
+			sb.Append('\n');
+			_successBox.AddChild(new RichTextLabel { BbcodeEnabled = true, FitContent = true, Text = sb.ToString(), CustomMinimumSize = new Vector2(520, 0) });
+			_successBox.AddChild(new RichTextLabel { BbcodeEnabled = true, FitContent = true, Text = PhaseReport(r), CustomMinimumSize = new Vector2(520, 0) });
 			var hb = new HBoxContainer(); hb.AddThemeConstantOverride("separation", 10);
 			var next = UiTheme.MakeButton(Loc.T("下一关"), () => _ctl.NextLevel(), 100);
 			next.Disabled = !hasNext;
@@ -1003,11 +1287,54 @@ namespace BridgeArchitect3D.UI
 
 		public void HideDialogs() { _failOverlay.Visible = false; _successOverlay.Visible = false; }
 
+		private CheckButton _cutawayBuild, _cutawayTest, _follow;
+		private OptionButton _contract;
+		private readonly System.Collections.Generic.List<string> _contractIds = new();
+		private string _contractShown = "-";
+
+		/// <summary>Contracts this level offers and the design's current one (rebuilt only when something changed).</summary>
+		public void SetContracts(System.Collections.Generic.IReadOnlyList<string> ids, string current)
+		{
+			if (_contract == null) return;
+			string key = string.Join(",", ids) + "|" + current;
+			if (key == _contractShown) return;
+			_contractShown = key;
+			_contract.Clear(); _contractIds.Clear();
+			_contract.AddItem(Loc.T("无合同"));
+			var cfg = EngineeringScore.Config;
+			foreach (var id in ids)
+			{
+				var c = cfg.Contract(id); if (c == null) continue;
+				_contractIds.Add(id); _contract.AddItem(c.Name);
+				_contract.SetItemTooltip(_contractIds.Count, c.Description);
+			}
+			int sel = current == null ? 0 : _contractIds.IndexOf(current) + 1;
+			_contract.Select(System.Math.Max(0, sel));
+			var cc = cfg.Contract(current);
+			_contract.TooltipText = cc == null ? Loc.T("可选：接受一份工程合同，改变评分重点并多一个条件，完成后总分有奖励") : cc.Description;
+		}
+
+		public void SetFollowChecked(bool on) => _follow?.SetPressedNoSignal(on);
+
 		// ---------------- 属性文本 ----------------
 		public static string NodeProperties(BridgeNode n, LevelDefinition level, BridgeDesign d, BridgeSimulation stat)
 		{
+			if(n.TunnelPoint)return Loc.F("[b]隧道路线控制点[/b]\n位置：X {0:0.00} m · 底部标高 {1:0.00} m\n",n.Position.X,n.Position.Y)
+				+Loc.T("[color=#21c6e1]拖动青色圆点：调整埋深（两端贴合岸壁，只能上下）\n双击圆点：放大后精细调整[/color]\n两岸垂直电梯随端点自动连接。\n每个管节接缝上都有圆点（沉管只有两端），角度变化时管节自动拼合。点击管体可选择管节。\n连接混凝土构件请使用橙色方形支点。");
 			var sb = new StringBuilder();
 			sb.Append(n.IsAnchor ? Loc.F("[b]固定锚点 {0}[/b]\n", (n.AnchorId)) : n.PierBase ? Loc.F("[b]桥墩基础 #{0}[/b]\n", (n.Id)) : Loc.F("[b]节点 #{0}[/b]{1}\n", (n.Id), ((n.PierPart ? Loc.T("（桥墩支点）") : ""))));
+			if (n.IsTunnelSupport)
+			{
+				var db = stat?.Db ?? Core.GameManager.Instance?.Db;
+				var g = db == null ? null : TunnelGeometry.Build(d, db);
+				var zone = level.Terrain.ZoneAt(n.Position.X);
+				int j = n.TunnelJoint;
+				if (g != null && j > 0 && j < g.Count)
+				{
+					var gr = g.Grade[j - 1].SupportLoad <= g.Grade[j].SupportLoad ? g.Grade[j - 1] : g.Grade[j];
+					sb.Append(Loc.F("隧道支点（第 {0} 道接缝，{1}）\n地基：{2}\n支点承载力：{3:0} kN（比桥墩低）\n只能连接混凝土类建材\n", (j), (gr.Name), (zone.Name), (TunnelRules.SupportCapacity(db.TunnelConfig, gr, zone) / 1000)));
+				}
+			}
 			if (n.PierBase)
 			{
 				var zone = level.Terrain.ZoneAt(n.Position.X);

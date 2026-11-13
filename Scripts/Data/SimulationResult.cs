@@ -20,7 +20,14 @@ namespace BridgeArchitect3D.Data
         OverBudget,
         Derailed,
         WrongSurface,
+        /// <summary>A tunnel element was overstressed (material strength); the name is kept for old saves and tests.</summary>
+        TunnelFlooded,
+        /// <summary>A bank lift platform carried more than it can.</summary>
+        LiftOverload,
     }
+
+    /// <summary>The four phases of every test: static (no traffic, no weather), vehicles, environment (weather events), result.</summary>
+    public enum TestPhase { Static, Vehicles, Environment, Result }
 
     public class VehicleResult
     {
@@ -46,6 +53,20 @@ namespace BridgeArchitect3D.Data
         /// <summary>出问题的位置（X 坐标 m），用于定位。</summary>
         public double ProblemX { get; set; } = double.NaN;
         public double MaxUtilization { get; set; }
+        // ---- Phase-4 result evaluation ----
+        /// <summary>Phase in which the test failed (Result when it passed).</summary>
+        public TestPhase FailurePhase { get; set; } = TestPhase.Result;
+        /// <summary>Peak utilisation in each phase (Static, Vehicles, Environment); -1 = the phase did not happen.</summary>
+        public double[] PhaseMaxUtil { get; set; } = { -1, -1, -1 };
+        /// <summary>Weakest place over the whole test: member id (or -1) and a readable description.</summary>
+        public int WeakestMemberId { get; set; } = -1;
+        public string WeakestText { get; set; } = "";
+        public double WeakestX { get; set; } = double.NaN;
+        /// <summary>Largest elastic deck sag (m) and largest tunnel displacement (settlement / sway, m).</summary>
+        public double MaxDeckSag { get; set; }
+        public double MaxTunnelMove { get; set; }
+        /// <summary>Safety margin during weather events: capacity / peak demand − 1 (NaN = no weather event).</summary>
+        public double WeatherMargin { get; set; } = double.NaN;
         public List<VehicleResult> VehicleResults { get; set; } = new();
         public double TotalCost { get; set; }
         public double Budget { get; set; }
@@ -73,6 +94,29 @@ namespace BridgeArchitect3D.Data
         /// <summary>受力分是否取自安全冗余（否则取自利用率）。</summary>
         public bool StressUsesMargin { get; set; }
         public int Score { get; set; }
+        // ---- Engineering Score (version 2, uncapped; see EngineeringScore) ----
+        public int ScoreVersion { get; set; }
+        public int BaseScore { get; set; }
+        public double ReferenceCost { get; set; }
+        public double RiverWidth { get; set; }
+        /// <summary>Riverbed / ground disturbance length, m (piers, immersed tube, anchors, bored tube).</summary>
+        public double Disturbance { get; set; }
+        public double EconomyFactor { get; set; }
+        public double SafetyFactor { get; set; }
+        public double WeatherFactor { get; set; }
+        public double TrafficFactor { get; set; }
+        public double EnvironmentFactor { get; set; }
+        public int EconomyPoints { get; set; }
+        public int SafetyPoints { get; set; }
+        public int WeatherPoints { get; set; }
+        public int TrafficPoints { get; set; }
+        public int EnvironmentPoints { get; set; }
+        public double AchievementMultiplier { get; set; } = 1;
+        /// <summary>Engineering contract of the tested design (null = none) and whether its condition was met.</summary>
+        public string Contract { get; set; }
+        public bool ContractMet { get; set; }
+        public string ContractNote { get; set; } = "";
+        public List<AchievementResult> Achievements { get; set; } = new();
 
         public int PassedVehicles
         {

@@ -11,6 +11,10 @@ namespace BridgeArchitect3D.World
         public const float SceneDepth = (float)(SceneryLayout.HalfDepth*2);   // Scene depth matches the placement boundary.
         public const float RoadWidth = 4f;
         public const string OverlayName = "BuildOverlays";
+        /// <summary>Extruded terrain meshes whose rendered front depth is trimmed in section view.</summary>
+        public const string CutawayGroup = "cutaway";
+        /// <summary>Front scenery (trees, houses...) hidden while the cutaway is on.</summary>
+        public const string CutawayFrontGroup = "cutaway_front";
 
         /// <summary>生成环境；返回装饰物根节点（建造侧视时可隐藏以减少干扰）。</summary>
         public static Node3D Build(Node3D root, LevelDefinition level,SceneryLayout layout=null)
@@ -20,7 +24,8 @@ namespace BridgeArchitect3D.World
             float w = (float)t.RiverWidth;
             float bed = (float)t.RiverBedDepth;
             float lh = (float)t.LeftBankHeight, rh = (float)t.RightBankHeight;
-            const float bankLen = (float)SceneryLayout.BankLength;
+            // Long tunnel ramps extend the banks beyond the standard scenery length
+            float bankLen = (float)TunnelRules.BankExtent(level);
 
             var grass = Mat(new Color(art.Ground));
             var soil = Mat(new Color(art.Soil));
@@ -29,10 +34,10 @@ namespace BridgeArchitect3D.World
             var line = Mat(new Color("e8e2c8"));
 
             // 两岸（实体 + 碰撞，供碎片落地）
-            AddBox(root, new Vector3(-bankLen / 2, (lh + bed - 2) / 2, 0), new Vector3(bankLen, lh - bed + 2, SceneDepth), soil, true);
-            AddBox(root, new Vector3(w + bankLen / 2, (rh + bed - 2) / 2, 0), new Vector3(bankLen, rh - bed + 2, SceneDepth), soil, true);
-            AddBox(root, new Vector3(-bankLen / 2, lh + 0.05f, 0), new Vector3(bankLen, 0.1f, SceneDepth), grass, false);
-            AddBox(root, new Vector3(w + bankLen / 2, rh + 0.05f, 0), new Vector3(bankLen, 0.1f, SceneDepth), grass, false);
+            AddBox(root, new Vector3(-bankLen / 2, (lh + bed - 2) / 2, 0), new Vector3(bankLen, lh - bed + 2, SceneDepth), soil, true).AddToGroup(CutawayGroup);
+            AddBox(root, new Vector3(w + bankLen / 2, (rh + bed - 2) / 2, 0), new Vector3(bankLen, rh - bed + 2, SceneDepth), soil, true).AddToGroup(CutawayGroup);
+            AddBox(root, new Vector3(-bankLen / 2, lh + 0.05f, 0), new Vector3(bankLen, 0.1f, SceneDepth), grass, false).AddToGroup(CutawayGroup);
+            AddBox(root, new Vector3(w + bankLen / 2, rh + 0.05f, 0), new Vector3(bankLen, 0.1f, SceneDepth), grass, false).AddToGroup(CutawayGroup);
             // Sloped bank walls: a wedge from each bank top edge down to its toe on the bed
             float run = (float)t.WallRun;
             if (run > 0)
@@ -42,7 +47,11 @@ namespace BridgeArchitect3D.World
             }
             // 河床
             var bedMat = t.DefaultSoil == "soft" ? Mat(new Color("8a6a45")) : rock;
-            AddBox(root, new Vector3(w / 2, bed - 1, 0), new Vector3(w + 2, 2, SceneDepth), bedMat, true);
+            AddBox(root, new Vector3(w / 2, bed - 1, 0), new Vector3(w + 2, 2, SceneDepth), bedMat, true).AddToGroup(CutawayGroup);
+            // Deep ground is visual context for bored tunnels; collision surfaces remain unchanged.
+            float deepTop = bed - 2, deepBottom = (float)t.BuildMinY;
+            if (deepBottom < deepTop && level.AllowedMaterials.Any(id => Core.GameManager.Instance?.Db?.GetMaterial(id)?.IsTunnel == true))
+                AddBox(root,new Vector3(w/2,(deepTop+deepBottom)/2,0),new Vector3(w+2*bankLen,deepTop-deepBottom,SceneDepth),bedMat,false).AddToGroup(CutawayGroup);
             // 河中岩墩
             foreach (var p in t.Pillars)
             {
@@ -61,14 +70,15 @@ namespace BridgeArchitect3D.World
             {
                 var waterMesh = AddBox(root, new Vector3(w / 2, (wl + bed) / 2, 0), new Vector3(w, wl - bed, SceneDepth), water, false);
                 waterMesh.Name = "Water";
+                waterMesh.AddToGroup(CutawayGroup);
             }
             BuildSoilProfile(root, level);
 
             // 道路引道与标线
-            AddBox(root, new Vector3(-bankLen / 2, lh + 0.15f, 0), new Vector3(bankLen, 0.12f, RoadWidth), asphalt, false);
-            AddBox(root, new Vector3(w + bankLen / 2, rh + 0.15f, 0), new Vector3(bankLen, 0.12f, RoadWidth), asphalt, false);
-            AddBox(root, new Vector3(-bankLen / 2, lh + 0.22f, 0), new Vector3(bankLen, 0.02f, 0.15f), line, false);
-            AddBox(root, new Vector3(w + bankLen / 2, rh + 0.22f, 0), new Vector3(bankLen, 0.02f, 0.15f), line, false);
+            AddBox(root, new Vector3(-bankLen / 2, lh + 0.15f, 0), new Vector3(bankLen, 0.12f, RoadWidth), asphalt, false).AddToGroup(TerrainSectionView.AccessCutGroup);
+            AddBox(root, new Vector3(w + bankLen / 2, rh + 0.15f, 0), new Vector3(bankLen, 0.12f, RoadWidth), asphalt, false).AddToGroup(TerrainSectionView.AccessCutGroup);
+            AddBox(root, new Vector3(-bankLen / 2, lh + 0.22f, 0), new Vector3(bankLen, 0.02f, 0.15f), line, false).AddToGroup(TerrainSectionView.AccessCutGroup);
+            AddBox(root, new Vector3(w + bankLen / 2, rh + 0.22f, 0), new Vector3(bankLen, 0.02f, 0.15f), line, false).AddToGroup(TerrainSectionView.AccessCutGroup);
 
             // Rails along both approaches when a train runs in this level (the train rides on the rail heads)
             if (level.TrafficEvents.Any(e => e.Type == TrafficEventType.Vehicle && e.VehicleId == "train"))
@@ -88,7 +98,13 @@ namespace BridgeArchitect3D.World
             layout ??=new SceneryLayout(level);
             BuildDecorations(deco, level, bankLen,layout);
             LandscapeDetails.Build(deco,level,layout);
+            // Scenery in front of the section plane (+z, camera side) goes to its own node so the cutaway can hide it
+            var decoFront = new Node3D { Name = "DecorationsFront" };
+            root.AddChild(decoFront); decoFront.AddToGroup(CutawayFrontGroup);
+            foreach (var child in deco.GetChildren())
+                if (child is Node3D n3 && n3.Position.Z > 0) { deco.RemoveChild(n3); decoFront.AddChild(n3); }
             LowPolyDetails.Batch(deco);
+            LowPolyDetails.Batch(decoFront);
             // Build aids (ship lane outline, no-pier zones, slope bands, build boundary) are hidden while testing
             var overlays = new Node3D { Name = OverlayName };
             root.AddChild(overlays);
@@ -96,6 +112,8 @@ namespace BridgeArchitect3D.World
             BuildElevatedApproaches(root, level, bankLen, asphalt, line, Mat(new Color("9a9a94")));
             BuildSlopeBands(overlays, level);
             BuildNoBuildZones(overlays, level);
+            var strata = new Node3D {Name="SectionStrata"};root.AddChild(strata);
+            BuildStrata(strata, level);
 
             // 可建造区域边界（淡色线框）
             var boundary = new MeshInstance3D { Mesh = BuildBoundaryMesh(level), MaterialOverride = Unshaded(new Color(0.55f, 0.8f, 1f, 0.5f)) };
@@ -124,6 +142,8 @@ namespace BridgeArchitect3D.World
             var sun = new DirectionalLight3D { ShadowEnabled = BridgeArchitect3D.Core.GameManager.ShadowsOn, LightEnergy = 1.1f };
             sun.RotationDegrees = new Vector3(-50, -35, 0);
             root.AddChild(sun);
+            var section = new TerrainSectionView { Name = "TerrainSectionView" };
+            root.AddChild(section); section.Capture(root); section.SetEnabled(false);
             return deco;
         }
 
@@ -316,8 +336,8 @@ namespace BridgeArchitect3D.World
             {
                 float x0 = (float)Mathf.Max(0, z.X0), x1 = (float)Mathf.Min(t.RiverWidth, z.X1), cx = (x0 + x1) / 2, wz = x1 - x0;
                 if (wz <= 0) continue;
-                if (z.IsRock) AddBox(root, new Vector3(cx, bed - 1.5f, BuildPlane.FrontZ + 1.2f), new Vector3(wz, 3f, 0.3f), rock, false);
-                else for (int i = 0; i < 4; i++) AddBox(root, new Vector3(cx, bed - 0.4f - i * 0.75f, BuildPlane.FrontZ + 1.2f), new Vector3(wz, 0.75f, 0.3f), i % 2 == 0 ? soft1 : soft2, false);
+                if (z.IsRock) AddBox(root, new Vector3(cx, bed - 1.5f, BuildPlane.FrontZ + 1.2f), new Vector3(wz, 3f, 0.3f), rock, false).AddToGroup(CutawayGroup);
+                else for (int i = 0; i < 4; i++) AddBox(root, new Vector3(cx, bed - 0.4f - i * 0.75f, BuildPlane.FrontZ + 1.2f), new Vector3(wz, 0.75f, 0.3f), i % 2 == 0 ? soft1 : soft2, false).AddToGroup(CutawayGroup);
                 root.AddChild(new Label3D
                 {
                     Text = z.Name + (z.IsRock ? Loc.T("：浅基础即可") : Loc.T("：浅基础承载低，建议桩基础")), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, NoDepthTest = true,
@@ -402,6 +422,38 @@ namespace BridgeArchitect3D.World
         }
 
         /// <summary>禁止建墩区：半透明绿色区域（航道或生态保护区），区内道路标高以下不能放置节点。</summary>
+        /// <summary>Levels with tunnel materials: a portal on each bank where the approach ramp enters the ground,
+        /// and a faint band on the river bed marking where tunnel sections can be laid.</summary>
+        /// <summary>Shield tunnel levels: ground layers below the bed drawn as a cutaway on the build plane.</summary>
+        private static void BuildStrata(Node3D overlays, LevelDefinition level)
+        {
+            var t = level.Terrain;
+            var cfg = Core.GameManager.Instance?.Db?.TunnelConfig;
+            if (t.Strata == null || t.Strata.Count == 0 || cfg == null) return;
+            float bed = (float)TunnelRules.BedY(t), bottom = (float)t.BuildMinY;
+            foreach (var col in t.Strata)
+            {
+                float top = bed;
+                foreach (var l in col.Layers)
+                {
+                    float th = l.Thickness > 0 ? (float)l.Thickness : top - bottom;
+                    if (th <= 0.01f) break;
+                    var gs = cfg.Geo(l.Soil);
+                    var c = Color.FromHtml(gs.Color ?? "#8a7a60"); c.A = 0.55f;
+                    var m = Unshaded(c);
+                    var band = new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3((float)(col.X1 - col.X0), th, 0.02f) }, MaterialOverride = m,
+                        Position = new Vector3((float)(col.X0 + col.X1) / 2, top - th / 2, TerrainSectionView.CutPlaneZ + 0.06f), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off };
+                    overlays.AddChild(band);
+                    band.AddToGroup(TerrainSectionView.SectionOnlyGroup);
+                    var label = new Label3D { Text = Loc.F("{0}（最小覆土 {1:0} m）", (gs.Name), (gs.MinCover)), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+                        FontSize = 24, PixelSize = 0.01f, Modulate = new Color(1, 1, 1, 0.9f), Position = new Vector3((float)col.X0 + 6, top - Mathf.Min(th, 4) / 2, TerrainSectionView.CutPlaneZ + 0.1f) };
+                    overlays.AddChild(label); label.AddToGroup(TerrainSectionView.SectionOnlyGroup);
+                    top -= th;
+                    if (top <= bottom) break;
+                }
+            }
+        }
+
         private static void BuildNoBuildZones(Node3D root, LevelDefinition level)
         {
             var t = level.Terrain;
@@ -465,7 +517,7 @@ namespace BridgeArchitect3D.World
             var pts = new Vector3[6];
             for (int i = 0; i < 3; i++) { pts[i] = V(i, hz); pts[i + 3] = V(i, -hz); }
             body.AddChild(new CollisionShape3D { Shape = new ConvexPolygonShape3D { Points = pts } });
-            body.AddChild(mi);
+            body.AddChild(mi); mi.AddToGroup(CutawayGroup);
             root.AddChild(body);
         }
 

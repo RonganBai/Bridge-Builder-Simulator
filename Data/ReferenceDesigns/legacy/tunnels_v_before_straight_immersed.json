@@ -1,0 +1,78 @@
+{
+  "_units": "长度 m，压力 / 承载 Pa，力 N，质量 kg/m，转角 rad，费用 $。所有隧道数值集中在这里，方便调整平衡。",
+  "ElementLength": 10,
+  "WaterDensity": 1000,
+  "Gravity": 9.81,
+  "RiskYellow": 0.7,
+  "RiskOrange": 0.9,
+  "SoftSupportFactor": 0.5,
+  "CurrentNormal": 0.5,
+  "CurrentFlood": 1.1,
+  "_geology": "盾构地层（游戏平衡参数，不是设计标准）：MinCover 管顶所在地层要求的最小覆土 m；Gamma 有效重度 N/m³；EarthK 土压系数；Permeability 洪水上涨传到地下水的比例；LagTime 地下水滞后时间常数 s；ExcavationCost 每米掘进费。",
+  "Geology": {
+    "rock": { "Name": "岩石",     "MinCover": 3,  "Gamma": 12000, "EarthK": 0.3, "Permeability": 0.2, "LagTime": 40, "ExcavationCost": 800, "Color": "#7D7468" },
+    "clay": { "Name": "坚实黏土", "MinCover": 6,  "Gamma": 9000,  "EarthK": 0.7, "Permeability": 0.4, "LagTime": 25, "ExcavationCost": 250, "Color": "#A0805A" },
+    "sand": { "Name": "砂土",     "MinCover": 9,  "Gamma": 10000, "EarthK": 0.9, "Permeability": 1.0, "LagTime": 3,  "ExcavationCost": 300, "Color": "#D6BF86" },
+    "silt": { "Name": "软弱淤泥", "MinCover": 12, "Gamma": 7000,  "EarthK": 1.2, "Permeability": 0.8, "LagTime": 8,  "ExcavationCost": 350, "Color": "#6F6A55" }
+  },
+  "Soils": {
+    "rock": { "Name": "岩石", "Bearing": 200000, "SettleCoef": 0.004 },
+    "soft": { "Name": "软土", "Bearing": 12000, "SettleCoef": 0.15 }
+  },
+  "Types": {
+    "immersed": {
+      "Name": "沉管隧道",
+      "TubeHeight": 8, "TubeWidth": 9, "FloorHeight": 0.8,
+      "MaxTrenchDepth": 6, "DredgeCostPerMeterDepth": 120, "RampCostPerMeter": 0,
+      "ReinforceCostPerMeter": 300, "ReinforceFactor": 2.5,
+      "ScourFactor": 0.02, "ScourCover": 2,
+      "Grades": {
+        "normal":     { "Name": "普通管节", "CostPerMeter": 700,  "MassPerMeter": 74000, "PressureCapacity": 140000, "JointRotation": 0.006, "SupportLoad": 600000,  "Color": "#A3A096" },
+        "reinforced": { "Name": "加强管节", "CostPerMeter": 1000, "MassPerMeter": 78000, "PressureCapacity": 220000, "JointRotation": 0.012, "SupportLoad": 1200000, "Color": "#8E9690" },
+        "heavy":      { "Name": "重型管节", "CostPerMeter": 1400, "MassPerMeter": 84000, "PressureCapacity": 320000, "JointRotation": 0.02,  "SupportLoad": 2000000, "Color": "#6F7F8C" }
+      }
+    },
+    "shield": {
+      "Name": "盾构隧道",
+      "Placement": "ground", "HasSupports": false,
+      "TubeHeight": 7, "TubeWidth": 8, "FloorHeight": 0.8,
+      "MaxDepthBelowBed": 40, "DefaultCover": 6,
+      "RampCostPerMeter": 0,
+      "ReinforceCostPerMeter": 400, "GroutCoverFactor": 0.6, "GroutEarthFactor": 0.8,
+      "Grades": {
+        "normal":     { "Name": "普通管片", "CostPerMeter": 1200, "MassPerMeter": 40000, "PressureCapacity": 280000, "JointRotation": 0.02, "SupportLoad": 0, "Color": "#A8A49A" },
+        "reinforced": { "Name": "加强管片", "CostPerMeter": 1500, "MassPerMeter": 44000, "PressureCapacity": 380000, "JointRotation": 0.02, "SupportLoad": 0, "Color": "#8F9A96" },
+        "heavy":      { "Name": "重型管片", "CostPerMeter": 1900, "MassPerMeter": 50000, "PressureCapacity": 500000, "JointRotation": 0.02, "SupportLoad": 0, "Color": "#73838F" }
+      }
+    },
+    "floating": {
+      "Name": "悬浮隧道",
+      "Placement": "water", "HasSupports": false,
+      "TubeHeight": 7, "TubeWidth": 9, "FloorHeight": 0.8,
+      "MinCover": 1, "MinBedClearance": 4,
+      "RampCostPerMeter": 0,
+      "ReinforceCostPerMeter": 300, "ReinforceFactor": 2, "ScourFactor": 0.5,
+      "_cables": "锚索承载 Capacity 为每根拉力 N；刚度为每根锚索给一节管节提供的横向 / 竖向刚度 N/m；AnchorCapacity 为一节管节锚固基础的总抗拔力 N。",
+      "DefaultCableCount": 2, "MaxCableCount": 6, "CableAngleDeg": 30,
+      "CableLateralStiffness": 15000, "CableVerticalStiffness": 2000000,
+      "DragCoefficient": 1.0, "MaxDisplacement": 1.0,
+      "AnchorCapacity": { "rock": 2500000, "soft": 1400000 },
+      "DefaultBuoyancy": "mid",
+      "Buoyancy": {
+        "low":  { "Name": "低浮力", "Ratio": 1.04, "CostPerMeter": 150 },
+        "mid":  { "Name": "中浮力", "Ratio": 1.2,  "CostPerMeter": 80 },
+        "high": { "Name": "高浮力", "Ratio": 1.35, "CostPerMeter": 0 }
+      },
+      "DefaultCable": "standard",
+      "Cables": {
+        "standard": { "Name": "钢绞线锚索", "Capacity": 600000,  "CostPerMeter": 60,  "Color": "#3A3F45" },
+        "strong":   { "Name": "高强复合锚索", "Capacity": 1000000, "CostPerMeter": 110, "Color": "#2B5D7A" }
+      },
+      "Grades": {
+        "normal":     { "Name": "普通管节", "CostPerMeter": 800,  "MassPerMeter": 52000, "PressureCapacity": 90000,  "JointRotation": 0.02, "SupportLoad": 0, "Color": "#B8B4A8" },
+        "reinforced": { "Name": "加强管节", "CostPerMeter": 1100, "MassPerMeter": 52000, "PressureCapacity": 160000, "JointRotation": 0.03, "SupportLoad": 0, "Color": "#9AA6A4" },
+        "heavy":      { "Name": "重型管节", "CostPerMeter": 1500, "MassPerMeter": 52000, "PressureCapacity": 240000, "JointRotation": 0.04, "SupportLoad": 0, "Color": "#7E8E9A" }
+      }
+    }
+  }
+}

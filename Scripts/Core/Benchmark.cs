@@ -71,6 +71,10 @@ namespace BridgeArchitect3D.Core
             {
                 if (_t < 0.5 || GetTree().CurrentScene is not LevelManager lm) return;
                 lm.BenchmarkStart();
+                // "--cutaway" / "--follow" turn on the underground cutaway / follow-the-vehicle camera for screenshots
+                var ba = OS.GetCmdlineUserArgs();
+                if (System.Array.IndexOf(ba, "--cutaway") >= 0) lm.SetCutaway(true);
+                if (System.Array.IndexOf(ba, "--follow") >= 0) lm.SetFollowCamera(true);
                 _started = true; _t = 0;
                 return;
             }

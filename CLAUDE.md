@@ -37,10 +37,10 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 - 测试不会在 0 秒直接判负：问题先记录，不稳定部分先垮塌，车辆照常行驶；遇到断口卡住 3 秒判负；驶上断裂桥面才坠落。局部构件掉落不算致命。
 - 预算可以超支，只影响评分。
 - 所有关卡的地图锚点（支点）承载力无限（levels.json 里 MaxLoad = 0 表示无限）；只有桥墩地基（浅基础 / 桩基础）有承载上限。
-- 评分上不封顶：预算 : 时间 : 完整度 : 受力 = 6 : 2 : 1 : 1（用户 2026-11 调整）。预算分 = 6000 × 预算 / 花费；时间分 = 2000 × min(1, 理想完成时间 / 实际完成时间)，理想时间 = 每辆车按自身速度走完全程、船直接通过（不等待）；完整度分 = 1000 × 桥面完整度；受力分 = 1000 × max(最大利用率, 安全冗余)，安全冗余 = 1/利用率 − 1，上限 150%。用户确认“利用率越高越好”。
+- 评分 = 工程积分（Engineering Score，评分版本 2，见水下隧道一节的第 ⑧ 步），旧 6:2:1:1 已替换。
 - 每种桥面在自身最大长度内（两端支撑）必须能承载规定车辆：木桥面要求轿车，钢桥面要求坦克，其余桥面要求重型货车（有回归测试）。每关至少有一种允许的桥面“跨中集中承载（吨）”不低于本关最重车辆；所有材料价格互不相同。
 - 建材性能面板：悬停建材按钮显示 5 格进度条（简单），勾选“显示数值”显示具体数字（详细）；力统一用“吨”。
-- 坡度：建议 ≤ 15%（容差 0.5 个百分点）；15%~30% 车辆减速爬坡；> 30% 爬不上去。
+- 坡度：建议 ≤ 15%（容差 0.5 个百分点）；15%~30° 车辆减速爬坡；> 30°（tan30° ≈ 57.7%，RoadPath.MaxClimbGrade）爬不上去。所有车辆 MaxRampGrade = 30°（2026-11 用户要求，桥面与隧道统一；隧道关原来的 8% 特许已删除，旧数据备份 legacy/*_v_before_30deg.json）。
 - 立柱有倾角限制（混凝土柱 15°、钢筋混凝土柱 30°、桥墩 5°），超限可建但测试开始时倒塌。
 - 桥墩工具：从河床立起，自动生成墩底基础 + 中部 + 顶部支点；基础可选浅基础 / 桩基础（选中桥墩任一节点或墩身构件即显示基础按钮，LevelManager 用 PierBaseOf 找墩底）；桥墩显示为俯视胶囊形单柱（中间板 + 两侧圆柱，跨两侧桁架）；软土浅基础承载低；洪水冲毁木桥墩、掏空冲刷区浅基础。
 - 旧桥加固：旧构件不计费、节点不能移动、最多拆 4 根、可付费修复。修复费 = 长度 × 单价 × RepairCostRatio（第十关 1.0）×（1 − 状况），即每份恢复的承载力与新建同价（2026-11 用户要求修复不能远比新建划算）；第十关预算 13500。会因横梁挡车的旧构件在打开设计时自动在中点刚性分段（CrossBeams.SplitExistingBlocking，只改内存，不改存档 / 起始桥文件）。横梁显示粗细为构件的 0.9 倍（≥0.15 m），挡车的显示红色。
@@ -77,6 +77,10 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 ## 尚未实现（用户提过，留待以后）
 钢—混凝土组合梁、弧形胶合木梁、温度伸缩、加固施工顺序（分段封闭）、双车道偏载 / 侧风 / 桥面扭转（需要横向受力计算）、自由建造模式。
 
+## 游戏版本号
+- Scripts/Data/GameVersion.cs 的 GameVersion.Current（当前 1.1.0）是唯一来源；project.godot config/version、export_presets.cfg file/product_version（x.y.z.0）、installer/BridgeArchitect3D.iss AppVersion 必须一致，每次改版本都在 CHANGELOG.md 加条目（测试检查这四处）。修订号 = 修复，次版本 = 新内容且旧存档可读，主版本 = 不兼容。
+- BridgeDesign / GameProgress / GameSettings 实现 IVersionStamped，写盘时 SaveManager 用 GameVersion.Stamp 写入 GameVersion；没有该字段的旧文件按 1.0.0。它和存档格式版本 BridgeDesign.Version（当前 5）是两回事。进度来自旧版本时 GameManager.UpdatedFrom 让主菜单提示一次；读到更新版本保存的方案时 SaveManager.VersionWarning 给提醒（照常载入）。主菜单标题下显示版本号。
+
 ## 工作约定
 - 改动后：跑测试 → 编译游戏 → 更新 README 相关章节。
 - Git：仓库 https://github.com/RonganBai/Bridge-Builder-Simulator ，分支 main；提交说明用中文或英文均可，结尾加 Co-Authored-By 行。推送前先征得用户同意。
@@ -105,3 +109,44 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 
 ## 导出版用户数据
 - project.godot 的 config/use_custom_user_dir.template / custom_user_dir_name.template：导出版（template 特性）存档在 %APPDATA%/BridgeArchitect3D，和编辑器 / 开发运行的 %APPDATA%/Godot/app_userdata/Bridge Architect 3D 分开，所以安装版从零开始，不带开发时的关卡进度。不要删除开发目录里的存档。
+
+## 水下隧道（Scripts/Data/Tunnels.cs + Scripts/Physics/TunnelAnalysis.cs，第十三关）
+- 2026-11 用户给了完整的“桥梁与隧道系统 + 工程评分”规格，按其 10 步顺序分多轮做：① 统一地面起终点与道路（已完成）② 地下入口与自动坡道（已完成：直线坡道 + 竖曲线 + 坡道计费 + 河岸加长；3D 弯曲坡道、转弯半径未做）③ 沉管（已完成，按新规格重调）④ 悬浮隧道（已完成，第十四关）⑤ 盾构（已完成，第十五关）⑥ 统一天气（已完成，见下）（正常 / 暴雨 / 严重洪水：水位 0/+2/+5 m，流速 0.5/0.8/1.1 m/s，地下水 0/+0.5~1/+1~3 m，土体软化 0/10/25%；不能直接降低材料强度）⑦ 四阶段测试（已完成，见下）⑧ 工程评分（已完成）⑨ 工程合同 + 优秀方案记录 + UI（地下剖切 / 跟车视角）（已完成，见下）⑩ 平衡与回归（已完成，见下）。洞口防洪（抬高入口 / 防洪闸 / 排水泵）、承压上限：盾构 0.28/0.38/0.50 MPa、悬浮 0.09/0.16/0.24 MPa。
+- 用户决定（2026-11）：新坡度规则（车辆 MaxRampGrade：普通 6%、货车 5%、满载重卡 4.5%、半挂 / 坦克 4%；关卡 Objectives.TunnelMaxGrade 可特许，如第十三关 8%）只用于隧道坡道与管身，桥面仍按 15% / 30% 规则。
+- 评分（第 ⑧ 步，已完成）：用户要求“无上限工程积分（Engineering Score）”替代所有关卡的旧 6:2:1:1 评分，不用 100 分满分制：参考方案约 1000 分但不封顶；经济性权重最高、非线性；必须通过全部车辆与天气测试才有正式分；安全冗余奖励到合理水平封顶；工程成就倍率（极端洪水、额外重载、航道保护、低环境扰动、高可靠性，关卡预配置、每项只算一次，不用星星 / 收集品）；多维排行榜（综合 / 最低造价 / 最快通行 / 最高安全裕量，按评分版本区分）；保存每关最高分及最低成本 / 最快 / 最可靠方案；桥梁与各种隧道统一标准，特殊成本与环境影响全部计入；权重可配置。
+- 工程积分实现（Scripts/Data/EngineeringScore.cs + Data/Scoring/scoring.json，权重与系数全部可配置）：基础分 = 1000 × Σ 权重 × 系数 × 桥面完整度 / Σ权重；经济 0.45 ×(参考造价 / 造价)^1.5（参考造价 = 关卡 Objectives.ReferenceCost，即参考方案造价；没有时预算 × 0.9），安全 0.2 × min(1.25, 裕量 / 0.3)，天气 0.15（天气期间裕量，同公式；无天气按安全），通行 0.15 × 理想 / 实际时间，环境 0.05 × max(0.2, 1 − 扰动 / 河宽)（河中桥墩 6 m / 个、沉管长度、悬浮锚索 0.5 m / 根、盾构 0）。参考方案 819~1109 分（测试要求 800~1200）。成就（EvaluateAchievements，通过后在 LevelManager 调用，每项只乘一次）：extreme_flood（水位 ×1.4 重测）、heavy_load（追加 truck_heavy 重测）、channel_protection（船只通过且不用开桥）、low_disturbance（环境系数 ≥ 0.8）、high_reliability（利用率 ≤ 70%）；Objectives.Achievements 为空时按关卡条件自动选：洪水 → 极端洪水，船 → 航道保护，本关已有 ≥ 0.5 × 满载重卡质量的公路车辆才给额外重载（只有轿车的第一关不给，避免不公平），另加低环境扰动、高可靠性。记录：GameProgress.Records[关卡] = LevelRecord（Version、BestScore、LowestCost、FastestTime、BestMargin），版本不同就重新记录；刷新的项目把方案存为命名方案“★ 最高综合分 / ★ 最低造价 / ★ 最快通行 / ★ 最高安全裕量”。BestScores 只用于解锁（旧版本分数不动），关卡菜单显示工程积分最高分，旧存档只显示“已通关（旧评分）”。
+- 数值全在 Data/Tunnels/tunnels.json（管节长度、风险阈值 70/90%、土质、坡道单价、每种隧道类型的尺寸与 3 个等级：费用、质量、水压上限、接缝转角、支点承载）。建材 tunnel_immersed（TunnelType "immersed"）。
+- 方案字段 BridgeDesign.Tunnel（TunnelRoute：材料、控制点节点 PointNodeIds、每节 Grade / Reinforced、Cost），存档版本 5。版本 4 的隧道段由 TunnelRules.MigrateLegacy 合并成一条路线（tunnel_rc→加强、tunnel_steel→重型、其余→普通）；旧参考方案备份在 legacy/level13_reference_v_before_tunnel_types.json（测试用它验证迁移）。
+- 建造：隧道工具在河底点起点再点终点；已有隧道时点击管身插入控制点（BridgeNode.TunnelPoint），拖动控制点改埋深（最多挖 MaxTrenchDepth，开挖按深度计费）。DesignEditor.RegenerateTunnel 按路线长度重新分 10 m 管节，接缝处自动生成支点（TunnelJoint = 接缝序号，在管顶，不能移动 / 单独删除，只接 Concrete 建材，承载取两侧较弱等级，软土减半）。选择工具点管节 → 属性面板显示水压 / 地基 / 沉降 / 接缝分项和等级按钮、加固地基、“应用到全部管节”。
+- 沉管荷载模型：水压 = ρg(水位 − 管底)，洪水抬高水位；地基压力 = (自重 − 浮力 + 车轴力)/(宽 × 长)，对比土质承载 × 加固系数，冲刷区洪水时 × ScourFactor（加固或埋深 ≥ ScourCover 免疫）；沉降 = 系数 × 利用率；接缝转角 = 相邻沉降差 / 跨度。任一项 ≥ 100% → 隧道进水（FailureReason.TunnelFlooded，每种原因有自己的文字）。
+- 显示：BridgeRenderer 每节一个半透明管身，按风险着色（绿 / 黄 / 橙 / 红），建造时为静态工况，测试时 LevelManager.UpdateTestHud 实时刷新并把沉降放大 10 倍显示。
+- 贯通两岸且管身坡度不超过 TunnelRules.RampGrade（最弱车辆或关卡特许）时，主路公路车辆走隧道（TunnelRules.Lane），火车仍走桥。
+- 地面道路：TunnelRules.GroundStartX / GroundEndX 是主路固定起终点（有隧道建材的关卡按最深可能管底的坡道长度外推），桥面路线（RoadPath.Build，lane 0）和隧道路线都从这里出发，没有隧道的关卡仍是锚点外 25 m（不变）。坡道长度 = 高差 / 坡度，转折处用抛物线竖曲线（TunnelRules.SmoothGrades）。TerrainBuilder 按 TunnelRules.BankExtent 加长两岸。坡道费用 = 坡道水平长度 × RampCostPerMeter，计入隧道费用。
+- 沉管承压（新规格）：普通 / 加强 / 重型 0.14 / 0.22 / 0.32 MPa。
+- 悬浮隧道 tunnel_floating（tunnels.json Types.floating，Placement "water"，HasSupports false：没有接缝支点、不能建桥）：控制点 = 管底，范围 [河床 + MinBedClearance, 水面 − MinCover − 管高]，新建时尽量浅（坡道短）。每节可设浮力等级（Ratio = 浮力 / 自重，配重自动匹配；低 1.04 / 中 1.2 / 高 1.35）、锚索根数（0~6）与种类（钢绞线 / 高强复合，每根承载 N）、加固锚固基础（Reinforced）；TunnelElement.CableCount / Cable / Buoyancy 可空（旧存档 = 类型默认），存档仍为版本 5。
+- 悬浮荷载模型（TunnelAnalysis.Floating）：浮力按浸没体积（完全浸没时洪水不加浮力，只加水压）；净上浮 = 浮力 − 自重，车辆超过它 → 锚索松弛下沉；水流横推 ½ρCdHv²（流速 TunnelConfig.CurrentNormal → CurrentFlood，按 BridgeSimulation.FloodFraction 插值）；每根锚索 = |(竖向, 横推)| / 根数；锚固基础按土质（洪水冲刷区不加固 × ScourFactor）；横向摆动 = 横推 / 横向刚度（上限 MaxDisplacement）；车辆下压位移检查接缝（两端与河岸固定）。每种原因有自己的失败文字。显示：锚索与锚块，测试时管段按摆动横移、按下压放大下沉。
+- 盾构隧道 tunnel_shield（Types.shield，Placement "ground"，无支点）：控制点 = 管底，范围 [max(河床 − MaxDepthBelowBed, 关卡 BuildMinY), 河床 − 管高 − 1]，新建时覆土 DefaultCover 6 m。所有隧道类型的最深位置都受关卡 BuildMinY 限制（同时决定固定地面起点的距离）。地层：TerrainConfig.Strata（GeoColumn X0~X1 + GeoLayer 从河床往下的 Soil / Thickness，0 = 往下一直是它），没有时按 FoundationZones（岩石 / 黏土）；参数在 tunnels.json Geology（rock / clay / sand / silt：MinCover 3/6/9/12、Gamma、EarthK、Permeability、LagTime、ExcavationCost）。Reinforced = 注浆加固（最小覆土 × GroutCoverFactor、土压 × GroutEarthFactor）。费用 = 管片 + 按轴线地层的掘进费 + 注浆 + 坡道。
+- 盾构荷载模型（TunnelAnalysis.Shield）：稳定 = 管顶所在地层最小覆土 / 实际覆土；外压 = 地下水压 ρg(地下水位 − 管底) + 有效土压 K·Σγ'h，两项分别显示，管片按总外压校核。地下水位 = 常水位 + 地下水上涨（不再另加河水压力，避免重复）；BridgeSimulation 每步按管身穿过的最透水地层，把上涨量以 LagTime 为时间常数追向 Permeability × 洪水上涨（砂土快、黏土慢）。显示：盾构管身不做深度测试（透过土体看到），TerrainBuilder.BuildStrata 在建造平面画地层色带与名称。
+- 生态保护区（NoBuildZones）里不能建沉管或悬浮隧道（扰动河床），盾构可以从下面穿过；水太浅时不能建悬浮隧道。
+- 第 ⑩ 步：AUDIT=1 运行测试会打印每关参考方案的造价比、利用率、天气裕量、时间、环境系数、分数、成就与可选合同（平衡表）。隧道关路线 740~1060 m（最深管底的坡道 + 入口最大抬高决定地面起点），整场 187~240 s：BridgeSimulation.QuietTraffic（静态阶段后、桥上与管身无车轴、无天气、无船、开启桥不动）时 TrafficManager 自动 ×8 播放（AutoFast，测试栏“引道快进”开关，只改播放速度不改结果），玩家实际观看约 67~79 s。通关后的成就重测在后台线程运行（LevelManager.OnTestFinished 用 Task.Run，测试里检查并行与顺序结果一致）。
+- 工程合同（scoring.json Contracts，EngineeringScore.ContractsFor / ContractConfig）：低成本（造价 ≤ 参考 × 0.85）、高安全（裕量 ≥ 50%）、极端天气（要拿到极端洪水成就）、重型物流（要拿到额外重载成就）、环境保护（环境系数 ≥ 0.8）；每个合同换一套权重，满足条件总分 × Bonus（1.2~1.25），不满足仍通关、只是没有奖励；需要某成就的合同只在本关提供该成就时出现。BridgeDesign.Contract（可空，旧存档为 null，存档版本不变）；建造左栏“工程合同”下拉框选择。记录按合同分开（EngineeringScore.RecordKey = 关卡 # 合同），并多一项最低环境影响（LowestDisturbance，“★ 最低环境影响”命名方案）；关卡菜单卡片显示最低造价 / 最快 / 最高安全裕量 / 最低扰动。
+- 地下剖切：TerrainBuilder 把两岸土体、草皮、岸壁、河床、水体放进组 TerrainBuilder.CutawayGroup，LevelManager.SetCutaway 隐藏 / 显示；建造左栏与测试栏都有开关。跟车视角：测试栏开关，OrbitCamera.Follow 每帧对准 TrafficManager.LeadVehiclePosition（最前面还在行驶的车），滚轮仍可缩放。基准可加 --cutaway / --follow 截图。
+- 统一天气（Scripts/Data/Weather.cs + Data/Environment/weather.json，桥梁与隧道共用）：预设 normal / rainstorm / flood（WaterRise、Current、GroundwaterRise、SoilSoftening、PondRate、Scour）。环境事件 TrafficEvent.Weather（+ 可选 Rise）；旧事件没有 Weather = 严重洪水、水位用 Height（旧关卡 / 存档照常）。BridgeSimulation 每步取所有活动事件各项最大值（按 RampTime 渐变）：FloodRise、Current、GroundwaterDirect（加到盾构地下水目标）、Softening（沉管地基 / 悬浮锚点承载 ×(1−s)，盾构所需覆土与土压 ×(1+s)，桥墩地基与隧道支点 AnchorMaxLoad ×(1−s)；材料强度不变）、PondRate；只有 Scour 预设冲刷。
+- 洞口防洪（TunnelRoute.PortalRaise / FloodGate / Pump，两岸同时，DesignEditor.SetPortalProtection，HUD 隧道属性行 −/+、防洪闸、排水泵）：入口 = 岸顶路面 + 抬高（先以同坡度爬上去再下坡道，多出的坡道按坡道计费 + RaiseCostPerMeter）；洪水高于入口（有闸时 + GateHeight）→ 隧道进水；有闸时水位接近入口就关闸，关闸或积水 > PondBlockDepth 时隧道车道车辆在左入口前等候（WaitingAtPortal，不算失败）。积水 += (PondRate − 泵 − 雨停后自然排水)·dt。第十三~十五关洪水水位比岸顶高约 1 m，参考方案都抬高入口 1.5 m（旧版备份 legacy/level1x_reference_v_before_weather.json）；第十五关开局有暴雨（没装泵时车辆在入口等积水退去）。
+- 四阶段测试（TestPhase，BridgeSimulation.Phase）：① 静态 = 开头 StaticPhaseTime 1 s 只有自重和正常天气（关卡所有事件在 TestEvents 里整体后移 1 s，理想时间同样后移，评分不变）；② 车辆；③ 环境 = 有天气事件活动时（与车辆重叠时算环境）；④ 结果。SimulationResult 新增 FailurePhase、PhaseMaxUtil[3]（−1 = 未进行）、WeakestMemberId / WeakestText / WeakestX（构件或隧道管节）、MaxDeckSag、MaxTunnelMove、WeatherMargin（天气期间 1/利用率 − 1）。成功 / 失败弹窗都显示 GameHUD.PhaseReport；测试状态栏前面显示当前阶段。超时上限 = max(240 s, 2 × 理想时间 + 60 s)（深隧道长坡道 + 入口等候）。
+- 第十五关：60 m 宽、8 m 深，整条河生态保护区，地层 淤泥 4 / 砂土 5 / 黏土 6 / 岩石；洪水 +5 m；坡道特许 8%；BuildMinY −30。浅埋在砂层要注浆且洪水时普通管片外压超限；参考方案 = 管顶进黏土（管底 −28.5 m）+ 加强管片（$146,550 / 预算 170000）。
+- 第十四关：80 m 宽、30 m 深、全软土、30~50 m 冲刷、洪水 +3 m、坡道特许 8%；沉管重型也扛不住水压（测试检查），低浮力被半挂车压沉，高浮力拉坏软土锚点，2 根锚索洪水时摆动过大。参考方案 = 加强管节 + 中浮力 + 每节 4 根钢绞线 + 全部锚点加固（$189,225 / 预算 205000，利用率 71%）：统一天气后洪水软化软土 25%，原方案（3 根、只加固冲刷区）利用率 98%，已备份 legacy/level14_reference_v_before_softening_rebalance.json。
+- 第十三关：水深 10 m、洪水 +5 m、坡道特许 8%、岩石 / 软土 / 冲刷岩石三区；普通管节洪水时水压 147 kPa 超限，软土交界不加固会漏接缝，冲刷区要加固或埋深 ≥ 2 m。参考方案 = 全部加强管节 + 20~60 m 加固地基（预算 105000）。
+
+## 隧道电梯（2026-11 用户要求，覆盖上面关于坡道 / 洞口防洪 / 漏水的旧规则）
+- 入口 = 两岸垂直电梯（材料 lift，IsLift，不能单独建造；BridgeRenderer.TunnelAccess.AddLift 用钢柱 / 钢梁 / deck_steel / 钢索 / 混凝土拼装）。参数在 C# LiftConfig（TunnelConfig.Lift）：平台 6~26 m、速度 2.5 m/s、承载 200 kN + 25 kN/m、井道 $300/m 高 + 平台 $250/m 长。TunnelRoute.LiftLength 可空（null = 最长）；DesignEditor.SetLiftLength / LiftLengthForLevel（自动配）。
+- 路线：RoadPath.LiftSegments 标出电梯段；BridgeSimulation.LiftState 一次运一辆，车停平台、LiftDy 动画、到达后 FrontS += Shift；太长 → VehicleBlocked，太重 → FailureReason.LiftOverload。理想时间按电梯排队（乘坐 + 空载返回）计算。
+- AddTunnel 一键从岸壁建到岸壁；两端 x 锁定在岸壁，只能上下；旧存档载入时贴合岸壁，PortalRaise / FloodGate / Pump 忽略且不计费。
+- 隧道失败只看材料强度：沉管 = 水压，悬浮 = max(水压, 锚索)，盾构 = 水压 + 土压；UpdatePortals 不再进水。参考造价：第十三关 $89,920、第十四关 $161,695、第十五关 $158,620（重型管片）。
+- 土质（2026-11 用户要求）：隧道不受土质影响，只有盾构管片的土压随地层 / 注浆 / 软化变化；沉管地基、悬浮锚点、隧道支点都与土质无关（SupportCapacity = 等级承载，天气软化只削弱桥墩地基）；只有盾构注浆计费，旧存档沉管 / 悬浮的 Reinforced 照常读取但不计费。
+- 沉管（TunnelTypeConfig.Straight）：整节预制直管，不能加控制点，只能上下拖动两端；旧存档的中间控制点载入时删除。价格 普通 / 加强 / 重型 500 / 1150 / 1950（基础价最便宜，升级比其他隧道贵）。旧 tunnels.json 备份 legacy/tunnels_v_before_straight_immersed.json。
+- 接缝圆点（2026-11 用户要求）：盾构 / 悬浮隧道的可拖动点就是管节接缝（TunnelRules.JointXs 从岸壁到岸壁等分，每节 ≤ ElementLength），每节 = 相邻两点之间的直段；接缝点只能上下拖，不能增删；旧存档和参考方案在 TunnelGeometry.Build / DesignEditor.SnapPointsToJoints 里按原路线重采样。渲染 BridgeRenderer.MiterTube 把每节两端剪切到接缝角平分面（以管底接缝为轴），相邻管节无缝隙、无重叠；沉管仍是直管（只有两端）。
+- 电梯显示：井道与轿厢封闭（AddEnclosure），门两侧空档有固定栅栏，配重加宽；剖视时前侧墙板（_tubeFrontDetails）和前侧装饰（TerrainBuilder.CutawayFrontGroup，z > 0 的树 / 房子）隐藏。
+
+## 桥面档次（承载 / 自重 / 成本，5 档）
+木 2/1/1 · 钢格栅 deck_grating 3/2/3 · 钢筋混凝土 road 4/5/2 · 预应力混凝土 deck_psc 5/4/3 · 加劲钢 deck_steel 5/2/4 · FRP 3~5/1/5（有回归测试）。格栅开放在第五关，预应力在第十一、十二关。

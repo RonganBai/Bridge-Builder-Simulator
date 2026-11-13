@@ -2,7 +2,7 @@
 ; Build: ISCC.exe installer\BridgeArchitect3D.iss  (output: export\installer\)
 
 #define AppName "Bridge Architect 3D"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 
 [Setup]
 AppId={{6C1B7E5A-3F2D-4B8E-9A61-2D7C4F0B9E13}

@@ -68,6 +68,14 @@ namespace BridgeArchitect3D.Data
         public string Look { get; set; }
         /// <summary>Side-truss-only member (cable, hydraulic): its nodes need no cross beam over the road.</summary>
         public bool SideOnly { get; set; }
+        /// <summary>Concrete-type material: the only kind that may connect to an underwater tunnel support point.</summary>
+        public bool Concrete { get; set; }
+        /// <summary>Underwater tunnel tool (see TunnelRules); its numbers live in Data/Tunnels/tunnels.json.</summary>
+        public bool IsTunnel { get; set; }
+        /// <summary>Vertical lift (tunnel access at both banks, generated with the tunnel; see TunnelConfig.Lift).</summary>
+        public bool IsLift { get; set; }
+        /// <summary>Tunnel type key in tunnels.json: immersed / shield / floating.</summary>
+        public string TunnelType { get; set; }
 
         public bool IsColumn => ComponentType == ComponentType.Column;
         /// <summary>Deck running surface: "road" (road vehicles only, default), "rail" (trains only) or "both".</summary>
@@ -136,6 +144,8 @@ namespace BridgeArchitect3D.Data
         public double UnitLength { get; set; }
         /// <summary>跟车最小间距 m（同一条道路上后车不会靠前车更近）。</summary>
         public double FollowGap { get; set; } = 3;
+        /// <summary>Steepest tunnel ramp / tube grade this vehicle can drive (0.06 = 6%). Bridge decks keep their own slope rules.</summary>
+        public double MaxRampGrade { get; set; } = 0.57735026918962573;   // 30°, same for every vehicle
     }
 
     public class AnchorDefinition
@@ -172,6 +182,8 @@ namespace BridgeArchitect3D.Data
         public List<PillarConfig> Pillars { get; set; } = new();
         /// <summary>禁止建墩区（航道 / 生态保护区）：区内道路标高以下不能放置节点。</summary>
         public List<NoBuildZone> NoBuildZones { get; set; } = new();
+        /// <summary>Geology below the river bed for shield tunnels (columns of layers); empty = from FoundationZones.</summary>
+        public List<GeoColumn> Strata { get; set; } = new();
         /// <summary>河床地基分区（软土 / 岩石，可带冲刷）。未覆盖的河床按 DefaultSoil 处理。</summary>
         public List<FoundationZone> FoundationZones { get; set; } = new();
         public string DefaultSoil { get; set; } = "rock";
@@ -238,6 +250,8 @@ namespace BridgeArchitect3D.Data
 
     public class TrafficEvent
     {
+        /// <summary>Copy with the time moved by dt (the simulation runs its static phase first).</summary>
+        public TrafficEvent Shifted(double dt) { var c = (TrafficEvent)MemberwiseClone(); c.Time += dt; return c; }
         public double Time { get; set; }
         public TrafficEventType Type { get; set; } = TrafficEventType.Vehicle;
         public string VehicleId { get; set; }
@@ -259,12 +273,23 @@ namespace BridgeArchitect3D.Data
         public string ShipKind { get; set; } = "cargo";
         // ---- 洪水事件参数（Type = Environment）：Height 为水位上涨高度，Duration 为持续时间 ----
         public double Duration { get; set; } = 10;
+        /// <summary>Environment events: weather preset id (normal / rainstorm / flood, see weather.json).
+        /// Null = legacy flood event whose water rise is Height.</summary>
+        public string Weather { get; set; }
+        /// <summary>Environment events with a Weather id: water rise override, m (null = the preset's).</summary>
+        public double? Rise { get; set; }
     }
 
     public class LevelObjectives
     {
         public double MaxDeckDeflection { get; set; } = 0.3;
         public double MaxDeckSlope { get; set; } = 0.15;
+        /// <summary>Tunnel grade allowed for every vehicle in this level (special levels, e.g. 0.08); 0 = each vehicle's own limit.</summary>
+        public double TunnelMaxGrade { get; set; }
+        /// <summary>Engineering Score: reference cost for the economy factor (0 = budget × ReferenceCostRatio).</summary>
+        public double ReferenceCost { get; set; }
+        /// <summary>Engineering achievements this level offers (null = chosen from the level's conditions).</summary>
+        public List<string> Achievements { get; set; }
         public int MaxBrokenMembers { get; set; } = 2;
         public double Star3BudgetRatio { get; set; } = 0.7;
         public double Star2BudgetRatio { get; set; } = 0.9;

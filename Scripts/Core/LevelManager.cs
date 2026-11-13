@@ -73,6 +73,7 @@ namespace BridgeArchitect3D.Core
             {
                 design = SaveManager.LoadDesign(_level.Id, out var err);
                 if (design == null && err != null) GD.PushWarning(err);
+                if (SaveManager.VersionWarning(design) is { } vw) CallDeferred(MethodName.WarnLater, vw);
             }
             // 关卡可以提供一座“半成品”起始桥（例如第一关缺一根斜撑），没有存档时载入
             if (design == null && !string.IsNullOrEmpty(_level.StartDesign)) design = SaveManager.LoadStartDesign(_level.StartDesign);
@@ -91,11 +92,18 @@ namespace BridgeArchitect3D.Core
             AddChild(_building);
             _building.Message += (t, e) => _hud.ShowToast(t, e);
             _building.Preview += (t, p, ok) => _hud.ShowPreview(t, p, ok);
-            _building.ToolChanged += () => _hud.SetTool(_building.Tool, _building.ToolMaterial);
+            _building.ToolChanged += () =>
+            {
+                _hud.SetTool(_building.Tool,_building.ToolMaterial);
+                if(_building.Tool==BuildTool.Build&&_db.GetMaterial(_building.ToolMaterial)?.IsTunnel==true)
+                {_building.SetHintNode(-1);SetCutaway(true);_hud.ShowToast("",false);}
+            };
             _building.SelectionChanged += RefreshProperties;
             _building.BoxChanged += r => _hud.ShowBoxRect(r);
             _editor.Changed += RefreshBudget;
+            _editor.Changed += ()=>GetNodeOrNull<TerrainSectionView>("TerrainSectionView")?.SetTunnel(_editor.TunnelGeo,_level);
             _building.Init(_editor, _camera, _renderer, mm, _gm.Settings.ShowGrid);
+            GetNodeOrNull<TerrainSectionView>("TerrainSectionView")?.SetTunnel(_editor.TunnelGeo,_level);
 
             _traffic = new TrafficManager { Name = "Traffic" };
             AddChild(_traffic);
@@ -146,6 +154,16 @@ namespace BridgeArchitect3D.Core
         /// <summary>第一步引导：空桥时选中桥面工具并高亮左岸起点；已有起始桥时提示先试车。</summary>
         private void ShowFirstStep()
         {
+            var tunnel=_level.AllowedMaterials.FirstOrDefault(id=>_db.GetMaterial(id)?.IsTunnel==true);
+            if(_editor.Design.Tunnel!=null)
+            {
+                _building.SetTool(BuildTool.Select);_building.FocusTunnel("route",true);SetCutaway(true);return;
+            }
+            if(tunnel!=null&&_editor.Design.Members.Count==0)
+            {
+                _building.SetTool(BuildTool.Build,tunnel);
+                return;
+            }
             var startAnchor = _editor.Design.Nodes.FirstOrDefault(n => n.IsAnchor && _level.Anchors.Any(a => a.Id == n.AnchorId && a.IsRoadStart));
             if (_editor.Design.Members.Count == 0)
             {
@@ -181,6 +199,8 @@ namespace BridgeArchitect3D.Core
             _overlays ??= FindChild(TerrainBuilder.OverlayName, true, false) as Node3D;
             if (_overlays != null) _overlays.Visible = !_testing;
             UpdateFloodWater();
+            if (_hud != null && !_testing) _hud.SetContracts(EngineeringScore.ContractsFor(_level), _editor.Design.Contract);
+            if (_follow && _testing && _traffic.LeadVehiclePosition() is { } lead) _camera.Follow(lead);
             if (_hud == null || !_testing || _traffic.Sim == null) return;
             var sim = _traffic.Sim;
             // The status line is rebuilt 20 times a second (string building + label relayout every frame was waste)
@@ -200,6 +220,7 @@ namespace BridgeArchitect3D.Core
 
         private void UpdateTestHud(BridgeSimulation sim)
         {
+            if (sim.TunnelGeo != null) _renderer.ShowTunnel(sim.TunnelStatus, true, sim.TunnelFlooded);
             string vehicles = string.Join(Loc.T("、"), sim.Vehicles.Where(v => !v.Finished).Select(v => v.Def.Name));
             if (string.IsNullOrEmpty(vehicles)) vehicles = "—";
             vehicles += Loc.F("（已通过 {0}/{1}）", (sim.FinishedVehicles), (sim.TotalVehicles));
@@ -215,20 +236,50 @@ namespace BridgeArchitect3D.Core
             if (sim.Bascule.Leaves.Count > 0) vehicles += "  " + sim.Bascule.StatusText;
             if (sim.Bascule.Fault != null) vehicles += "  ⚠ " + sim.Bascule.Fault;
             if (sim.Bascule.ConfigNote != null) vehicles += "  ⚠ " + sim.Bascule.ConfigNote;
-            if (sim.FloodRise > 0.01) vehicles += Loc.F("  🌊 洪水 +{0:0.0} m", (sim.FloodRise));
+            // Weather goes on the (shorter) status line so the vehicle line does not run off the screen
+            string weather = "";
+            if (sim.WeatherName != null) weather += Loc.F("  🌧 {0} +{1:0.0} m · {2:0.0} m/s · 软化 {3:0}%", (sim.WeatherName), (sim.FloodRise), (sim.Current), (sim.Softening * 100));
+            if (sim.Vehicles.Any(v => v.WaitingAtPortal)) weather += Loc.T("  · 车辆在电梯前等候");
+            if (_traffic.FastForwarding) vehicles += Loc.F("  ⏩ 引道快进 ×{0}", (TrafficManager.AutoFastFactor));
             string status; Color col;
             if (_traffic.IsReplaying) { status = Loc.F("回放中 t={0:0.0}s（按“继续”退出回放）", (_traffic.ReplayFrameTime)); col = UiTheme.Warn; }
             else if (sim.State == SimState.Failed) { status = Loc.T("失败：") + FailureDetector.ReasonText(sim.Result.FailureReason); col = UiTheme.Bad; }
             else if (sim.State == SimState.Succeeded) { status = Loc.T("全部车辆通过"); col = UiTheme.Good; }
             else
             {
-                double u = sim.CurrentMaxUtilization;
-                status = Loc.F("{0}  当前最大利用率 {1:0}%  断裂 {2}", ((u > 0.9 ? Loc.T("接近极限") : Loc.T("安全"))), (u * 100), (sim.BrokenCount));
+                double u = LiveUtil(sim);
+                status = GameHUD.PhaseName(sim.Phase) + "  " + Loc.F("{0}  当前最大利用率 {1:0}%  断裂 {2}", ((u > 0.9 ? Loc.T("接近极限") : Loc.T("安全"))), (u * 100), (sim.BrokenCount));
                 col = u > 0.9 ? UiTheme.Warn : UiTheme.Good;
             }
-            _hud.SetLoad(sim.CurrentMaxUtilization);
-            _hud.UpdateTest(sim.Progress, vehicles, status, col, _traffic.Paused || _traffic.IsReplaying, _traffic.IsReplaying ? _traffic.ReplayFrameTime : sim.Time, _traffic.TimelineEnd, sim.State is SimState.Succeeded or SimState.Failed);
+            _hud.SetLoad(LiveUtil(sim));
+            _hud.UpdateTest(sim.Progress, vehicles, status + weather, col, _traffic.Paused || _traffic.IsReplaying, _traffic.IsReplaying ? _traffic.ReplayFrameTime : sim.Time, _traffic.TimelineEnd, sim.State is SimState.Succeeded or SimState.Failed);
         }
+
+        public void SetContract(string id)
+        {
+            if (_testing || _editor.Design.Contract == id) return;
+            _editor.Design.Contract = id;
+            var c = EngineeringScore.Config.Contract(id);
+            _hud.ShowToast(c == null ? Loc.T("不接合同") : Loc.F("已接受{0}：{1}", (c.Name), (c.Description)), false);
+        }
+
+        private bool _cutaway, _follow;
+        /// <summary>Retain terrain behind a closed section plane and expose hollow tunnel interiors.</summary>
+        public void SetCutaway(bool on)
+        {
+            _cutaway = on;
+            GetNodeOrNull<TerrainSectionView>("TerrainSectionView")?.SetEnabled(on);
+            _renderer.SetCutaway(on);
+            foreach (var node in GetTree().GetNodesInGroup(World.TerrainBuilder.CutawayFrontGroup))
+                if (node is Node3D front) front.Visible = !on;
+            _hud?.SetCutawayChecked(on);
+        }
+        public void SetAutoFast(bool on) => _traffic.AutoFast = on;
+        public void SetFollowCamera(bool on) { _follow = on; if (!on) _camera.StopFollow(); }
+
+        /// <summary>Live peak utilisation of the structure and the tunnel (the tunnel used to be left out).</summary>
+        private static double LiveUtil(BridgeSimulation sim) =>
+            System.Math.Max(sim.CurrentMaxUtilization, sim.TunnelGeo != null && !sim.TunnelFlooded ? System.Math.Min(1, sim.TunnelStatus.MaxUtil) : 0);
 
         public override void _UnhandledInput(InputEvent e)
         {
@@ -267,6 +318,13 @@ namespace BridgeArchitect3D.Core
         private string StaticStatusText(out Color c)
         {
             var s = _building?.StaticSim;
+            if(_editor.TunnelGeo is {} tube&&(s?.Model==null||s.Model.MemberCount==0))
+            {
+                var state=Physics.TunnelAnalysis.Evaluate(tube,_level,_db.TunnelConfig,Physics.TunnelAnalysis.StaticEnvironment(_level,_db.TunnelConfig));
+                _hud.SetLoad(state.MaxUtil);c=state.MaxUtil>=1?UiTheme.Bad:UiTheme.Good;
+                if(!TunnelRules.Complete(tube,_level.Terrain)){c=UiTheme.Warn;return Loc.T("隧道端点尚未接岸");}
+                return state.MaxUtil>=1?Loc.T("隧道静态校核未通过"):Loc.T("隧道就绪 · 两岸电梯已连接");
+            }
             if (s == null || s.Model == null || s.Model.MemberCount == 0) { c = UiTheme.Muted; _hud.SetLoad(0, false); return Loc.T("尚未建造构件"); }
             if (!s.Output.Stable) { c = UiTheme.Bad; _hud.SetLoad(1); return Loc.T("自重下不稳定：") + s.Output.Message; }
             double u = s.CurrentMaxUtilization;
@@ -284,7 +342,20 @@ namespace BridgeArchitect3D.Core
                 _hud.ShowProperties(GameHUD.NodeProperties(n, _level, d, stat));
             else if (_building.SelectedMemberId >= 0 && d.FindMember(_building.SelectedMemberId) is { } m)
                 _hud.ShowProperties(GameHUD.MemberProperties(m, _db, stat?.Model, stat?.Status, stat?.Output.Stable ?? false, Loc.T("自重工况（无车辆）")));
+            else if (_building.SelectedTunnelElement >= 0 && _editor.TunnelGeo is { } tg && _building.SelectedTunnelElement < tg.Count)
+            {
+                var st = Physics.TunnelAnalysis.Evaluate(tg, _level, _db.TunnelConfig, Physics.TunnelAnalysis.StaticEnvironment(_level, _db.TunnelConfig));
+                _hud.ShowProperties(GameHUD.TunnelElementProperties(tg, _building.SelectedTunnelElement, st, _level, _db.TunnelConfig, Loc.T("静态工况（常水位，无车辆）")));
+            }
             else _hud.ShowProperties(null);
+            {
+                var tg2 = _editor.TunnelGeo; int te = _building.SelectedTunnelElement;
+                bool show = !_testing && tg2 != null && te >= 0 && te < tg2.Count && _building.SelectedNodeId < 0 && _building.SelectedMemberId < 0;
+                if (show) _hud.SetTunnelRow(true, tg2.Type, tg2.GradeId[te], tg2.Reinforced[te],
+                    tg2.Type.IsFloating ? tg2.CableCount[te] : 0, tg2.Type.IsFloating ? tg2.CableId[te] : null, tg2.Type.IsFloating ? tg2.BuoyancyId[te] : null);
+                if (show) _hud.SetLiftRow(tg2.LiftLength);
+                else _hud.SetTunnelRow(false);
+            }
             var selMat = _building.SelectedMemberId >= 0 ? _db.GetMaterial(d.FindMember(_building.SelectedMemberId)?.MaterialId) : null;
             var selMem = _building.SelectedMemberId >= 0 ? d.FindMember(_building.SelectedMemberId) : null;
             bool canRepair = !_testing && selMem != null && selMem.Existing && selMem.Condition < 1 - 1e-9;
@@ -297,7 +368,7 @@ namespace BridgeArchitect3D.Core
             _hud.SetFoundationRow(!_testing && pierBase != null, pierBase?.Foundation ?? FoundationType.None);
             var mech = d.EnsureMechanisms();
             bool isLock = selNode != null && mech.LockOf(selNode.Id) != null;
-            bool lockable = !_testing && selNode != null && !selNode.IsAnchor && !selNode.PierBase && !selNode.PierPart;
+            bool lockable = !_testing && selNode != null && !selNode.IsAnchor && !selNode.PierBase && !selNode.PierPart && !selNode.IsTunnelNode;
             bool hyd = !_testing && selMat != null && selMat.Extendable;
             bool isLeaf = selMem != null && mech.Leaves.Any(l => l.ActuatorMemberId == selMem.Id);
             bool split = !_testing && selMem != null && selMat != null && !selMat.Extendable && !selMat.IsPier && !selMem.Existing;
@@ -341,7 +412,7 @@ namespace BridgeArchitect3D.Core
             var d = SaveManager.LoadNamedDesign(_level.Id, name, out var err);
             if (d == null) { _hud.ShowToast(err, true); return; }
             _editor.ReplaceDesign(d);
-            _hud.ShowToast(Loc.F("已加载方案“{0}”：{1} 根构件，已用 ${2:N0}（可撤销）", (name), (d.Members.Count), (_editor.UsedCost)), false);
+            _hud.ShowToast(SaveManager.VersionWarning(d) ?? Loc.F("已加载方案“{0}”：{1} 根构件，已用 ${2:N0}（可撤销）", (name), (d.Members.Count), (_editor.UsedCost)), SaveManager.VersionWarning(d) != null);
         }
 
         public void LoadDesign()
@@ -350,8 +421,10 @@ namespace BridgeArchitect3D.Core
             var d = SaveManager.LoadDesign(_level.Id, out var err);
             if (d == null) { _hud.ShowToast(err, true); return; }
             _editor.ReplaceDesign(d);
-            _hud.ShowToast(Loc.F("已加载存档：{0} 个节点，{1} 根构件，已用 ${2:N0}", (d.Nodes.Count), (d.Members.Count), (_editor.UsedCost)), false);
+            _hud.ShowToast(SaveManager.VersionWarning(d) ?? Loc.F("已加载存档：{0} 个节点，{1} 根构件，已用 ${2:N0}", (d.Nodes.Count), (d.Members.Count), (_editor.UsedCost)), SaveManager.VersionWarning(d) != null);
         }
+
+        private void WarnLater(string text) => _hud?.ShowToast(text, true);
 
         private int _referenceStep;
 
@@ -389,6 +462,18 @@ namespace BridgeArchitect3D.Core
             _gm.GoToMainMenu();
         }
 
+        public void OpenLevelSettings()
+        {
+            if (_testing) { _hud.ShowToast(Loc.T("测试中不能改关卡设置，先返回建造"), true); return; }
+            LevelSettingsUI.Open(_hud, _db, _level, _gm.LevelOverridden(_level.Id),
+                lv =>
+                {
+                    SaveManager.SaveDesign(_editor.Design, out _);   // keep the current design across the restart
+                    if (!_gm.SaveLevelSettings(lv, out var err)) _hud.ShowToast(Loc.T("关卡设置没有保存：") + err, true);
+                },
+                () => { SaveManager.SaveDesign(_editor.Design, out _); _gm.RestoreLevelDefaults(_level.Id); });
+        }
+
         public void OpenLevelSelect()
         {
             _gm.ShowLevelSelectOnMenu = true;
@@ -405,6 +490,29 @@ namespace BridgeArchitect3D.Core
 
         // Scrubbing only after the test has ended; a running test is never frozen by the bar
         public void SeekTest(double time) { if (_testing && _traffic.Sim?.State is SimState.Succeeded or SimState.Failed) _traffic.Seek(time); }
+        public void TunnelAction(string action)
+        {
+            var g = _editor.TunnelGeo; int te = _building.SelectedTunnelElement;
+            if (_testing || g == null) return;
+            if (action.StartsWith("focus:"))
+            {
+                _building.FocusTunnel(action.Substring(6));
+                return;
+            }
+            if (te < 0 || te >= g.Count) return;
+            int target = _hud.TunnelApplyAll ? -1 : te;
+            BuildResult r;
+            if (action.StartsWith("grade:")) r = _editor.SetTunnelGrade(target, action.Substring(6));
+            else if (action.StartsWith("buoy:")) r = _editor.SetTunnelBuoyancy(target, action.Substring(5));
+            else if (action.StartsWith("cable:")) r = _editor.SetTunnelCables(target, g.CableCount[te], action.Substring(6));
+            else if (action.StartsWith("cables:")) r = _editor.SetTunnelCables(target, g.CableCount[te] + int.Parse(action.Substring(7)));
+            else if (action.StartsWith("lift:")) r = _editor.SetLiftLength(g.LiftLength + int.Parse(action.Substring(5)) * TunnelRules.LiftCfg.LengthStep);
+            else if (action == "liftauto") r = _editor.SetLiftLength(_editor.LiftLengthForLevel());
+            else r = _editor.SetTunnelReinforced(target, !g.Reinforced[te]);
+            if(r.Ok&&action.StartsWith("lift"))_building.FocusTunnel("route",true);
+            _hud.ShowToast(r.Message ?? "", !r.Ok);
+        }
+
         public void SetFoundationSelected(FoundationType type)
         {
             if (_testing || _pierBaseId < 0) return;
@@ -578,13 +686,20 @@ namespace BridgeArchitect3D.Core
             if (_testing) _traffic.UpdateVisuals();
         }
 
-        private void OnTestFinished(SimulationResult r)
+        private async void OnTestFinished(SimulationResult r)
         {
             if (r.IsSuccess)
             {
-                int prev = _gm.BestScoreFor(_level.Id);
-                _gm.RecordCompletion(_level.Id, r.Score);
-                _hud.ShowSuccess(r, _gm.NextLevelId(_level.Id) != null, prev);
+                // Achievements need short extra re-tests (stronger flood, extra heavy vehicle) before the score is final;
+                // they run on a worker thread (pure C#, own simulation copies) so the frame does not hitch
+                var sim = _traffic.Sim;
+                _hud.ShowToast(Loc.T("正在评估工程成就（更强洪水 / 额外重载重测）…"), false);
+                await System.Threading.Tasks.Task.Run(() => EngineeringScore.EvaluateAchievements(sim));
+                // The player left the level (scene freed) or restarted the test meanwhile
+                if (!IsInstanceValid(this) || !IsInsideTree() || !IsInstanceValid(_traffic) || !_testing || _traffic.Sim != sim) return;
+                int prev = _gm.RecordFor(_level.Id, r.Contract).BestScore;
+                var kinds = _gm.RecordResult(_level.Id, r, _editor.Design);
+                _hud.ShowSuccess(r, _gm.NextLevelId(_level.Id) != null, prev, kinds);
             }
             else _hud.ShowFailure(r, _traffic.CanReplay);
         }

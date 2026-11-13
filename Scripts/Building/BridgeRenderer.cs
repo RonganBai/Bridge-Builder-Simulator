@@ -102,7 +102,9 @@ namespace BridgeArchitect3D.Building
                 v.Tie.Visible = HeightClearance.NeedsCrossTie(design, _mm.Db, Level, n);
                 _nodes[n.Id] = v; _nodeList.Add(v);
                 if (n.PierBase) AddFoundation(n);
+                if (n.IsTunnelSupport) NewMesh(new BoxMesh { Size = new Vector3(1.6f, 0.4f, 5.6f) }, _mm.Foundation).Position = ToV(n.Position) + new Vector3(0, -0.2f, 0);
             }
+            AddTunnel(design);
             BuildClearanceMarks(design);
             var sleeves = DesignEditor.SleeveFractions(design, Level, _mm.Db);
             foreach (var m in design.Members)
@@ -157,6 +159,208 @@ namespace BridgeArchitect3D.Building
             foreach (var dx in new[] { -1.0f, 1.0f })
                 foreach (var dz in new[] { -2.0f, 2.0f })
                     NewMesh(pile, _mm.Foundation).Position = p + new Vector3(dx, -3.6f, dz);
+        }
+
+        // ---------------- Underwater tunnel ----------------
+        private readonly System.Collections.Generic.List<(MeshInstance3D shell, StandardMaterial3D mat, Vector3 basePos)> _tubes = new();
+        private TunnelGeometry _tubeGeo;
+        private bool _cutaway;
+        private readonly List<(MeshInstance3D mesh, Mesh full, Mesh section)> _tubeSections = new();
+        private readonly List<MeshInstance3D> _tubeFrontDetails = new();
+        private readonly List<(int element, MeshInstance3D mesh, Vector3 top, Vector3 anchor)> _tubeCableLines = new();
+
+        public void SetCutaway(bool on)
+        {
+            _cutaway = on;
+            foreach (var part in _tubeSections) part.mesh.Mesh = on ? part.section : part.full;
+            foreach (var part in _tubeFrontDetails) part.Visible = !on;
+        }
+
+        private MeshInstance3D TubeLining(Node3D parent, string shape, float length, float width, float height, float wall, Material material, float x = 0)
+        {
+            var full = TunnelVisualMesh.Lining(shape, length, width, height, wall, false);
+            var section = TunnelVisualMesh.Lining(shape, length, width, height, wall, true);
+            var mesh = new MeshInstance3D { Mesh = _cutaway ? section : full, MaterialOverride = material, Position = new Vector3(x,0,0) };
+            parent.AddChild(mesh); _tubeSections.Add((mesh, full, section)); return mesh;
+        }
+
+        private static MeshInstance3D TubeBox(Node3D parent, string name, Vector3 position, Vector3 size, Material material)
+        {
+            var mesh = new MeshInstance3D { Name = name, Mesh = new BoxMesh { Size = size }, MaterialOverride = material, Position = position };
+            parent.AddChild(mesh); return mesh;
+        }
+        /// <summary>Settlement is drawn this many times larger so it can be seen.</summary>
+        public const float TunnelSettleScale = 10f;
+        public static readonly Color[] RiskColors = { new("#4caf50"), new("#e8c33a"), new("#ef8a2e"), new("#e04436") };
+
+        /// <summary>Distinct hollow tube families. Utilization colours the joint rims while the lining retains its material identity.</summary>
+        private void AddTunnel(BridgeDesign design)
+        {
+            _tubes.Clear(); _tubeSections.Clear(); _tubeFrontDetails.Clear(); _tubeCableLines.Clear();
+            _tubeGeo = TunnelGeometry.Build(design, _mm.Db);
+            var g = _tubeGeo;
+            if (g == null) return;
+            float h = (float)g.Type.TubeHeight, w = (float)g.Type.TubeWidth, fl = (float)g.Type.FloorHeight;
+            var angles = new float[g.Count];
+            for (int i = 0; i < g.Count; i++) angles[i] = Mathf.Atan2((float)(g.Y1[i] - g.Y0[i]), (float)(g.X1[i] - g.X0[i]));
+            for (int i = 0; i < g.Count; i++)
+            {
+                var a = new Vector3((float)g.X0[i], (float)g.Y0[i], 0); var b = new Vector3((float)g.X1[i], (float)g.Y1[i], 0);
+                var d = b - a; float len = d.Length(); float ang = Mathf.Atan2(d.Y, d.X);
+                var up = new Vector3(-Mathf.Sin(ang), Mathf.Cos(ang), 0);
+                var centre = (a + b) / 2 + up * (h / 2);
+                string shape = g.Type.IsShield ? "shield" : g.Type.IsFloating ? "floating" : "immersed";
+                var gc = Color.FromHtml(g.Grade[i].Color ?? "#9a9a92");
+                var solid = new StandardMaterial3D { AlbedoColor = gc, Roughness = 0.9f, CullMode = BaseMaterial3D.CullModeEnum.Disabled };
+                var mat = new StandardMaterial3D { AlbedoColor = RiskColors[0], Roughness = 0.7f, CullMode = BaseMaterial3D.CullModeEnum.Disabled };
+                float wall = g.GradeId[i] == "heavy" ? 0.42f : g.GradeId[i] == "reinforced" ? 0.34f : 0.27f;
+                var shell = TubeLining(_container, shape, Mathf.Max(len,0.1f), w, h, wall, solid);
+                shell.Name = "TunnelBody_" + shape; shell.Position = centre; shell.Rotation = new Vector3(0,0,ang);
+                var accent = new StandardMaterial3D { AlbedoColor = new Color(shape == "immersed" ? "c3934c" : shape == "shield" ? "8b7760" : "468f9b"), Roughness = 0.7f, CullMode = BaseMaterial3D.CullModeEnum.Disabled };
+                TubeLining(shell,shape,0.18f,w+0.06f,h+0.06f,wall+0.03f,mat,-len/2+0.09f).Name = "OpenJointRim";
+                TubeLining(shell,shape,0.1f,w+0.03f,h+0.03f,wall+0.02f,accent,len/2-0.05f);
+                var floor = TunnelVisualMesh.Floor(shape,len,w,h,wall,fl,out float floorWidth);
+                shell.AddChild(new MeshInstance3D {Name="FloorSlab",Mesh=floor,MaterialOverride=solid});
+                var road = new StandardMaterial3D {AlbedoColor = new Color("3c4851"),Roughness=0.95f};
+                float roadWidth = Mathf.Min(4.4f,floorWidth-0.4f);
+                // Separate the pavement and paint from the slab to prevent coplanar depth flicker.
+                TubeBox(shell,"RoadSurface",new Vector3(0,-h/2+fl+0.005f,0),new Vector3(len,0.05f,roadWidth),road);
+                var paint = new StandardMaterial3D {AlbedoColor=new Color("e5dcb5"),Roughness=0.8f};
+                for(float x=-len/2+0.8f;x<len/2;x+=2.4f)
+                    TubeBox(shell,"LaneMark",new Vector3(x,-h/2+fl+0.031f,0),new Vector3(Mathf.Min(1.1f,len/2-x),0.002f,0.09f),paint);
+                if(g.Type.IsShield)
+                {
+                    for(float x=-len/2+1.6f;x<len/2-0.2f;x+=1.6f)
+                        TubeLining(shell,shape,0.075f,w+0.02f,h+0.02f,wall+0.02f,accent,x).Name = "SegmentRing";
+                }
+                else if(g.Type.IsFloating)
+                {
+                    float podHeight = 0.35f + Mathf.Clamp((float)(g.Buoy[i].Ratio-1)*1.4f,0,0.6f);
+                    for(int side=-1;side<=1;side+=2)
+                    {
+                        var pod = TubeBox(shell,"BuoyancyChamber",new Vector3(0,h*0.22f,side*(w/2-0.36f)),new Vector3(len*0.72f,podHeight,0.65f),accent);
+                        if(side>0)_tubeFrontDetails.Add(pod);
+                    }
+                    TubeLining(shell,shape,0.26f,w+0.12f,h+0.12f,wall+0.08f,accent).Name = "AnchorCollar";
+                }
+                else
+                {
+                    TubeBox(shell,"InspectionWalkway",new Vector3(0,-h/2+fl+0.12f,-w/2+0.85f),new Vector3(len,0.24f,0.85f),solid);
+                    TubeBox(shell,"ServiceDuct",new Vector3(0,-h/2+fl+1.1f,-w/2+wall+0.1f),new Vector3(len,0.18f,0.18f),accent);
+                }
+                var lampMat = new StandardMaterial3D {AlbedoColor=new Color("efe3b8"),EmissionEnabled=true,Emission=new Color("e2d6ac"),EmissionEnergyMultiplier=0.4f};
+                for(float x=-len/2+1.2f;x<len/2-0.3f;x+=3.2f)
+                    TubeBox(shell,"InteriorLight",new Vector3(x,h*0.26f,-w*0.29f),new Vector3(0.65f,0.1f,0.16f),lampMat);
+                // Miter both ends on the bisector of the joint angle: neighbouring elements meet without gap or overlap
+                float t0 = i > 0 ? Mathf.Tan((angles[i] - angles[i - 1]) / 2) : 0, t1 = i + 1 < g.Count ? Mathf.Tan((angles[i + 1] - angles[i]) / 2) : 0;
+                if (Mathf.Abs(t0) > 1e-5f || Mathf.Abs(t1) > 1e-5f) MiterTube(shell, Vector3.Zero, len, h, t0, t1);
+                if (g.Type.IsFloating) AddCables(g, i, a, b, w);
+                else if (g.Reinforced[i] && g.Type.IsShield)
+                    NewMesh(new BoxMesh { Size = new Vector3(len, 0.6f, w + 2f) }, _mm.Foundation).Position = (a + b) / 2 - new Vector3(0, 0.3f, 0);
+                _tubes.Add((shell, mat, centre));
+            }
+            AddTunnelAccess(g);
+            SetCutaway(_cutaway);
+            // Static check (normal water level, no vehicles) so the build view shows the risk colours at once
+            if (_mm.Db.TunnelConfig != null)
+                ShowTunnel(Physics.TunnelAnalysis.Evaluate(g, Level, _mm.Db.TunnelConfig, Physics.TunnelAnalysis.StaticEnvironment(Level, _mm.Db.TunnelConfig)), false);
+        }
+
+        /// <summary>
+        /// Shears every mesh of an element (local x along the axis, y up, origin at the centre, bottom at -h/2) so
+        /// its end faces lie on the bisector planes through the bottom joint points: x += (y + h/2)·((1−u)·t0 − u·t1),
+        /// u = position along the element, t = tan(half the angle change at that joint).
+        /// </summary>
+        private void MiterTube(Node3D node, Vector3 offset, float len, float h, float t0, float t1)
+        {
+            Mesh Shear(Mesh m, Vector3 p)
+            {
+                if (m == null) return null;
+                var am = new ArrayMesh();
+                for (int s = 0; s < m.GetSurfaceCount(); s++)
+                {
+                    var arr = m.SurfaceGetArrays(s);
+                    var verts = arr[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+                    for (int k = 0; k < verts.Length; k++)
+                    {
+                        var v = verts[k] + p;
+                        float u = Mathf.Clamp((v.X + len / 2) / len, 0, 1);
+                        verts[k].X += (v.Y + h / 2) * ((1 - u) * t0 - u * t1);
+                    }
+                    arr[(int)Mesh.ArrayType.Vertex] = verts;
+                    am.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arr);
+                    var sm = m.SurfaceGetMaterial(s); if (sm != null) am.SurfaceSetMaterial(s, sm);
+                }
+                return am;
+            }
+            if (node is MeshInstance3D mi)
+            {
+                int idx = _tubeSections.FindIndex(t => t.mesh == mi);
+                if (idx >= 0) { var t = _tubeSections[idx]; _tubeSections[idx] = (mi, Shear(t.full, offset), Shear(t.section, offset)); mi.Mesh = _cutaway ? _tubeSections[idx].section : _tubeSections[idx].full; }
+                else mi.Mesh = Shear(mi.Mesh, offset);
+            }
+            foreach (var child in node.GetChildren())
+                if (child is Node3D c) MiterTube(c, offset + (node == null ? Vector3.Zero : c.Position), len, h, t0, t1);
+        }
+
+        /// <summary>Floating tube: anchor cables from the tube bottom to the bed, splayed sideways in pairs, plus anchor blocks.</summary>
+        private void AddCables(TunnelGeometry g, int i, Vector3 a, Vector3 b, float w)
+        {
+            int n = g.CableCount[i];
+            float bed = (float)TunnelRules.BedY(Level.Terrain);
+            var cmat = new StandardMaterial3D { AlbedoColor = Color.FromHtml(g.Cable[i].Color ?? "#3a3f45"), Roughness = 0.6f, Metallic = 0.4f };
+            float tan = Mathf.Tan((float)g.Type.CableAngleDeg * Mathf.Pi / 180);
+            for (int k = 0; k < n; k++)
+            {
+                float f = (k / 2 + 0.5f) / Mathf.Ceil(n / 2f);
+                var direction = (b-a).Normalized();var up = new Vector3(-direction.Y,direction.X,0);
+                var top = a.Lerp(b, f) + up*(float)g.Type.TubeHeight*0.26f;
+                float side = k % 2 == 0 ? -1 : 1;
+                var t3 = new Vector3(top.X, top.Y, side * w * 0.45f);
+                var b3 = new Vector3(top.X, bed, side * (w / 2 + (top.Y - bed) * tan));
+                var line = Line(t3, b3, 0.12f, cmat);
+                line.Name = "TunnelAnchorCable";
+                _tubeCableLines.Add((i,line,t3,b3));
+                var anchorMat = g.Reinforced[i] ? _mm.Foundation : cmat;
+                NewMesh(new BoxMesh { Size = new Vector3(1.2f, 0.6f, 1.2f) }, anchorMat).Position = b3 + new Vector3(0, 0.3f, 0);
+            }
+        }
+
+        /// <summary>Thin box from a to b in any direction.</summary>
+        private MeshInstance3D Line(Vector3 a, Vector3 b, float thick, Material mat)
+        {
+            var mi = NewMesh(new BoxMesh {Size=Vector3.One},mat);
+            SetCable(mi,a,b,thick);return mi;
+        }
+
+        private static void SetCable(MeshInstance3D mi, Vector3 a, Vector3 b, float thick)
+        {
+            var d = b-a;float len=d.Length();
+            if (len < 1e-4f) return;
+            var y = d / len;
+            var x = Mathf.Abs(y.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : y.Cross(Vector3.Up).Normalized();
+            var z = x.Cross(y).Normalized();
+            mi.Transform = new Transform3D(new Basis(x*thick, y*len, z*thick), (a+b)/2);
+        }
+
+        /// <summary>Colour every element by its utilization band; while testing also sink it by its settlement.</summary>
+        public void ShowTunnel(Physics.TunnelState st, bool testing, bool flooded = false)
+        {
+            if (st == null || _mm.Db.TunnelConfig == null) return;
+            for (int i = 0; i < _tubes.Count && i < st.Count; i++)
+            {
+                var (shell, mat, basePos) = _tubes[i];
+                int band = flooded ? 3 : TunnelRules.RiskBand(_mm.Db.TunnelConfig, st.Util[i]);
+                mat.AlbedoColor = RiskColors[band];
+                // Floating tubes also sway sideways with the current (drawn at true scale)
+                float sway = testing && i < st.Sway.Length ? (float)st.Sway[i] : 0;
+                shell.Position = basePos - new Vector3(0, testing ? (float)st.Settle[i] * TunnelSettleScale : 0, -sway);
+            }
+            foreach(var cable in _tubeCableLines)
+            {
+                var tube = _tubes[cable.element];
+                SetCable(cable.mesh,cable.top+tube.shell.Position-tube.basePos,cable.anchor,0.12f);
+            }
         }
 
         private MeshInstance3D NewMesh(Mesh mesh, Material mat)

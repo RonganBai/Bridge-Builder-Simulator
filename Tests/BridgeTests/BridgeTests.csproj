@@ -8,6 +8,8 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="LiftBatchTests.cs" />
+    <Compile Include="TunnelAccessTests.cs" />
     <Compile Include="Program.cs" /><Compile Include="SuvTests.cs" /><Compile Include="HarborTests.cs" /><Compile Include="IndependentFrameTests.cs" /><Compile Include="LinkageTests.cs" /><Compile Include="MotionRegressionTests.cs" /><Compile Include="ShipRigidTests.cs" /><Compile Include="CoupledTests.cs" /><Compile Include="SceneJointTests.cs" /><Compile Include="CrossBeamFixtures.cs" />
     <Compile Include="../../Scripts/Data/**/*.cs" />
     <Compile Include="../../Scripts/Physics/**/*.cs" />

@@ -32,8 +32,10 @@ namespace BridgeArchitect3D.Core
         }
     }
 
-    public class GameSettings
+    public class GameSettings : IVersionStamped
     {
+        /// <summary>Game version that last wrote the settings (null = before versioning).</summary>
+        public string GameVersion { get; set; }
         /// <summary>视觉变形放大系数（仅影响显示，不影响判定）。</summary>
         public double DeformationScale { get; set; } = 30;
         public bool ShowGrid { get; set; } = true;
@@ -123,10 +125,15 @@ namespace BridgeArchitect3D.Core
     }
 
     /// <summary>关卡进度（保存在 user://progress.json）。</summary>
-    public class GameProgress
+    public class GameProgress : IVersionStamped
     {
+        /// <summary>Game version that last wrote the progress (null = before versioning); used to show "updated to …" once.</summary>
+        public string GameVersion { get; set; }
         /// <summary>各关最高分（通关才记录）。</summary>
         public Dictionary<string, int> BestScores { get; set; } = new();
+        /// <summary>Engineering Score records per level (best score, lowest cost, fastest, highest margin) of the
+        /// current scoring version. Old progress files have none; BestScores still unlocks the next level.</summary>
+        public Dictionary<string, LevelRecord> Records { get; set; } = new();
         public string LastLevelId { get; set; }
     }
 
@@ -151,6 +158,8 @@ namespace BridgeArchitect3D.Core
         public bool LoadSavedDesign { get; set; }
         /// <summary>返回主菜单时直接打开关卡选择。</summary>
         public bool ShowLevelSelectOnMenu { get; set; }
+        /// <summary>Version the player came from when this run is the first of a newer version (null otherwise).</summary>
+        public string UpdatedFrom { get; set; }
 
         public override void _Ready()
         {
@@ -169,15 +178,33 @@ namespace BridgeArchitect3D.Core
                 Db = GameDatabase.FromJson(
                     Loc.TranslateJson(ReadRes("res://Data/Materials/materials.json")),
                     Loc.TranslateJson(ReadRes("res://Data/Vehicles/vehicles.json")),
-                    Loc.TranslateJson(ReadRes("res://Data/Levels/levels.json")));
+                    Loc.TranslateJson(ReadRes("res://Data/Levels/levels.json")),
+                    Loc.TranslateJson(ReadRes("res://Data/Tunnels/tunnels.json")),
+                    Loc.TranslateJson(ReadRes("res://Data/Environment/weather.json")),
+                    Loc.TranslateJson(ReadRes("res://Data/Scoring/scoring.json")));
             }
             catch (Exception e)
             {
                 LoadError = Loc.T("数据加载失败：") + e.Message;
                 GD.PushError(LoadError);
             }
+            if (Db != null)
+            {
+                // Built-in data stays available for "restore defaults"; player level settings replace it
+                foreach (var l in Db.Levels) _defaultLevels[l.Id] = GameDatabase.SerializeLevel(l);
+                if (!Benchmark.Requested(out _))
+                    foreach (var id in System.Linq.Enumerable.ToList(_defaultLevels.Keys))
+                        if (SaveManager.LoadLevelOverride(id) is { } o)
+                        {
+                            o.Id = id;
+                            if (Db.LevelError(o) is { } err) GD.PushWarning(Loc.F("关卡设置 {0} 无效，使用内置设置：{1}", (id), (err)));
+                            else Db.ReplaceLevel(o);
+                        }
+            }
             var p = SaveManager.ReadUserJson<GameProgress>("user://progress.json");
             if (p != null) Progress = p;
+            // An existing player who ran an older version: remember it so the menu can say what changed (once)
+            if (p != null && GameVersion.IsOlder(p.GameVersion)) UpdatedFrom = p.GameVersion ?? GameVersion.Unversioned;
             ApplySettings();
             if (Benchmark.Requested(out var benchLevels))
             {
@@ -294,6 +321,50 @@ namespace BridgeArchitect3D.Core
             SaveProgress();
         }
 
+        /// <summary>Record of a level for the current scoring version (a record of an older version starts over).</summary>
+        public LevelRecord RecordFor(string levelId, string contract = null)
+        {
+            int v = Db?.Scoring.Version ?? 2;
+            if (!Progress.Records.TryGetValue(EngineeringScore.RecordKey(levelId, contract), out var rec) || rec.Version != v) rec = new LevelRecord { Version = v };
+            return rec;
+        }
+
+        /// <summary>Update the level's records with a passed test; the improving design is kept as a named design per kind.</summary>
+        public List<string> RecordResult(string levelId, SimulationResult r, BridgeDesign design)
+        {
+            var rec = RecordFor(levelId, r.Contract);
+            var kinds = rec.Improve(r);
+            Progress.Records[EngineeringScore.RecordKey(levelId, r.Contract)] = rec;
+            // BestScores only marks the level as passed (unlocking); old version-1 scores in it stay untouched
+            if (!Progress.BestScores.ContainsKey(levelId)) Progress.BestScores[levelId] = r.Score;
+            SaveProgress();
+            string suffix = Db?.Scoring.Contract(r.Contract) is { } cc ? Loc.T("（") + cc.Name + Loc.T("）") : "";
+            foreach (var k in kinds) SaveManager.SaveNamedDesign(design.Clone(), LevelRecord.KindName(k) + suffix, out _);
+            return kinds;
+        }
+
+        private readonly System.Collections.Generic.Dictionary<string, string> _defaultLevels = new();
+
+        /// <summary>Level settings: replace this level's data for this player and restart it.</summary>
+        public bool SaveLevelSettings(LevelDefinition level, out string error)
+        {
+            error = Db.LevelError(level);
+            if (error != null || !SaveManager.SaveLevelOverride(level, out error)) return false;
+            if (!Db.ReplaceLevel(level)) { }   // custom level: ResolveLevel applies the override
+            StartLevel(level.Id, true);
+            return true;
+        }
+
+        /// <summary>Level settings: back to the built-in (or designed) data.</summary>
+        public void RestoreLevelDefaults(string levelId)
+        {
+            SaveManager.RemoveLevelOverride(levelId);
+            if (_defaultLevels.TryGetValue(levelId, out var json)) Db.ReplaceLevel(GameDatabase.DeserializeLevel(json));
+            StartLevel(levelId, true);
+        }
+
+        public bool LevelOverridden(string levelId) => SaveManager.HasLevelOverride(levelId);
+
         public void StartLevel(string levelId, bool loadSave)
         {
             CurrentLevelId = levelId;
@@ -309,6 +380,7 @@ namespace BridgeArchitect3D.Core
         {
             var lv = Db?.GetLevel(levelId);
             if (lv != null || !CustomLevelBuilder.IsCustom(levelId)) return lv;
+            if (SaveManager.LoadLevelOverride(levelId) is { } o && Db.LevelError(o) == null) { o.Id = levelId; return o; }
             var spec = SaveManager.LoadCustomLevel(levelId);
             return spec == null ? null : CustomLevelBuilder.Build(spec, Db);
         }

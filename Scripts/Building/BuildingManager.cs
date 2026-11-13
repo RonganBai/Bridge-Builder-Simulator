@@ -44,6 +44,7 @@ namespace BridgeArchitect3D.Building
         private int _dragNode = -1;
         private Vector2 _lastMouse;
         private MeshInstance3D _previewBeam, _cursor, _grid, _ring;
+        private TunnelBuildGuide _tunnelGuide;
         private bool _showGrid = true;
 
         public void Init(DesignEditor editor, Camera3D camera, BridgeRenderer renderer, MaterialManager mm, bool showGrid)
@@ -60,6 +61,9 @@ namespace BridgeArchitect3D.Building
             AddChild(_grid);
             if(_grid.MaterialOverride is StandardMaterial3D gridMaterial)
             {gridMaterial.AlbedoColor=Colors.White;gridMaterial.VertexColorUseAsAlbedo=true;}
+            _tunnelGuide = new TunnelBuildGuide { Visible = false };
+            _tunnelGuide.FocusRequested += destination=>FocusTunnel(destination);
+            AddChild(_tunnelGuide);
             OnDesignChanged();
         }
 
@@ -87,6 +91,7 @@ namespace BridgeArchitect3D.Building
             Tool = t;
             ToolMaterial = t == BuildTool.Build ? materialId : null;
             CancelChain();
+            if(t==BuildTool.Build&&Editor.Db.GetMaterial(materialId)?.IsTunnel==true)FocusTunnel("route",true);
             ToolChanged?.Invoke();
         }
 
@@ -101,12 +106,14 @@ namespace BridgeArchitect3D.Building
         public void ClearSelection()
         {
             SelectedNodeId = -1; SelectedMemberId = -1;
+            SelectedTunnelElement = -1;
             SelNodes.Clear(); SelMembers.Clear();
             Recolor(); SelectionChanged?.Invoke();
         }
 
         private void OnDesignChanged()
         {
+            if (Editor.TunnelGeo == null || SelectedTunnelElement >= Editor.TunnelGeo.Count) SelectedTunnelElement = -1;
             if (Editor.Design.FindNode(SelectedNodeId) == null) SelectedNodeId = -1;
             if (Editor.Design.FindMember(SelectedMemberId) == null) SelectedMemberId = -1;
             if (Editor.Design.FindNode(_chainStart) == null) _chainStart = -1;
@@ -115,6 +122,12 @@ namespace BridgeArchitect3D.Building
             SelNodes.RemoveWhere(id => Editor.Design.FindNode(id) == null);
             SelMembers.RemoveWhere(id => Editor.Design.FindMember(id) == null);
             _renderer.Rebuild(Editor.Design);
+            if(Editor.TunnelGeo is {} tunnel&&_camera is CameraControl.OrbitCamera camera)
+            {
+                var access=new TunnelAccessPlan(Editor.Level,tunnel);
+                double low=tunnel.Points.Min(p=>p.Y),high=Math.Max(tunnel.Points.Max(p=>p.Y)+tunnel.Type.TubeHeight,Math.Max(access.Entry.Y,access.Exit.Y)+tunnel.Type.TubeHeight);
+                camera.RememberBoundsAsHome(new Vector3((float)(access.MinX+access.MaxX)/2,(float)(low+high)/2,0),new Vector3((float)(access.MaxX-access.MinX),(float)(high-low),0));
+            }
             RefreshStatic();
             Recolor();
             SelectionChanged?.Invoke();
@@ -127,6 +140,7 @@ namespace BridgeArchitect3D.Building
 
         private void Recolor()
         {
+            RefreshTunnelGuide();
             if (!Enabled) return;
             _hlNodes.Clear(); _hlMembers.Clear();
             foreach (var n in SelNodes) _hlNodes.Add(n);
@@ -139,6 +153,79 @@ namespace BridgeArchitect3D.Building
             bool stress = StressView && StaticSim != null && StaticSim.Output.Stable;
             _renderer.ColorForBuild(_hlNodes, _hlMembers, _hoverNode, _hoverMember, stress ? StaticSim.Model : null, stress ? StaticSim.Status : null);
             _renderer.RefreshBowIfNeeded();
+        }
+
+        private void RefreshTunnelGuide()
+        {
+            if (_tunnelGuide == null) return;
+            var material = Tool == BuildTool.Build ? Editor.Db.GetMaterial(ToolMaterial) : null;
+            var geometry = Editor.TunnelGeo;
+            bool selected = SelectedTunnelElement >= 0 || Editor.Design.FindNode(SelectedNodeId)?.IsTunnelNode == true;
+            _renderer.ShowReservedAccess(geometry==null&&material?.IsTunnel==true?Editor.TunnelCfg?.Type(material):null,Enabled&&material?.IsTunnel==true&&geometry==null);
+            if (!Enabled || (material?.IsTunnel != true && geometry==null)) { _tunnelGuide.Visible = false; return; }
+            var type = geometry?.Type ?? Editor.TunnelCfg?.Type(material);
+            MouseToPlane(out var p);
+            double cursor = TunnelMouseX(p.X,type);
+            bool valid = double.IsNaN(_tunnelStart) || Editor.PreviewTunnel(_tunnelStart, cursor, ToolMaterial, out _, out _) == null;
+            int element=Editor.TunnelElementAt(p.X,p.Y);
+            _tunnelGuide.ShowRoute(_camera,Editor.Level,type,geometry,_tunnelStart,cursor,valid,selected,Editor.Design.Nodes,TunnelHandleAtMouse(),SelectedNodeId,element>=0?element:SelectedTunnelElement,material?.IsTunnel==true,Tool);
+        }
+
+        public void FocusTunnel(string destination,bool rememberHome=false)
+        {
+            var geometry=Editor.TunnelGeo;
+            var type=geometry?.Type??Editor.TunnelCfg?.Type(Editor.Db.GetMaterial(ToolMaterial));
+            if(type==null||_camera is not CameraControl.OrbitCamera camera)return;
+            geometry??=TunnelAccessPlan.Preview(Editor.Level,type);
+            var access=new TunnelAccessPlan(Editor.Level,geometry);
+            if(destination=="entry"||destination=="exit")
+            {
+                var p=destination=="entry"?access.Entry:access.Exit;
+                camera.FrameDiagnostic(new Vector3((float)p.X,(float)p.Y+3,0),new Vector3(30,18,0));
+            }
+            else
+            {
+                double x0=destination=="tube"?geometry.Points[0].X:access.MinX;
+                double x1=destination=="tube"?geometry.Points[^1].X:access.MaxX;
+                double y0=geometry.Points.Min(p=>p.Y),y1=geometry.Points.Max(p=>p.Y)+type.TubeHeight;
+                if(destination!="tube"){y1=Math.Max(y1,Math.Max(access.Entry.Y,access.Exit.Y)+type.TubeHeight);}
+                camera.FrameDiagnostic(new Vector3((float)(x0+x1)/2,(float)(y0+y1)/2,0),new Vector3((float)(x1-x0),(float)(y1-y0),0),2000);
+            }
+            if(rememberHome)camera.RememberFrameAsHome();
+        }
+
+        private int TunnelHandleAtMouse(int ignore=-1)
+        {
+            int best=-1;float distance=14;
+            foreach(var n in Editor.Design.Nodes.Where(n=>n.IsTunnelNode&&n.Id!=ignore))
+            {
+                var world=new Vector3((float)n.Position.X,(float)n.Position.Y,BuildPlane.FrontZ);
+                if(_camera.IsPositionBehind(world))continue;
+                float d=_camera.UnprojectPosition(world).DistanceTo(_lastMouse);
+                if(d<distance){distance=d;best=n.Id;}
+            }
+            return best;
+        }
+
+        private double TunnelMouseX(double raw,TunnelTypeConfig type)
+        {
+            if(TryReservedTunnelX(type,out double selected))return selected;
+            return Editor.SnapTunnelX(raw);
+        }
+
+        private bool TryReservedTunnelX(TunnelTypeConfig type,out double x)
+        {
+            x=0;
+            if(type!=null&&Editor.Design.Tunnel==null)
+            {
+                var geometry=TunnelAccessPlan.Preview(Editor.Level,type);
+                foreach(var p in geometry.Points)
+                {
+                    var world=new Vector3((float)p.X,(float)p.Y,BuildPlane.FrontZ);
+                    if(!_camera.IsPositionBehind(world)&&_camera.UnprojectPosition(world).DistanceTo(_lastMouse)<=16){x=p.X;return true;}
+                }
+            }
+            return false;
         }
 
         // ---------------- 引导与问题定位高亮 ----------------
@@ -248,7 +335,8 @@ namespace BridgeArchitect3D.Building
         {
             var from = _camera.ProjectRayOrigin(_lastMouse);
             var dir = _camera.ProjectRayNormal(_lastMouse);
-            nodeId = _renderer.PickNode(from, dir, NodeSnapRadius);
+            nodeId = TunnelHandleAtMouse();
+            if(nodeId<0)nodeId = _renderer.PickNode(from, dir, NodeSnapRadius);
             memberId = nodeId >= 0 ? -1 : _renderer.PickMember(from, dir);
         }
 
@@ -264,12 +352,18 @@ namespace BridgeArchitect3D.Building
             else if (e is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
             {
                 _lastMouse = mb.Position;
+                if(mb.Pressed&&mb.DoubleClick&&TunnelHandleAtMouse() is int focus&&focus>=0)
+                {
+                    var n=Editor.Design.FindNode(focus);
+                    if(_camera is CameraControl.OrbitCamera camera)camera.FrameDiagnostic(new Vector3((float)n.Position.X,(float)n.Position.Y+3,0),new Vector3(24,18,0));
+                    GetViewport().SetInputAsHandled();return;
+                }
                 if (mb.Pressed) OnLeftPress();
                 else OnLeftRelease();
             }
             else if (e is InputEventMouseButton rb && rb.ButtonIndex == MouseButton.Right && rb.Pressed)
             {
-                if (_chainStart >= 0) CancelChain();   // right click cancels the current connection (drag still orbits)
+                if (_chainStart >= 0 || !double.IsNaN(_tunnelStart)) CancelChain();   // right click cancels the current connection (drag still orbits)
                 // Double right click in build / delete mode returns to the select / drag tool
                 if (rb.DoubleClick && (Tool == BuildTool.Build || Tool == BuildTool.Delete))
                 {
@@ -317,7 +411,9 @@ namespace BridgeArchitect3D.Building
         private Vector2 SnapPoint(Vector2 p, out BridgeNode snappedNode, int ignoreNodeId = -1)
         {
             // Default: snap to the nearest node within the radius; holding Ctrl places on the grid only
-            snappedNode = Input.IsKeyPressed(Key.Ctrl) ? null : Editor.NodeAt(p.X, p.Y, NodeSnapRadius,ignoreNodeId>=0?ignoreNodeId:_dragNode);
+            int ignore=ignoreNodeId>=0?ignoreNodeId:_dragNode;
+            int handle=Input.IsKeyPressed(Key.Ctrl)?-1:TunnelHandleAtMouse(ignore);
+            snappedNode = Input.IsKeyPressed(Key.Ctrl) ? null : handle>=0?Editor.Design.FindNode(handle):Editor.NodeAt(p.X,p.Y,NodeSnapRadius,ignore);
             if (snappedNode != null) return new Vector2((float)snappedNode.Position.X, (float)snappedNode.Position.Y);
             return new Vector2((float)DesignEditor.Snap(p.X), (float)DesignEditor.Snap(p.Y));
         }
@@ -367,6 +463,49 @@ namespace BridgeArchitect3D.Building
                 var zone = Editor.Level.Terrain.ZoneAt(px);
                 text = ok ? Loc.F("桥墩 高 {0:0.0} m · ${1:0}（{2}，浅基础）", (ph), (pc), (zone.Name)) + (sn != null ? Loc.T("\n墩顶直接顶住这个节点") : "") : $"✗ {why}";
             }
+            else if (mat != null && Editor.Db.GetMaterial(mat).IsLift)
+            {
+                _ring.Visible = false; _cursor.Visible = false;
+                ok = Editor.TunnelGeo != null;
+                text = ok ? Loc.T("点击查看并调整两岸电梯（电梯随隧道自动生成）") : Loc.T("先建一条隧道，两岸垂直电梯会自动生成");
+            }
+            else if (mat != null && Editor.Db.GetMaterial(mat).IsTunnel)
+            {
+                // The preview and commit share the same unsnapped mouse position and default tube elevation.
+                var type = Editor.TunnelCfg?.Type(Editor.Db.GetMaterial(mat));
+                double tx = TunnelMouseX(p.X,type);
+                double bed = type == null ? TunnelRules.BedY(Editor.Level.Terrain) : TunnelRules.DefaultBottom(Editor.Level.Terrain, type);
+                var tg = Editor.TunnelGeo;
+                _ring.Visible = false;
+                _cursor.Visible = true;
+                _cursor.Position = new Vector3((float)tx, (float)bed, BuildPlane.FrontZ);
+                if (tg != null)
+                {
+                    bool onTube = Editor.TunnelElementAt(p.X, p.Y) >= 0;
+                    ok = onTube;
+                    text = onTube ? Loc.T("上下拖动接缝上的圆点调整埋深（沉管只能拖两端）") : Loc.T("已有隧道：上下拖动接缝上的圆点调整埋深；选中管节可升级");
+                }
+                else if (double.IsNaN(_tunnelStart))
+                {
+                    TunnelRules.FlatBed(Editor.Level.Terrain, out double b0, out double b1);
+                    string why = Editor.PreviewTunnel(b0, b1, mat, out double tc, out _);
+                    ok = why == null;
+                    text = ok ? Loc.F("点击一次建造整条隧道（两端贴合岸壁，两岸自动配垂直电梯）· 约 ${0:0}", (tc)) : $"✗ {why}";
+                }
+                else
+                {
+                    string why = Editor.PreviewTunnel(_tunnelStart, tx, mat, out double tc, out string warn);
+                    ok = why == null;
+                    float a = (float)Math.Min(_tunnelStart, tx), b = (float)Math.Max(_tunnelStart, tx);
+                    float th = (float)(Editor.TunnelCfg?.Type(Editor.Db.GetMaterial(mat))?.TubeHeight ?? 8);
+                    BridgeRenderer.SetBeam(_previewBeam, new Vector3(a, (float)bed + th / 2, BuildPlane.FrontZ), new Vector3(b, (float)bed + th / 2, BuildPlane.FrontZ), th, 0.3f);
+                    _previewBeam.Visible = b - a > 0.01;
+                    _previewBeam.MaterialOverride = ok ? _mm.PreviewOk : _mm.PreviewBad;
+                    int count = TunnelRules.ElementCount(b - a, Editor.TunnelCfg?.ElementLength ?? 10);
+                    text = ok ? Loc.F("隧道 {0:0.0} m · 总计 ${1:0} · {2} 节管节 · 含两岸电梯", (b - a), (tc), (count)) + (warn != null ? $"\n⚠ {warn}" : "") : $"✗ {why}";
+                }
+                _cursor.MaterialOverride = ok ? _mm.PreviewOk : _mm.PreviewBad;
+            }
             else if (mat != null && _chainStart >= 0)
             {
                 var start = Editor.Design.FindNode(_chainStart);
@@ -386,7 +525,7 @@ namespace BridgeArchitect3D.Building
                 if (Editor.Db.GetMaterial(mat).IsDeck && Math.Abs(b.X - a.X) > 0.05)
                 {
                     double sl = Math.Abs((b.Y - a.Y) / (b.X - a.X)), lim = Editor.Level.Objectives.MaxDeckSlope;
-                    slopeTxt = Loc.F(" · 坡度 {0:0}%", (sl * 100)) + (sl > lim * 2 + 0.005 ? Loc.T("（太陡，车辆爬不上去）") : sl > lim + 0.005 ? Loc.F("（超过建议 {0:0}%，车辆会减速）", (lim * 100)) : "");
+                    slopeTxt = Loc.F(" · 坡度 {0:0}%", (sl * 100)) + (sl > Traffic.RoadPath.MaxClimbGrade + 0.005 ? Loc.T("（太陡，车辆爬不上去）") : sl > lim + 0.005 ? Loc.F("（超过建议 {0:0}%，车辆会减速）", (lim * 100)) : "");
                 }
                 text = ok ? $"{pv.Length:0.0} m · ${pv.Cost:0}" + slopeTxt
                             + (pv.Cost > Editor.Remaining + 1e-6 ? Loc.T(" · 将超预算") : "")
@@ -401,7 +540,13 @@ namespace BridgeArchitect3D.Building
                 _cursor.Position = new Vector3(snapped.X, snapped.Y, BuildPlane.FrontZ);
                 text = ok ? Loc.F("起点：节点 #{0}", (sn.Id)) : Loc.T("请从已有节点（锚点或已建节点）开始建造");
             }
+            int handle=TunnelHandleAtMouse();
+            if(_dragNode<0&&handle>=0&&Editor.Design.FindNode(handle) is { } node)
+                text=node.TunnelPoint?Loc.T("青色控制点：拖动调整埋深（两端只能沿岸壁上下）；双击放大；电梯随端点自动更新")
+                    :Loc.T("橙色结构支点：可连接混凝土构件；路线请拖动青色控制点");
+            else if(text==null&&Editor.TunnelElementAt(p.X,p.Y)>=0)text=Loc.T("点击管节：设置等级；上下拖动接缝圆点调整埋深");
             Preview?.Invoke(text, _lastMouse, ok);
+            RefreshTunnelGuide();
             if (oldN != _hoverNode || oldM != _hoverMember) Recolor();
         }
 
@@ -415,14 +560,15 @@ namespace BridgeArchitect3D.Building
                 case BuildTool.Select:
                 {
                     PickAtMouse(out int nid, out int mid);
-                    SelNodes.Clear(); SelMembers.Clear();
+                    SelNodes.Clear(); SelMembers.Clear(); SelectedTunnelElement = -1;
                     if (nid >= 0)
                     {
                         SelectedNodeId = nid; SelectedMemberId = -1;
                         var n = Editor.Design.FindNode(nid);
-                        if (n != null && !n.IsAnchor) _dragNode = nid;
+                        if (n != null && !n.IsAnchor && !n.IsTunnelSupport) _dragNode = nid;
                     }
                     else if (mid >= 0) { SelectedMemberId = mid; SelectedNodeId = -1; }
+                    else if (Editor.TunnelElementAt(p.X, p.Y) is int te && te >= 0) { SelectedTunnelElement = te; SelectedNodeId = -1; SelectedMemberId = -1; }
                     else
                     {
                         // 点在空白处：开始框选
@@ -443,6 +589,7 @@ namespace BridgeArchitect3D.Building
                         Report(Editor.DeleteMember(mid), Loc.F("已删除构件，退还 ${0:0}", (m?.EffectiveCost() ?? 0)));
                         break;
                     }
+                    if (Editor.TunnelElementAt(p.X, p.Y) >= 0) { var tr = Editor.DeleteTunnel(); Report(tr, tr.Message); break; }
                     SelNodes.Clear(); SelMembers.Clear();
                     _boxing = true; _boxStart = _lastMouse;
                     break;
@@ -451,7 +598,7 @@ namespace BridgeArchitect3D.Building
                 {
                     if (mat == null) break;
                     // 按在普通节点上：先不执行点击，等待判断是“点击”还是“长按拖动”
-                    if (sn != null && !sn.IsAnchor)
+                    if (sn != null && !sn.IsAnchor && !sn.IsTunnelSupport)
                     {
                         _pressNode = sn.Id; _pressTime = 0; _pressMouse = _lastMouse;
                         break;
@@ -486,6 +633,31 @@ namespace BridgeArchitect3D.Building
         /// <summary>建造工具的点击：选择起点，或连接到终点（已有节点或新位置）。</summary>
         private void BuildClick(Vector2 snapped, BridgeNode sn, string mat)
         {
+            if (Editor.Db.GetMaterial(mat).IsLift)
+            {
+                // Lifts come with the tunnel; clicking selects the tunnel so the lift row shows
+                if (Editor.TunnelGeo is { Count: > 0 }) { SelectedTunnelElement = 0; SelectionChanged?.Invoke(); Message?.Invoke(Loc.T("电梯随隧道自动生成：在属性栏用 − / + 调整电梯平台长度"), false); }
+                else Message?.Invoke(Loc.T("先建一条隧道，两岸垂直电梯会自动生成"), true);
+                return;
+            }
+            if (Editor.Db.GetMaterial(mat).IsTunnel)
+            {
+                if (!MouseToPlane(out var raw)) return;
+                double tx = TunnelMouseX(raw.X,Editor.TunnelCfg?.Type(Editor.Db.GetMaterial(mat)));
+                if (Editor.Design.Tunnel != null)
+                {
+                    if (!MouseToPlane(out var tp) || Editor.TunnelElementAt(tp.X, tp.Y) < 0) { Message?.Invoke(Loc.T("已有隧道：上下拖动接缝上的圆点调整埋深"), true); return; }
+                    var ir = Editor.InsertTunnelPoint(tp.X);
+                    Message?.Invoke(ir.Message, !ir.Ok);
+                    return;
+                }
+                // One click builds the whole tunnel: wall to wall, lifts on both banks
+                var tr = Editor.AddTunnel(0, 0, mat);
+                if (tr.Ok) {_tunnelStart = double.NaN;FocusTunnel("route",true);}
+                Message?.Invoke(tr.Message, !tr.Ok);
+                UpdateHover();
+                return;
+            }
             if (Editor.Db.GetMaterial(mat).IsPier)
             {
                 double px = sn != null ? sn.Position.X : snapped.X, py = sn != null ? sn.Position.Y : snapped.Y;
@@ -579,11 +751,17 @@ namespace BridgeArchitect3D.Building
             else if (SelectedNodeId >= 0) Report(Editor.DeleteNode(SelectedNodeId), Loc.T("已删除节点"));
         }
 
+        /// <summary>Selected tube element (-1 = none).</summary>
+        public int SelectedTunnelElement { get; set; } = -1;
+        /// <summary>First click of the tunnel tool (NaN = none yet).</summary>
+        private double _tunnelStart = double.NaN;
+
         private void CancelChain()
         {
-            if (_chainStart < 0) return;
+            _tunnelStart = double.NaN;
             _chainStart = -1;
             if (_previewBeam != null) _previewBeam.Visible = false;
+            Preview?.Invoke(null, Vector2.Zero, true);
             Recolor();
         }
 

@@ -1,0 +1,43 @@
+{
+  "_units": "工程积分（Engineering Score，无上限）：参考方案约 1000 分。基础分 = 1000 × Σ 权重 × 分项系数 × 桥面完整度，再乘以获得的工程成就倍率（每项只算一次）。必须通过全部车辆与天气测试才有正式分。",
+  "Version": 2,
+  "Weights": { "Economy": 0.45, "Safety": 0.2, "Weather": 0.15, "Traffic": 0.15, "Environment": 0.05 },
+  "_economy": "经济系数 = (参考造价 / 实际造价)^EconomyExponent，不封顶；参考造价 = 预算 × ReferenceCostRatio（关卡可用 Objectives.ReferenceCost 指定）。",
+  "ReferenceCostRatio": 0.9,
+  "EconomyExponent": 1.5,
+  "_safety": "安全系数 = min(SafetyCap, 安全裕量 / SafetyTarget)，安全裕量 = 1 / 最大利用率 − 1；天气系数同样计算，用天气期间的裕量（没有天气事件的关卡取安全系数）。",
+  "SafetyTarget": 0.3,
+  "SafetyCap": 1.25,
+  "_environment": "环境系数 = max(EnvironmentFloor, 1 − 扰动长度 / 河宽)；扰动长度 = 河中桥墩 × PierDisturbance + 沉管长度 × ImmersedDisturbance + 悬浮锚索根数 × CableDisturbance + 盾构长度 × ShieldDisturbance。",
+  "EnvironmentFloor": 0.2,
+  "PierDisturbance": 6,
+  "ImmersedDisturbance": 1,
+  "CableDisturbance": 0.5,
+  "ShieldDisturbance": 0,
+  "_achievements": "工程成就：关卡 Objectives.Achievements 指定可获得的成就（为空时按关卡条件自动选择）。extreme_flood 用更强洪水（水位 × ExtremeFloodFactor）重测；heavy_load 追加一辆 HeavyVehicle 重测（只在本关已有不低于 HeavyLoadMinMassRatio × 其质量的公路车辆时提供）；channel_protection 船只全部直接通过（不用等开桥）；low_disturbance 环境系数 ≥ LowDisturbanceMin；high_reliability 最大利用率 ≤ HighReliabilityMaxUtil。",
+  "Achievements": {
+    "extreme_flood":      { "Name": "极端洪水", "Multiplier": 1.15 },
+    "heavy_load":         { "Name": "额外重载", "Multiplier": 1.1 },
+    "channel_protection": { "Name": "航道保护", "Multiplier": 1.1 },
+    "low_disturbance":    { "Name": "低环境扰动", "Multiplier": 1.05 },
+    "high_reliability":   { "Name": "高可靠性", "Multiplier": 1.1 }
+  },
+  "ExtremeFloodFactor": 1.4,
+  "HeavyVehicle": "truck_heavy",
+  "LowDisturbanceMin": 0.8,
+  "HeavyLoadMinMassRatio": 0.5,
+  "HighReliabilityMaxUtil": 0.7,
+  "_contracts": "工程合同（可选，每关按条件提供）：改变评分权重并设置额外条件，不改变任何物理规律。满足条件 → 总分 × Bonus；不满足仍算通关，只是没有合同奖励。MaxCostRatio：造价 ≤ 参考造价 × 比例；MinMargin：安全裕量至少；RequireAchievement：必须拿到该成就；MinEnvironment：环境系数至少。",
+  "Contracts": {
+    "low_cost":        { "Name": "低成本合同",   "Description": "造价不超过参考造价的 85%，经济性权重更高。", "Bonus": 1.2, "MaxCostRatio": 0.85,
+                         "Weights": { "Economy": 0.6, "Safety": 0.15, "Weather": 0.1, "Traffic": 0.1, "Environment": 0.05 } },
+    "high_safety":     { "Name": "高安全性合同", "Description": "整场测试安全裕量至少 50%（最大利用率 ≤ 67%），安全权重更高。", "Bonus": 1.2, "MinMargin": 0.5,
+                         "Weights": { "Economy": 0.3, "Safety": 0.35, "Weather": 0.2, "Traffic": 0.1, "Environment": 0.05 } },
+    "extreme_weather": { "Name": "极端天气合同", "Description": "必须扛住更强洪水（极端洪水成就），天气权重更高。", "Bonus": 1.25, "RequireAchievement": "extreme_flood",
+                         "Weights": { "Economy": 0.3, "Safety": 0.15, "Weather": 0.35, "Traffic": 0.15, "Environment": 0.05 } },
+    "heavy_logistics": { "Name": "重型物流合同", "Description": "追加满载重卡也要安全通过（额外重载成就），通行效率权重更高。", "Bonus": 1.2, "RequireAchievement": "heavy_load",
+                         "Weights": { "Economy": 0.35, "Safety": 0.2, "Weather": 0.1, "Traffic": 0.3, "Environment": 0.05 } },
+    "environment":     { "Name": "环境保护合同", "Description": "环境系数至少 0.8（少建河中桥墩、少扰动河床），环境权重更高。", "Bonus": 1.2, "MinEnvironment": 0.8,
+                         "Weights": { "Economy": 0.35, "Safety": 0.15, "Weather": 0.15, "Traffic": 0.1, "Environment": 0.25 } }
+  }
+}
