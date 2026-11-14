@@ -1599,5 +1599,6 @@
  "两岸各一部，平台 {0:0}~{1:0} m，速度 {2:0.#} m/s；也可以直接拖动平台外端节点改长度。载重由你在井道里搭的平台、吊索和柱子决定": "One per bank, platform {0:0}~{1:0} m, speed {2:0.#} m/s; you can also drag the outer platform end node to change the length. Capacity comes from the platform, ropes and columns you build in the shaft",
  "{0}\n{1:0} kN ${2:0}": "{0}\n{1:0} kN ${2:0}",
  "电梯滑轮：配重 {0:0} 吨（每 {1:0} 吨 ${2:0}），两岸共用": "Lift sheave: counterweight {0:0} t (${2:0} per {1:0} t), shared by both lifts",
- "井壁拉结": "lining tie"
+ "井壁拉结": "lining tie",
+ "地震": "Earthquake"
 }

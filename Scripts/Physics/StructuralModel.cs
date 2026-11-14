@@ -240,6 +240,10 @@ namespace BridgeArchitect3D.Physics
         public int[] TunnelOf;
         /// <summary>Extra fixed vertical load per node, N (down negative): lift counterweights on their sheaves.</summary>
         public double[] NodeLoadY = Array.Empty<double>();
+        /// <summary>Earthquake: prescribed horizontal movement of fixed supports, m (null = none). Longer than NodeCount is fine.</summary>
+        public double[] SupportShiftX;
+        /// <summary>Earthquake: horizontal ground acceleration, m/s² (every mass gets the opposite inertia force).</summary>
+        public double GroundAccel;
         /// <summary>Model member index of each tube element / node index of each tube joint (empty = no structural tube).</summary>
         public int[] TubeMember = Array.Empty<int>(), TubeNode = Array.Empty<int>();
 

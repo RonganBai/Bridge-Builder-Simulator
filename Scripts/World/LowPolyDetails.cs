@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using BridgeArchitect3D.Data;
@@ -25,7 +25,7 @@ namespace BridgeArchitect3D.World
             switch(def.Kind)
             {
                 case "car":
-                    root.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.RoundedBox(new Vector3(l*0.35f,0.08f,w*0.87f),0.12f),Position=new Vector3(cx-0.15f,1.47f,0),MaterialOverride=Paint});
+                    root.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.RoundedBox(new Vector3(l*0.35f,0.08f,w*0.87f),0.12f),Position=new Vector3(cx-0.15f,1.47f,0),MaterialOverride=Ink});
                     B(front+0.065f,0.89f,0,0.03f,0.18f,w*0.28f,Ink);
                     B(front+0.07f,0.62f,0,0.03f,0.12f,0.42f,Paint);
                     foreach(int side in new[]{-1,1})
@@ -91,6 +91,8 @@ namespace BridgeArchitect3D.World
                     foreach(int side in new[]{-1,1})B(0,1.17f,z+side*0.25f,0.13f,0.47f,0.12f,Paint);
                     break;
             }
+            RefineMechanicalDetails(root, def, unit);
+            RefineRunningGear(root);
             // Keep the model within the vehicle's physical clearance height.
             float top=0;
             foreach(var mesh in root.GetChildren().OfType<MeshInstance3D>())
@@ -100,6 +102,115 @@ namespace BridgeArchitect3D.World
             if(top>h)foreach(var mesh in root.GetChildren().OfType<MeshInstance3D>())
             {var t=mesh.Transform;t.Origin=new Vector3(t.Origin.X,t.Origin.Y*h/top,t.Origin.Z);t.Basis=new Basis(t.Basis.X*new Vector3(1,h/top,1),t.Basis.Y*new Vector3(1,h/top,1),t.Basis.Z*new Vector3(1,h/top,1));mesh.Transform=t;}
             Batch(root);
+        }
+
+        private static void RefineMechanicalDetails(Node3D root, VehicleDefinition def, int unit)
+        {
+            if (def.Kind == "pedestrians") return;
+            float w = (float)def.Width, h = (float)def.Height;
+            void Detail(Vector3 position, Vector3 size, Material material)
+                => Box(root, position, size, material);
+            if (def.Kind == "train")
+            {
+                float length = (float)(def.UnitLength > 0 ? def.UnitLength : def.Length / Math.Max(1, def.Units)) - 0.6f;
+                foreach (int side in new[] { -1, 1 })
+                {
+                    float z = side * (w / 2 + 0.035f);
+                    // Walkway edge, access steps and radiator louvres are solid low-poly geometry.
+                    Detail(new(-length / 2, 1.02f, z), new(length * 0.94f, 0.07f, 0.09f), Alloy);
+                    foreach (float x in new[] { -0.65f, -length + 0.65f })
+                        for (int step = 0; step < 3; step++)
+                            Detail(new(x, 0.45f + step * 0.18f, z), new(0.42f, 0.045f, 0.19f), Alloy);
+                    if (unit == 0)
+                    {
+                        for (int vent = 0; vent < 3; vent++)
+                        {
+                            float x = -length * (0.43f + vent * 0.17f);
+                            Detail(new(x, h * 0.61f, z), new(length * 0.12f, h * 0.23f, 0.045f), Ink);
+                            for (int slat = 0; slat < 5; slat++)
+                                Detail(new(x, h * (0.52f + slat * 0.043f), z + side * 0.028f),
+                                    new(length * 0.115f, 0.025f, 0.025f), Alloy);
+                        }
+                    }
+                }
+            }
+            if (def.Kind is "car" or "pickup" or "suv" or "police" or "police_suv" or "jeep")
+            {
+                float rear = (float)def.Axles.Select(a => a.Offset).DefaultIfEmpty(0).Min();
+                float front = ((float)def.Length + rear) / 2;
+                float y = def.Kind == "car" ? 0.87f : h * 0.47f;
+                // A small fictional shield badge sits on the grille, inside the physical body envelope.
+                var badge = new MeshInstance3D { Mesh = Cube, MaterialOverride = Alloy,
+                    Position = new Vector3(front + 0.035f, y, 0),
+                    Scale = new Vector3(0.025f, 0.085f, 0.085f),
+                    RotationDegrees = new Vector3(45, 0, 0) };
+                root.AddChild(badge);
+            }
+            AddLocalChassis(root, def);
+        }
+
+        private static void AddLocalChassis(Node3D root, VehicleDefinition def)
+        {
+            if (def.Kind is "train" or "tank" or "motorcycle" or "pedestrians") return;
+            // Read wheel geometry in this unit's coordinates, never global simulation axle offsets.
+            var wheels = root.GetChildren().OfType<MeshInstance3D>()
+                .Where(m => m.Mesh is CylinderMesh c && c.TopRadius * Math.Abs(m.Scale.X) > .25f
+                    && Math.Abs(Math.Abs(m.RotationDegrees.X) - 90) < 1)
+                .GroupBy(m => Math.Round(m.Position.X, 2)).ToArray();
+            if (wheels.Length == 0) return;
+            float first = float.MaxValue, last = float.MinValue, deck = 0;
+            foreach (var group in wheels)
+            {
+                float x = group.First().Position.X;
+                float left = group.Min(m => m.Position.Z), right = group.Max(m => m.Position.Z);
+                if (right - left < .4f) continue;
+                float y = group.Min(m => m.Position.Y);
+                Box(root,new(x,y,(left+right)/2),new(.14f,.14f,right-left),Ink);
+                // Differential housing joins the axle to the central frame.
+                Box(root,new(x,y,0),new(.30f,.23f,.32f),Ink);
+                first = Math.Min(first,x); last = Math.Max(last,x); deck = Math.Max(deck,y+.16f);
+            }
+            if (first > last) return;
+            float length = Math.Max(.65f,last-first+.7f), center = (first+last)/2;
+            foreach(int side in new[]{-1,1})
+                Box(root,new(center,deck,side*(float)def.Width*.22f),new(length,.16f,.12f),Ink);
+        }
+
+        // Add silhouette detail before batching, sharing the existing alloy and dark materials.
+        private static void RefineRunningGear(Node3D root)
+        {
+            var wheels = root.GetChildren().OfType<MeshInstance3D>()
+                .Where(m => m.Mesh is CylinderMesh c && c.TopRadius >= 0.25f
+                    && c.TopRadius <= 0.85f && Math.Abs(m.RotationDegrees.X) > 80
+                    && Math.Abs(m.RotationDegrees.X) < 100).ToArray();
+            foreach (var wheel in wheels)
+            {
+                var cylinder = (CylinderMesh)wheel.Mesh;
+                float radius = cylinder.TopRadius * Math.Abs(wheel.Scale.X);
+                float side = wheel.Position.Z >= 0 ? 1 : -1;
+                float face = wheel.Position.Z + side * (cylinder.Height * Math.Abs(wheel.Scale.Y) / 2 + 0.012f);
+                // A twelve-sided recessed rim gives readable tires without smooth high-poly geometry.
+                root.AddChild(new MeshInstance3D {
+                    Mesh = new CylinderMesh { TopRadius = radius * 0.67f, BottomRadius = radius * 0.67f,
+                        Height = 0.024f, RadialSegments = 12, Rings = 1 },
+                    Position = new Vector3(wheel.Position.X, wheel.Position.Y, face),
+                    RotationDegrees = new Vector3(90, 0, 0), MaterialOverride = Ink });
+                for (int i = 0; i < 6; i++)
+                {
+                    float angle = i * Mathf.Tau / 6;
+                    var spoke = new MeshInstance3D { Mesh = Cube, MaterialOverride = Alloy,
+                        Position = new Vector3(wheel.Position.X + Mathf.Cos(angle) * radius * 0.29f,
+                            wheel.Position.Y + Mathf.Sin(angle) * radius * 0.29f, face + side * 0.018f),
+                        Scale = new Vector3(radius * 0.48f, radius * 0.09f, 0.025f),
+                        RotationDegrees = new Vector3(0, 0, Mathf.RadToDeg(angle)) };
+                    root.AddChild(spoke);
+                }
+                root.AddChild(new MeshInstance3D {
+                    Mesh = new CylinderMesh { TopRadius = radius * 0.19f, BottomRadius = radius * 0.19f,
+                        Height = 0.045f, RadialSegments = 8, Rings = 1 },
+                    Position = new Vector3(wheel.Position.X, wheel.Position.Y, face + side * 0.025f),
+                    RotationDegrees = new Vector3(90, 0, 0), MaterialOverride = Alloy });
+            }
         }
 
         /// <summary>One mesh per material and unit keeps added detail from multiplying draw calls.</summary>

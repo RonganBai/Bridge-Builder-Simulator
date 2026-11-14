@@ -51,8 +51,8 @@ namespace BridgeArchitect3D.Physics
             foreach(string id in new[]{"hydraulic","hydraulic_lift","cable","cable_composite","fixed_pulley","counterweight","steel","deck_steel"})
                 if(!level.AllowedMaterials.Contains(id))level.AllowedMaterials.Add(id);
             AddMounts(level.ProvidedInfrastructure,level,db);
-            level.StartHint="自行铺设平台，用液压缸驱动，或经定滑轮连接钢索与配重。橙色支点可安装滑轮；平台端点可铺路。安装、断绳、行程不足均会提示。";
-            if(string.IsNullOrWhiteSpace(level.Description)||level.Description.StartsWith("电梯设计挑战")||level.Description.StartsWith("机构电梯"))level.Description="机构电梯：通道和少量支点由关卡提供，玩家设计平台、液压缸、钢索、定滑轮及配重；比较行程、拉力、支反力与造价。";
+            level.StartHint=Loc.T("自行铺设平台，用液压缸驱动，或经定滑轮连接钢索与配重。橙色支点可安装滑轮；平台端点可铺路。安装、断绳、行程不足均会提示。");
+            if(string.IsNullOrWhiteSpace(level.Description)||level.Description.StartsWith(Loc.T("电梯设计挑战"))||level.Description.StartsWith(Loc.T("机构电梯")))level.Description=Loc.T("机构电梯：通道和少量支点由关卡提供，玩家设计平台、液压缸、钢索、定滑轮及配重；比较行程、拉力、支反力与造价。");
         }
         public static void AddMounts(BridgeDesign d,LevelDefinition level,GameDatabase db)
         {
@@ -123,8 +123,8 @@ namespace BridgeArchitect3D.Physics
             foreach(var pulley in d.Nodes.Where(n=>n.Pulley&&l.Nodes.Contains(n.Id)))
             {
                 int count=l.Members.Count(m=>db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==pulley.Id||m.EndNodeId==pulley.Id));
-                if(count!=2){plan.Problem=$"定滑轮 #{pulley.Id} 必须连接两段钢索，当前 {count} 段";return plan;}
-                if(!StableMount(d,db,pulley.Id)){plan.Problem=$"定滑轮 #{pulley.Id} 的安装点没有稳定支撑";return plan;}
+                if(count!=2){plan.Problem=Loc.F("定滑轮 #{0} 必须连接两段钢索，当前 {1} 段", (pulley.Id), (count));return plan;}
+                if(!StableMount(d,db,pulley.Id)){plan.Problem=Loc.F("定滑轮 #{0} 的安装点没有稳定支撑", (pulley.Id));return plan;}
             }
             foreach(var group in Ropes(d,db))
             {
@@ -139,13 +139,13 @@ namespace BridgeArchitect3D.Physics
                 double platform=g.Where(v=>l.Platform.Contains(v.Key)).Sum(v=>v.Value);
                 if(Math.Abs(platform)<.1)continue;
                 var moving=g.Where(v=>!l.Platform.Contains(v.Key)&&!StableMount(d,db,v.Key)&&Math.Abs(v.Value)>.1).ToArray();
-                if(moving.Length!=1){plan.Problem="跨过定滑轮的钢索需要一个可移动端点，连接配重或液压缸；不能把两端都钉死。";return plan;}
+                if(moving.Length!=1){plan.Problem=Loc.T("跨过定滑轮的钢索需要一个可移动端点，连接配重或液压缸；不能把两端都钉死。");return plan;}
                 var end=moving[0];
                 foreach(var part in parts)
                 {
                     bool hasEnd=part.StartNodeId==end.Key||part.EndNodeId==end.Key||l.Platform.Contains(part.StartNodeId)||l.Platform.Contains(part.EndNodeId);
                     if(hasEnd && Math.Abs(d.FindNode(part.StartNodeId).Position.X-d.FindNode(part.EndNodeId).Position.X)>.1)
-                    {plan.Problem=$"钢索 #{part.Id} 的移动端必须沿竖直导轨走绳，避免绳长变化锁死";return plan;}
+                    {plan.Problem=Loc.F("钢索 #{0} 的移动端必须沿竖直导轨走绳，避免绳长变化锁死", (part.Id));return plan;}
                 }
                 plan.Motion[end.Key]=-platform/end.Value;
             }
@@ -155,27 +155,27 @@ namespace BridgeArchitect3D.Physics
                 if(Math.Abs(va-vb)<.01)continue;
                 var a=d.FindNode(h.StartNodeId);var b=d.FindNode(h.EndNodeId);
                 int fixedId=Math.Abs(va)<.01?a.Id:b.Id;
-                if(!StableMount(d,db,fixedId)){plan.Problem=$"液压缸 #{h.Id} 的固定端没有稳定支撑";return plan;}
-                if(Math.Abs(a.Position.X-b.Position.X)>.1){plan.Problem=$"液压缸 #{h.Id} 必须沿竖直导轨安装，避免侧向卡死";return plan;}
+                if(!StableMount(d,db,fixedId)){plan.Problem=Loc.F("液压缸 #{0} 的固定端没有稳定支撑", (h.Id));return plan;}
+                if(Math.Abs(a.Position.X-b.Position.X)>.1){plan.Problem=Loc.F("液压缸 #{0} 必须沿竖直导轨安装，避免侧向卡死", (h.Id));return plan;}
                 double len=Vec3d.Distance(a.Position,b.Position),delta=(b.Position.Y>=a.Position.Y?1:-1)*(vb-va)*(l.Shaft.Top-l.Shaft.Bottom);
                 var mat=db.GetMaterial(h.MaterialId);double stroke=h.Stroke??(delta<0?-mat.RetractRatio:mat.ExtendRatio);
                 if(len+delta<.1||Math.Sign(stroke)!=Math.Sign(delta)||Math.Abs(len*stroke)+.01<Math.Abs(delta))
-                {plan.Problem=$"液压缸 #{h.Id} 行程不足或方向相反：需要 {Math.Abs(delta):0.0} m，可用 {Math.Abs(len*stroke):0.0} m；调整初始长度与目标长度";return plan;}
+                {plan.Problem=Loc.F("液压缸 #{0} 行程不足或方向相反：需要 {1:0.0} m，可用 {2:0.0} m；调整初始长度与目标长度", (h.Id), (Math.Abs(delta)), (Math.Abs(len*stroke)));return plan;}
                 plan.Drivers.Add(h.Id);
             }
-            if(plan.Drivers.Count==0){plan.Problem="没有有效液压驱动：将液压缸接到平台，或接到经定滑轮转向的钢索端点，并提供足够行程";return plan;}
+            if(plan.Drivers.Count==0){plan.Problem=Loc.T("没有有效液压驱动：将液压缸接到平台，或接到经定滑轮转向的钢索端点，并提供足够行程");return plan;}
             foreach(var move in plan.Motion)
             {
                 var node=d.FindNode(move.Key);double end=node.Position.Y+move.Value*(l.Shaft.Top-l.Shaft.Bottom);
                 if(end<LiftStructure.PitY(LiftStructure.Cfg(db),l.Shaft)+.3||end>LiftStructure.HeadY(LiftStructure.Cfg(db),l.Shaft)+.1)
-                {plan.Problem=$"移动节点 #{node.Id} 会超出井道行程，调整配重初始位置";return plan;}
+                {plan.Problem=Loc.F("移动节点 #{0} 会超出井道行程，调整配重初始位置", (node.Id));return plan;}
             }
             foreach(var m in l.Members.Where(m=>db.GetMaterial(m.MaterialId)?.IsCable==true))
             {
                 var a=d.FindNode(m.StartNodeId);var b=d.FindNode(m.EndNodeId);
                 if(d.FindNode(m.StartNodeId).Pulley||d.FindNode(m.EndNodeId).Pulley)continue;
                 if(Math.Abs(plan.Motion.GetValueOrDefault(a.Id)-plan.Motion.GetValueOrDefault(b.Id))>.01)
-                {plan.Problem=$"钢索 #{m.Id} 两端直接固定，会锁住升降行程；请经过定滑轮连接可移动端";return plan;}
+                {plan.Problem=Loc.F("钢索 #{0} 两端直接固定，会锁住升降行程；请经过定滑轮连接可移动端", (m.Id));return plan;}
             }
             return plan;
         }
@@ -185,7 +185,7 @@ namespace BridgeArchitect3D.Physics
             {
                 if(!m.NodeIndex.TryGetValue(n.Id,out int i))continue;
                 m.NodeLoadY[i]-=(n.CounterweightTonnes*1000+(n.Pulley?40:0))*StructuralModel.Gravity;
-                if(n.LiftRole?.StartsWith("mount")==true){m.FixX[i]=true;m.FixY[i]=true;m.FixRot[i]=true;m.IsAnchor[i]=true;m.AnchorMaxLoad[i]=PulleyCapacity;m.AnchorIds[i]="井道固定支点 #"+n.Id;}
+                if(n.LiftRole?.StartsWith("mount")==true){m.FixX[i]=true;m.FixY[i]=true;m.FixRot[i]=true;m.IsAnchor[i]=true;m.AnchorMaxLoad[i]=PulleyCapacity;m.AnchorIds[i]=Loc.T("井道固定支点 #")+n.Id;}
                 if(n.CounterweightTonnes>0)m.FixX[i]=true;
                 if(n.Pulley)m.PulleyBearings[i]=PulleyCapacity;
             }
@@ -224,28 +224,28 @@ namespace BridgeArchitect3D.Physics
         }
         public static string Report(BridgeDesign d,LevelDefinition level,GameDatabase db)
         {
-            var text=new System.Text.StringBuilder("[b]机构电梯 · 承载与经济检查[/b]\n");
+            var text=new System.Text.StringBuilder(Loc.T("[b]机构电梯 · 承载与经济检查[/b]\n"));
             foreach(var l in LiftStructure.Analyze(d,level,db))
             {
                 text.AppendLine("\n[b]"+LiftStructure.Name(l)+"[/b]");
-                if(l.Problem!=null){text.AppendLine("未通过："+l.Problem);continue;}
+                if(l.Problem!=null){text.AppendLine(Loc.T("未通过：")+l.Problem);continue;}
                 var empty=LiftStructure.Check(d,level,db,l,Array.Empty<(double,double)>());
-                text.AppendLine($"空载最大利用率 {empty.Util*100:0}%");
+                text.AppendLine(Loc.F("空载最大利用率 {0:0}%", (empty.Util*100)));
                 foreach(string id in level.TrafficEvents.Where(e=>e.Type==TrafficEventType.Vehicle&&e.VehicleId!=null).Select(e=>e.VehicleId).Distinct())
                 {
                     if(!db.Vehicles.TryGetValue(id,out var vehicle)||RailTrack.IsTrain(vehicle))continue;
                     var result=LiftStructure.Check(d,level,db,l,LiftStructure.VehicleAxles(vehicle,l.Shaft,TunnelRules.LiftCfg.Margin,d.Tunnel.Lift.BoardingPolicy));
-                    text.AppendLine($"{vehicle.Name}：最大利用率 {result.Util*100:0}%（{result.Where} / {result.Why}）");
-                    if(result.Util>1)text.AppendLine("建议："+result.Fix);
+                    text.AppendLine(Loc.F("{0}：最大利用率 {1:0}%（{2} / {3}）", (vehicle.Name), (result.Util*100), (result.Where), (result.Why)));
+                    if(result.Util>1)text.AppendLine(Loc.T("建议：")+result.Fix);
                 }
             }
-            text.AppendLine("\n[b]当前造价[/b]");
-            foreach(var group in d.Members.Where(m=>!m.Provided).GroupBy(m=>m.MaterialId))text.AppendLine($"{db.GetMaterial(group.Key)?.Name}：${group.Sum(m=>m.EffectiveCost()):N0}");
-            text.AppendLine($"定滑轮：${d.Nodes.Count(n=>n.Pulley)*1800:N0}；配重：${d.Nodes.Sum(n=>n.CounterweightTonnes)*260:N0}");
-            text.AppendLine($"合计 ${d.TotalCost():N0} / 预算 ${level.Budget:N0}");
-            text.AppendLine("\n下层、半程、上层三个位形做二维准静态验算。单车校核不保证多车合乘；合乘在测试时按实际车队校核。定滑轮只转向，配重不消除支点负荷。");
+            text.AppendLine(Loc.T("\n[b]当前造价[/b]"));
+            foreach(var group in d.Members.Where(m=>!m.Provided).GroupBy(m=>m.MaterialId))text.AppendLine(Loc.F("{0}：${1:N0}", (db.GetMaterial(group.Key)?.Name), (group.Sum(m=>m.EffectiveCost()))));
+            text.AppendLine(Loc.F("定滑轮：${0:N0}；配重：${1:N0}", (d.Nodes.Count(n=>n.Pulley)*1800), (d.Nodes.Sum(n=>n.CounterweightTonnes)*260)));
+            text.AppendLine(Loc.F("合计 ${0:N0} / 预算 ${1:N0}", (d.TotalCost()), (level.Budget)));
+            text.AppendLine(Loc.T("\n下层、半程、上层三个位形做二维准静态验算。单车校核不保证多车合乘；合乘在测试时按实际车队校核。定滑轮只转向，配重不消除支点负荷。"));
             return text.ToString();
         }
-        public static string Summary(BridgeDesign d,LevelDefinition level,GameDatabase db)=>string.Join("\n",LiftStructure.Analyze(d,level,db).Select(l=>LiftStructure.Name(l)+"："+(l.Problem??"机构已连接；测试将校核平台、液压拉力、绳张力与支点反力")));
+        public static string Summary(BridgeDesign d,LevelDefinition level,GameDatabase db)=>string.Join("\n",LiftStructure.Analyze(d,level,db).Select(l=>LiftStructure.Name(l)+Loc.T("：")+(l.Problem??Loc.T("机构已连接；测试将校核平台、液压拉力、绳张力与支点反力"))));
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Text.Json;
 using BridgeArchitect3D.Data;
@@ -13,7 +13,7 @@ namespace BridgeArchitect3D.Tools
         private VehicleController _model;
         private Camera3D _camera;
         private VehicleDefinition[] _definitions;
-        private readonly string[] _ids={"mixer","coupe","machinery_flatbed","machinery_flatbed","machinery_flatbed","machinery_flatbed","car_carrier","fire_engine","semi_long","utility","crane","dump_loaded","dump_empty","articulated_bus","tanker","tractor_trailer","garbage","concrete_pump","modular_transport","school_bus"};
+        private string[] _ids={"mixer","coupe","machinery_flatbed","machinery_flatbed","machinery_flatbed","machinery_flatbed","car_carrier","fire_engine","semi_long","utility","crane","dump_loaded","dump_empty","articulated_bus","tanker","tractor_trailer","garbage","concrete_pump","modular_transport","school_bus"};
         private int _index,_frames;
         private string _output;
         public override void _Ready()
@@ -22,6 +22,8 @@ namespace BridgeArchitect3D.Tools
             if(at>=0 && at+1<args.Length)_output=args[at+1];
             using var json=JsonDocument.Parse(FileAccess.GetFileAsString("res://Data/Vehicles/vehicles.json"));
             _definitions=json.RootElement.GetProperty("Vehicles").EnumerateArray().Select(e=>JsonSerializer.Deserialize<VehicleDefinition>(e.GetRawText())).ToArray();
+            if (Array.IndexOf(args, "--all-vehicles") >= 0)
+                _ids = _definitions.Where(d => d.Kind != "pedestrians").Select(d => d.Id).ToArray();
             AddChild(new WorldEnvironment{Environment=new Godot.Environment{BackgroundMode=Godot.Environment.BGMode.Color,BackgroundColor=new Color("a9b9bd"),AmbientLightSource=Godot.Environment.AmbientSource.Color,AmbientLightColor=Colors.White,AmbientLightEnergy=0.65f}});
             AddChild(new DirectionalLight3D{RotationDegrees=new(-48,-30,0),LightEnergy=1.4f,ShadowEnabled=true});
             AddChild(new MeshInstance3D{Mesh=new PlaneMesh{Size=new(100,100)},Position=new(0,-0.02f,0),MaterialOverride=new StandardMaterial3D{AlbedoColor=new Color("687d7f"),Roughness=1}});
@@ -34,7 +36,7 @@ namespace BridgeArchitect3D.Tools
             _model.PlaceAlongPath(x=>new Vector3((float)x,0,0),0);_model.SetEmergencyLights(true,0.04);
             foreach(var unit in _model.GetChildren().OfType<Node3D>())
             {
-                if(d.Kind=="flatbed")
+                if(d.Kind=="flatbed" && Array.IndexOf(OS.GetCmdlineUserArgs(), "--all-vehicles") < 0)
                 {
                     string[] names={"PayloadExcavator","PayloadForklifts","PayloadSteel","PayloadTransformer"};
                     for(int i=0;i<4;i++){var n=unit.GetNodeOrNull<Node3D>(names[i]);if(n!=null)n.Visible=i==_index-2;}

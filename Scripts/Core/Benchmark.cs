@@ -59,6 +59,9 @@ namespace BridgeArchitect3D.Core
             var gm = GameManager.Instance;
             gm.CurrentLevelId = _levels.Dequeue();
             gm.LoadSavedDesign = false;
+            // "--quake" adds an earthquake from the start (in memory only, nothing is saved) to look at the scenery
+            if (System.Array.IndexOf(OS.GetCmdlineUserArgs(), "--quake") >= 0 && gm.ResolveLevel(gm.CurrentLevelId) is { } ql && !ql.TrafficEvents.Exists(e => e.Weather == "earthquake"))
+                ql.TrafficEvents.Add(new Data.TrafficEvent { Type = Data.TrafficEventType.Environment, Weather = "earthquake", Name = Loc.T("地震"), Time = 0, Duration = 30 });
             _t = 0; _started = false; _frames.Clear(); _drawCalls = 0; _objects = 0; _gpu = 0; _cpu = 0; _timed = 0;
             GetTree().ChangeSceneToFile(GameManager.LevelScene);
         }

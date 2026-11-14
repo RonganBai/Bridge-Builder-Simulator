@@ -26,6 +26,12 @@ namespace BridgeArchitect3D.Physics
                 double w = m.Mass[k] * StructuralModel.Gravity * 0.5;
                 loads[2 * m.A[k] + 1] -= w;
                 loads[2 * m.B[k] + 1] -= w;
+                if (m.GroundAccel != 0)
+                {
+                    // Earthquake inertia: the structure lags the moving ground
+                    double hx = -m.Mass[k] * m.GroundAccel * 0.5;
+                    loads[2 * m.A[k]] += hx; loads[2 * m.B[k]] += hx;
+                }
             }
             for (int i = 0; i < axleCount; i++)
             {

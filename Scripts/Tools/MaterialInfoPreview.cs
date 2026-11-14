@@ -29,7 +29,7 @@ namespace BridgeArchitect3D.Tools
             _camera=new Camera3D{Current=true,Projection=Camera3D.ProjectionType.Orthogonal,Size=22,Far=500};AddChild(_camera);
             _renderer=new BridgeRenderer{Level=_level};AddChild(_renderer);_renderer.Init(new MaterialManager(_db));
             var canvas=new CanvasLayer();AddChild(canvas);_hud=new GameHUD();canvas.AddChild(_hud);_controller=new LevelManager();
-            _hud.Init(_controller,"配重与实时信息预览","",_db.Materials.Values.ToArray(),_db.Materials.Values.ToArray());
+            _hud.Init(_controller,Loc.T("配重与实时信息预览"),"",_db.Materials.Values.ToArray(),_db.Materials.Values.ToArray());
             ShowSample();
         }
         private void ShowSample()
@@ -39,7 +39,7 @@ namespace BridgeArchitect3D.Tools
             string buoy=new[]{"low","mid","high"}[_index%3];_editor.SetTunnelBuoyancy(-1,buoy);_editor.SetTunnelGrade(-1,"heavy");_renderer.Rebuild(_editor.Design);_renderer.SetCutaway(true);
             var g=_editor.TunnelGeo;int selected=g.Count/2;
             var st=BridgeSimulation.StaticTunnel(_editor.Design,_level,_db);
-            _hud.ShowTunnelProperties(g,selected,st,_level,_db.TunnelConfig,"静态工况："+g.Buoy[selected].Name);
+            _hud.ShowTunnelProperties(g,selected,st,_level,_db.TunnelConfig,Loc.T("静态工况：")+g.Buoy[selected].Name);
             var target=new Vector3((float)g.MidX(selected)-2,(float)g.Y0[selected]+1,0);
             _camera.Position=target+new Vector3(12,7,45);_camera.LookAt(target);
             int CountBlocks(Node n)=>n.GetChildren().Sum(c=>(c.Name.ToString().StartsWith("BallastBlock")?1:0)+CountBlocks(c));

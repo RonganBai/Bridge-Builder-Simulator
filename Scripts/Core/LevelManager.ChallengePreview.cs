@@ -12,8 +12,8 @@ namespace BridgeArchitect3D.Core
         private void BackupLegacyLiftDesign(BridgeDesign design)
         {
             if(design?.Tunnel==null || _level.ProvidedInfrastructure==null || (design.InfrastructureId==_level.Id && (!_level.MechanicalLift||design.Nodes.Any(n=>n.LiftRole?.StartsWith("mount")==true))) || SaveManager.WritesSuspended)return;
-            string name="改版前隧道方案_"+DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")+"UTC";
-            if(!SaveManager.SaveNamedDesign(design.Clone(),name,out var error))GD.PushWarning("原方案备份未完成："+error);
+            string name=Loc.T("改版前隧道方案_")+DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")+"UTC";
+            if(!SaveManager.SaveNamedDesign(design.Clone(),name,out var error))GD.PushWarning(Loc.T("原方案备份未完成：")+error);
         }
         private void BeginChallengePreview()
         {

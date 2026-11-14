@@ -142,6 +142,11 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 - 第十四关：80 m 宽、30 m 深、全软土、30~50 m 冲刷、洪水 +3 m、坡道特许 8%；沉管重型也扛不住水压（测试检查），低浮力被半挂车压沉，高浮力拉坏软土锚点，2 根锚索洪水时摆动过大。参考方案 = 加强管节 + 中浮力 + 每节 4 根钢绞线 + 全部锚点加固（$189,225 / 预算 205000，利用率 71%）：统一天气后洪水软化软土 25%，原方案（3 根、只加固冲刷区）利用率 98%，已备份 legacy/level14_reference_v_before_softening_rebalance.json。
 - 第十三关：水深 10 m、洪水 +5 m、坡道特许 8%、岩石 / 软土 / 冲刷岩石三区；普通管节洪水时水压 147 kPa 超限，软土交界不加固会漏接缝，冲刷区要加固或埋深 ≥ 2 m。参考方案 = 全部加强管节 + 20~60 m 加固地基（预算 105000）。
 
+## 天气画面与地震（2026-11 用户要求）
+- WeatherPreset 新增 Rain / Overcast（只影响画面）和 QuakeWiden / QuakeAccel / QuakeFrequency；weather.json 新预设 earthquake（河道永久变宽 0.3 m、0.15 g、1.2 Hz）。关卡编辑器的天气下拉自动列出它；目前没有内置关卡使用地震。
+- 物理：河道变宽 = 固定支点的规定水平位移（StructuralModel.SupportShiftX，右岸全量、河中基础按 x / 河宽线性分摊；StructureSolver 把 K·u 移到右端，固定自由度输出规定位移），随事件 2 s 渐入、结束后保持；摇晃 = 全部质量的水平惯性力（StructuralModel.GroundAccel，LoadCalculator）。两岸固定的刚性桥面会被 0.3 m 拉断（QuakeTests 检查）。
+- 画面：Scripts/World/WeatherVisuals.cs（GPUParticles3D 倾斜雨滴、天空变灰、太阳变暗、轻雾），地震时相机 HOffset / VOffset 抖动；SimFrame 记录 Rain / Overcast / Shake，拖动回放同样显示。
+
 ## 隧道电梯（2026-11 用户要求，覆盖上面关于坡道 / 洞口防洪 / 漏水的旧规则）
 - 入口 = 两岸垂直电梯（材料 lift，IsLift，不能单独建造；电梯结构是玩家构件，见下文“电梯 = 普通构件”）。参数在 C# LiftConfig（TunnelConfig.Lift）：平台 6~26 m、速度 2.5 m/s、承载由构件决定（见下文）。TunnelRoute.LiftLength 可空（null = 最长）；DesignEditor.SetLiftLength / LiftLengthForLevel（自动配）。
 - 路线：RoadPath.LiftSegments 标出电梯段；BridgeSimulation.LiftState 一次运一辆，车停平台、LiftDy 动画、到达后 FrontS += Shift；太长 → VehicleBlocked，太重 → FailureReason.LiftOverload。理想时间按电梯排队（乘坐 + 空载返回）计算。

@@ -41,11 +41,11 @@ namespace BridgeArchitect3D.Data
             foreach(var m in provided.Members)m.Provided=true;
             provided.Tunnel.Structure=1;provided.Tunnel.Lift.Built=null;
             level.ProvidedInfrastructure=provided;
-            level.Name=level.Id=="level13"?"第十三关：沉管通道电梯":level.Id=="level14"?"第十四关：悬浮通道电梯":"第十五关：深埋通道电梯";
+            level.Name=level.Id=="level13"?Loc.T("第十三关：沉管通道电梯"):level.Id=="level14"?Loc.T("第十四关：悬浮通道电梯"):Loc.T("第十五关：深埋通道电梯");
             level.Budget=Math.Ceiling((memberCost+machineCost)*Math.Max(1,factor)/1000)*1000;
-            level.Description="电梯设计挑战：隧道、地面通道及外部支撑由关卡提供。用桥面、梁、钢索和柱子组装两岸电梯，平衡承载、偏载、驱动与造价。";
-            level.StartDesign=null;level.StartHint="固定隧道已建成。当前是轻型电梯起步结构；重点检查平台、吊索、井架和驱动，再选择居中单车或多车合乘。预算仅用于电梯。";
-            level.ReferenceHint="先查看空载和车辆偏载下的控制部位，再针对性补强。配重减轻驱动负担，但增加井架受力；用结构与经济方案评估比较材料成本。";
+            level.Description=Loc.T("电梯设计挑战：隧道、地面通道及外部支撑由关卡提供。用桥面、梁、钢索和柱子组装两岸电梯，平衡承载、偏载、驱动与造价。");
+            level.StartDesign=null;level.StartHint=Loc.T("固定隧道已建成。当前是轻型电梯起步结构；重点检查平台、吊索、井架和驱动，再选择居中单车或多车合乘。预算仅用于电梯。");
+            level.ReferenceHint=Loc.T("先查看空载和车辆偏载下的控制部位，再针对性补强。配重减轻驱动负担，但增加井架受力；用结构与经济方案评估比较材料成本。");
             return level;
         }
         /// <summary>One-time migration keeps the user's lift members and machines, replacing only the supplied infrastructure.</summary>

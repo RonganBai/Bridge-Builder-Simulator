@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using BridgeArchitect3D.Building;
@@ -135,11 +135,11 @@ namespace BridgeArchitect3D.UI
 			desc.CustomMinimumSize = new Vector2(300, 0);
 			_matInfoBox.AddChild(desc);
 
-            if(m.DeviceKind!=null)
-            {
-                _matInfoBox.AddChild(UiTheme.MakeLabel(m.DeviceKind=="pulley"?"每个 $1800 · 额定轴载 600 kN\n定滑轮不省力，改变绳索方向；需要两段钢索。":"每块 5 吨 / $1300 · 每端最多 100 吨\n挂在钢索端点；配重也增加滑轮和支点负荷。",12,UiTheme.Accent));
-                _matInfoBox.AddChild(UiTheme.MakeLabel("Shift 点击可拆除滑轮或减少配重；支持撤销。",12,UiTheme.Muted));return;
-            }
+			if(m.DeviceKind!=null)
+			{
+				_matInfoBox.AddChild(UiTheme.MakeLabel(m.DeviceKind=="pulley"?Loc.T("每个 $1800 · 额定轴载 600 kN\n定滑轮不省力，改变绳索方向；需要两段钢索。"):Loc.T("每块 5 吨 / $1300 · 每端最多 100 吨\n挂在钢索端点；配重也增加滑轮和支点负荷。"),12,UiTheme.Accent));
+				_matInfoBox.AddChild(UiTheme.MakeLabel(Loc.T("Shift 点击可拆除滑轮或减少配重；支持撤销。"),12,UiTheme.Muted));return;
+			}
 			if (m.IsLift)
 			{
 				// Lift: 5-cell bars like the other materials (platform range, load, speed, price)
@@ -559,18 +559,18 @@ namespace BridgeArchitect3D.UI
 			return ImageTexture.CreateFromImage(img);
 			}
 			var col = string.IsNullOrEmpty(m.Color) ? new Color(0.7f, 0.7f, 0.7f) : new Color(m.Color);
-            if(m.DeviceKind=="pulley")
-            {
-                for(int y=0;y<N;y++)for(int x=0;x<N;x++){float r=new Vector2(x-15,y-15).Length();if(r>7&&r<11)Px(x,y,new Color("e5ba55"));}
-                Line(7,15,23,15,2,UiTheme.Text);Line(15,7,15,23,2,UiTheme.Text);
-                Line(4,15,4,28,2,UiTheme.Text);Line(26,15,26,28,2,UiTheme.Text);
-            }
-            else if(m.DeviceKind=="counterweight")
-            {
-                Line(15,1,15,9,2,UiTheme.Text);
-                for(int y=10;y<27;y++)for(int x=5;x<25;x++)Px(x,y,new Color("8c9eac"));
-                Line(8,14,22,14,2,new Color("e5ba55"));Line(8,23,22,23,2,new Color("e5ba55"));
-            }
+			if(m.DeviceKind=="pulley")
+			{
+				for(int y=0;y<N;y++)for(int x=0;x<N;x++){float r=new Vector2(x-15,y-15).Length();if(r>7&&r<11)Px(x,y,new Color("e5ba55"));}
+				Line(7,15,23,15,2,UiTheme.Text);Line(15,7,15,23,2,UiTheme.Text);
+				Line(4,15,4,28,2,UiTheme.Text);Line(26,15,26,28,2,UiTheme.Text);
+			}
+			else if(m.DeviceKind=="counterweight")
+			{
+				Line(15,1,15,9,2,UiTheme.Text);
+				for(int y=10;y<27;y++)for(int x=5;x<25;x++)Px(x,y,new Color("8c9eac"));
+				Line(8,14,22,14,2,new Color("e5ba55"));Line(8,23,22,23,2,new Color("e5ba55"));
+			}
 			else if (m.IsDeck) { for (int y = 12; y < 19; y++) for (int x = 2; x < 28; x++) Px(x, y, col); Line(5, 15, 25, 15, 1, new Color(0.95f, 0.92f, 0.75f)); }
 			else if (m.Extendable) { Line(4, 25, 16, 13, 7, col); Line(14, 15, 26, 4, 3, new Color(0.85f, 0.87f, 0.9f)); }
 			else if (m.ComponentType == ComponentType.Cable) Line(4, 26, 26, 4, 2, col);
@@ -647,7 +647,7 @@ namespace BridgeArchitect3D.UI
 			_liftSummary = UiTheme.MakeLabel("", 12, UiTheme.Muted);
 			_liftSummary.AutowrapMode = TextServer.AutowrapMode.WordSmart; _liftSummary.CustomMinimumSize = new Vector2(240, 0);
 			_tunnelBox.AddChild(_liftSummary);
-            BuildOperationChoices(_tunnelBox);
+			BuildOperationChoices(_tunnelBox);
 			vb.AddChild(_tunnelBox);
 			// Lift sheave node (top of a hoist rope): drive and counterweight
 			_sheaveBox = new VBoxContainer { Visible = false };
@@ -758,7 +758,7 @@ namespace BridgeArchitect3D.UI
 			_tunnelRaiseLabel.Text = Loc.F("平台 {0:0} m\n能装车身 ≤ {1:0.#} m\n{2}", (length), (TunnelRules.LiftFits(length)),LiftOperation.Name(operation));
 			_tunnelRaiseLabel.TooltipText = Loc.F("两岸各一部，平台 {0:0}~{1:0} m，速度 {2:0.#} m/s；也可以直接拖动平台外端节点改长度。载重由你在井道里搭的平台、吊索和柱子决定", (lc.MinLength), (lc.MaxLength), (lc.Speed));
 			if (_liftSummary != null) _liftSummary.Text = summary;
-            MarkOperation(operation);
+			MarkOperation(operation);
 		}
 
 		/// <summary>Machine row on a selected sheave node (top of a hoist rope): drive and counterweight of both lifts.</summary>
@@ -1140,7 +1140,7 @@ namespace BridgeArchitect3D.UI
 		{
 			_rightPanel.Visible = !string.IsNullOrEmpty(bbcode);
 			_props.Text = bbcode ?? "";
-            SetLiveMetrics(metrics,bbcode);
+			SetLiveMetrics(metrics,bbcode);
 			Callable.From(LayoutProperties).CallDeferred();
 		}
 
@@ -1377,24 +1377,24 @@ namespace BridgeArchitect3D.UI
 		// ---------------- 属性文本 ----------------
 		public static string NodeProperties(BridgeNode n, LevelDefinition level, BridgeDesign d, BridgeSimulation stat)
 		{
-            if(n.Provided)return Loc.F("[b]关卡提供的固定节点[/b]\n位置：{0}\n隧道、通道和外部支撑不占电梯预算，不能移动或删除。请在两岸电梯井内设计平台、吊索与井架。",n.Position);
+			if(n.Provided)return Loc.F("[b]关卡提供的固定节点[/b]\n位置：{0}\n隧道、通道和外部支撑不占电梯预算，不能移动或删除。请在两岸电梯井内设计平台、吊索与井架。",n.Position);
 			if(n.TunnelPoint)return Loc.F("[b]隧道路线控制点[/b]\n位置：X {0:0.00} m · 底部标高 {1:0.00} m\n",n.Position.X,n.Position.Y)
 				+Loc.T("[color=#21c6e1]拖动青色圆点：调整埋深（两端贴合岸壁，只能上下）\n双击圆点：放大后精细调整[/color]\n两岸垂直电梯随端点自动连接。\n每个管节接缝上都有圆点（沉管只有两端），角度变化时管节自动拼合。点击管体可选择管节。\n管底橙色方点是接缝连接点：在下面立桥墩 / 柱子或拉锚索来承担管身。");
-            var sb = new StringBuilder();
-            if(n.Pulley)sb.Append("[b]定滑轮[/b] · 额定轴载 600 kN · $1800\n两段钢索为一根连续绳索，两侧等张力；Shift 用滑轮工具点击拆除。\n");
-            if(n.CounterweightTonnes>0)sb.Append($"[b]配重块 {n.CounterweightTonnes:0} 吨[/b] · 自重 {n.CounterweightTonnes*9.81:0.0} kN · ${n.CounterweightTonnes*260:0}\n用配重工具点击增重，Shift 点击减重。\n");
+			var sb = new StringBuilder();
+			if(n.Pulley)sb.Append(Loc.T("[b]定滑轮[/b] · 额定轴载 600 kN · $1800\n两段钢索为一根连续绳索，两侧等张力；Shift 用滑轮工具点击拆除。\n"));
+			if(n.CounterweightTonnes>0)sb.Append(Loc.F("[b]配重块 {0:0} 吨[/b] · 自重 {1:0.0} kN · ${2:0}\n用配重工具点击增重，Shift 点击减重。\n", (n.CounterweightTonnes), (n.CounterweightTonnes*9.81), (n.CounterweightTonnes*260)));
 			sb.Append(n.IsAnchor ? Loc.F("[b]固定锚点 {0}[/b]\n", (n.AnchorId)) : n.PierBase ? Loc.F("[b]桥墩基础 #{0}[/b]\n", (n.Id)) : Loc.F("[b]节点 #{0}[/b]{1}\n", (n.Id), ((n.PierPart ? Loc.T("（桥墩支点）") : ""))));
-            if(n.Pulley && stat?.Output.Stable==true && stat.Model.NodeIndex.TryGetValue(n.Id,out int pulleyIndex))
-            {
-                double fx=0,fy=0;
-                foreach(var rope in d.Members.Where(m=>stat.Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==n.Id||m.EndNodeId==n.Id)))
-                    if(stat.Model.MemberIndex.TryGetValue(rope.Id,out int k))
-                    {
-                        double t=stat.Output.AxialForce[k],sign=rope.StartNodeId==n.Id?1:-1;
-                        fx+=sign*t*stat.Model.Cos[k];fy+=sign*t*stat.Model.Sin[k];sb.Append($"钢索 #{rope.Id} 张力 {System.Math.Max(0,t)/1000:0.0} kN\n");
-                    }
-                sb.Append($"滑轮轴合力 {System.Math.Sqrt(fx*fx+fy*fy)/1000:0.0} / 600 kN\n");
-            }
+			if(n.Pulley && stat?.Output.Stable==true && stat.Model.NodeIndex.TryGetValue(n.Id,out int pulleyIndex))
+			{
+				double fx=0,fy=0;
+				foreach(var rope in d.Members.Where(m=>stat.Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==n.Id||m.EndNodeId==n.Id)))
+					if(stat.Model.MemberIndex.TryGetValue(rope.Id,out int k))
+					{
+						double t=stat.Output.AxialForce[k],sign=rope.StartNodeId==n.Id?1:-1;
+						fx+=sign*t*stat.Model.Cos[k];fy+=sign*t*stat.Model.Sin[k];sb.Append(Loc.F("钢索 #{0} 张力 {1:0.0} kN\n", (rope.Id), (System.Math.Max(0,t)/1000)));
+					}
+				sb.Append(Loc.F("滑轮轴合力 {0:0.0} / 600 kN\n", (System.Math.Sqrt(fx*fx+fy*fy)/1000)));
+			}
 			if (n.IsTunnelSupport)
 			{
 				var db = stat?.Db ?? Core.GameManager.Instance?.Db;
@@ -1447,7 +1447,7 @@ namespace BridgeArchitect3D.UI
 			var mat = db.GetMaterial(m.MaterialId);
 			var sb = new StringBuilder();
 			sb.Append(Loc.F("[b]构件 #{0}[/b]  {1}\n", (m.Id), (mat?.Name)));
-            if(m.Provided)sb.Append(Loc.T("[color=#a3afbf]关卡提供的固定设施 · 不计设计费用 · 不可修改[/color]\n"));
+			if(m.Provided)sb.Append(Loc.T("[color=#a3afbf]关卡提供的固定设施 · 不计设计费用 · 不可修改[/color]\n"));
 			if (m.Existing)
 			{
 				string col = m.Condition >= 0.999 ? "#8ecdb1" : m.Condition >= 0.7 ? "#e3c384" : "#e3b67b";

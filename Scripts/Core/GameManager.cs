@@ -354,7 +354,7 @@ namespace BridgeArchitect3D.Core
         public bool SaveLevelSettings(LevelDefinition level, out string error)
         {
             var errs = LevelEditing.Validate(level, Db);
-            error = errs.Count > 0 ? string.Join("；", errs) : null;
+            error = errs.Count > 0 ? string.Join(Loc.T("；"), errs) : null;
             if (error != null) return false;
             if (CustomLevelBuilder.IsCustom(level.Id))
             {
@@ -375,7 +375,7 @@ namespace BridgeArchitect3D.Core
         {
             var c = LevelEditing.AsCustom(level);
             var errs = LevelEditing.Validate(c, Db);
-            error = errs.Count > 0 ? string.Join("；", errs) : null;
+            error = errs.Count > 0 ? string.Join(Loc.T("；"), errs) : null;
             if (error != null || !SaveManager.SaveCustomLevel(c, out error)) return null;
             return c.Id;
         }

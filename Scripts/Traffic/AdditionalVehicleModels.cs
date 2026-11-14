@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using BridgeArchitect3D.Data;
 using BridgeArchitect3D.World;
@@ -25,15 +25,18 @@ namespace BridgeArchitect3D.Traffic
         {
             Box(n,new(-1.6f,0.84f,0),new(7,0.28f,w*0.65f),Dark);
             Round(n,new(front-0.8f,1.65f,0),new(1.6f,1.05f,w*0.72f),0.12f,paint);
-            Round(n,new(front-2.55f,2.2f,0),new(1.9f,2.8f,w*0.92f),0.14f,paint);
+            var cabOutline = new[] { new Vector2(front-3.5f,.8f), new Vector2(front-1.6f,.8f),
+                new Vector2(front-1.6f,2.35f), new Vector2(front-1.82f,3.30f),
+                new Vector2(front-2.04f,3.60f), new Vector2(front-3.5f,3.60f) };
+            n.AddChild(new MeshInstance3D { Mesh=CurvedMeshes.Extrude(cabOutline,w*.92f),MaterialOverride=paint });
             Round(n,new(front-4.15f,2.35f,0),new(1.3f,3.1f,w*0.94f),0.14f,paint);
-            Box(n,new(front-1.585f,2.88f,0),new(0.035f,0.78f,w*0.8f),Glass);
+            CurvedMeshes.Windshield(n,front-1.612f,2.46f,front-1.795f,3.25f,w*.74f,0f,Glass);
             Box(n,new(front+0.03f,1.58f,0),new(0.08f,0.93f,w*0.64f),Alloy);
             for(int i=-4;i<=4;i++)Box(n,new(front+0.08f,1.58f,i*w*0.065f),new(0.025f,0.81f,0.04f),Dark);
             Box(n,new(front+0.08f,0.94f,0),new(0.18f,0.3f,w),Alloy);
             foreach(int side in new[]{-1,1})
             {
-                Box(n,new(front-2.45f,2.9f,side*w*0.465f),new(1.2f,0.74f,0.025f),Glass);
+                Box(n,new(front-2.64f,2.85f,side*w*0.465f),new(1.02f,0.65f,0.018f),Glass);
                 Box(n,new(front-2.55f,2.28f,side*w*0.47f),new(0.3f,0.06f,0.03f),Alloy);
                 Box(n,new(front-2.45f,1.05f,side*w*0.46f),new(1.6f,0.14f,0.28f),Alloy);
                 Bar(n,new(front-3.5f,1.1f,side*w*0.5f),new(front-3.5f,4.05f,side*w*0.5f),0.09f,Alloy);
@@ -79,12 +82,13 @@ namespace BridgeArchitect3D.Traffic
                 else
                 {
                     float cab=front-1.05f;
-                    Round(n,new(cab,1.65f,0),new(2.1f,2.2f,w*0.94f),0.12f,paint);
-                    Box(n,new(front+0.015f,2.18f,0),new(0.03f,0.75f,w*0.8f),Glass);
+                    var cabShape = new[] { new Vector2(front-2.1f,.55f),new Vector2(front,.55f),new Vector2(front,1.72f),new Vector2(front-.22f,2.50f),new Vector2(front-.42f,2.75f),new Vector2(front-2.1f,2.75f) };
+                    n.AddChild(new MeshInstance3D { Mesh=CurvedMeshes.Extrude(cabShape,w*.94f),MaterialOverride=paint });
+                    CurvedMeshes.Windshield(n,front+.012f,1.78f,front-.20f,2.49f,w*.80f,.025f,Glass);
                     Box(n,new(front+0.04f,1.17f,0),new(0.06f,0.55f,w*0.6f),Dark);
                     foreach(int side in new[]{-1,1})
                     {
-                        Box(n,new(cab+0.15f,2.18f,side*w*0.477f),new(1.45f,0.72f,0.025f),Glass);
+                        Box(n,new(cab+0.15f,2.18f,side*w*0.471f),new(1.08f,0.62f,0.018f),Glass);
                         Box(n,new(cab+0.75f,2.02f,side*w*0.54f),new(0.14f,0.38f,0.08f),Dark);
                         Box(n,new(cab-0.3f,1.56f,side*w*0.478f),new(0.32f,0.06f,0.025f),Alloy);
                     }
@@ -137,8 +141,8 @@ namespace BridgeArchitect3D.Traffic
             {
                 foreach(int side in new[]{-1,1})
                 {
-                    Box(n,new(cx,0.96f,side*w*0.46f),new(l*0.45f,0.35f,0.035f),White);
-                    Box(n,new(cx,0.97f,side*w*0.485f),new(0.2f,0.23f,0.025f),Alloy);
+                    Box(n,new(cx,0.96f,side*w*0.505f),new(l*0.45f,0.35f,0.018f),White);
+                    VehicleText(n,"POLICE",new(cx,0.97f,side*w*0.516f),new(0,side>0?0:180,0),0.0035f,48,new Color("202b34"));
                 }
                 Beacon(n,cx,h-0.02f,w,new[]{"Blue","White","Red"});
                 Box(n,new(front+0.13f,0.75f,0),new(0.13f,0.5f,w*0.55f),Dark);

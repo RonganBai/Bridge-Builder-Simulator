@@ -11,7 +11,7 @@
       "Length": 4.4,
       "Width": 1.8,
       "Height": 1.4,
-      "Color": "#D9483B",
+      "Color": "#A84237",
       "Axles": [
         {
           "Offset": 0,
@@ -37,7 +37,7 @@
       "Length": 8.0,
       "Width": 2.5,
       "Height": 3.2,
-      "Color": "#E3A72F",
+      "Color": "#C08B36",
       "Axles": [
         {
           "Offset": 0,
@@ -147,7 +147,7 @@
       "Length": 11.0,
       "Width": 2.5,
       "Height": 3.0,
-      "Color": "#2E9A5B",
+      "Color": "#D6B84D",
       "Axles": [
         {
           "Offset": 0,
@@ -173,7 +173,7 @@
       "Length": 7.0,
       "Width": 3.5,
       "Height": 2.4,
-      "Color": "#5E6B3F",
+      "Color": "#647451",
       "Axles": [
         {
           "Offset": 0,
@@ -198,7 +198,7 @@
       "Length": 60,
       "Width": 3.0,
       "Height": 3.8,
-      "Color": "#7A3E2E",
+      "Color": "#D2AD49",
       "Units": 4,
       "UnitLength": 15,
       "FollowGap": 5,
@@ -282,7 +282,7 @@
       "Length": 5.5,
       "Width": 2.0,
       "Height": 2.4,
-      "Color": "#9AA7B5",
+      "Color": "#C08B36",
       "FollowGap": 4,
       "Axles": [
         {
@@ -309,7 +309,7 @@
       "Length": 9.0,
       "Width": 2.5,
       "Height": 3.4,
-      "Color": "#C0392B",
+      "Color": "#C08B36",
       "FollowGap": 6,
       "Axles": [
         {
@@ -339,7 +339,7 @@
       "Length": 4.45,
       "Width": 2.04,
       "Height": 1.67,
-      "Color": "#658E93",
+      "Color": "#52768A",
       "FollowGap": 3,
       "Axles": [
         {
@@ -365,7 +365,7 @@
       "Length": 5.25,
       "Width": 2.22,
       "Height": 1.96,
-      "Color": "#727B63",
+      "Color": "#52768A",
       "FollowGap": 3.5,
       "Axles": [
         {
@@ -417,7 +417,7 @@
       "Length": 5.6,
       "Width": 2,
       "Height": 1.85,
-      "Color": "#66856B",
+      "Color": "#577669",
       "FollowGap": 3,
       "Axles": [
         {
@@ -444,7 +444,7 @@
       "Length": 24.5,
       "Width": 2.6,
       "Height": 4.1,
-      "Color": "#9A5048",
+      "Color": "#365F93",
       "FollowGap": 6,
       "Axles": [
         {
@@ -486,7 +486,7 @@
       "Length": 5.5,
       "Width": 2.05,
       "Height": 2.7,
-      "Color": "#ECE8DB",
+      "Color": "#E6E7DF",
       "FollowGap": 3,
       "Axles": [
         {
@@ -511,7 +511,7 @@
       "Length": 8.6,
       "Width": 2.5,
       "Height": 3.7,
-      "Color": "#D8D4C6",
+      "Color": "#C5D3D1",
       "Wheelbase": 5.3,
       "FollowGap": 4,
       "MaxRampGrade": 0.5773502691896257,
@@ -542,7 +542,7 @@
       "Length": 8.2,
       "Width": 2.5,
       "Height": 3.65,
-      "Color": "#C93632",
+      "Color": "#BA3E34",
       "Wheelbase": 4.8,
       "FollowGap": 4,
       "MaxRampGrade": 0.5773502691896257,
@@ -569,7 +569,7 @@
       "Length": 12,
       "Width": 2.6,
       "Height": 4,
-      "Color": "#BD873E",
+      "Color": "#456878",
       "Wheelbase": 9.2,
       "FollowGap": 4,
       "MaxRampGrade": 0.5773502691896257,
@@ -604,7 +604,7 @@
       "Length": 4.9,
       "Width": 1.95,
       "Height": 1.65,
-      "Color": "#202D38",
+      "Color": "#202A34",
       "Wheelbase": 2.85,
       "FollowGap": 4,
       "MaxRampGrade": 0.5773502691896257,
@@ -631,7 +631,7 @@
       "Length": 5.05,
       "Width": 2.1,
       "Height": 2.05,
-      "Color": "#25343F",
+      "Color": "#202A34",
       "Wheelbase": 3.02,
       "FollowGap": 4,
       "MaxRampGrade": 0.5773502691896257,
@@ -658,7 +658,7 @@
       "Length": 4.75,
       "Width": 1.95,
       "Height": 1.95,
-      "Color": "#A69665",
+      "Color": "#7B8560",
       "Wheelbase": 2.9,
       "FollowGap": 4,
       "MaxRampGrade": 0.5773502691896257,
@@ -685,7 +685,7 @@
       "Length": 6.5,
       "Width": 2.2,
       "Height": 3.2,
-      "Color": "#E5B83D",
+      "Color": "#D3AB50",
       "Wheelbase": 3.8,
       "FollowGap": 4,
       "MaxRampGrade": 0.5773502691896257,
@@ -713,7 +713,7 @@
       "Length": 4.55,
       "Width": 1.88,
       "Height": 1.35,
-      "Color": "#347A99",
+      "Color": "#456FAD",
       "FollowGap": 3,
       "Axles": [
         {
@@ -739,7 +739,7 @@
       "Length": 24,
       "Width": 2.6,
       "Height": 4.4,
-      "Color": "#436E87",
+      "Color": "#4A6B83",
       "FollowGap": 6,
       "Axles": [
         {
@@ -781,7 +781,7 @@
       "Length": 13.8,
       "Width": 2.6,
       "Height": 4,
-      "Color": "#E3B12D",
+      "Color": "#D4AA3D",
       "FollowGap": 5,
       "Axles": [
         {
@@ -815,7 +815,7 @@
       "Length": 8.4,
       "Width": 2.5,
       "Height": 3.2,
-      "Color": "#C2943A",
+      "Color": "#BC943F",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
@@ -846,7 +846,7 @@
       "Length": 8.4,
       "Width": 2.5,
       "Height": 3.2,
-      "Color": "#C2943A",
+      "Color": "#BC943F",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
@@ -877,7 +877,7 @@
       "Length": 18,
       "Width": 2.55,
       "Height": 3.2,
-      "Color": "#3D999A",
+      "Color": "#588B94",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
@@ -908,7 +908,7 @@
       "Length": 18.5,
       "Width": 2.55,
       "Height": 3.85,
-      "Color": "#BB6545",
+      "Color": "#BAC5C8",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
@@ -951,7 +951,7 @@
       "Length": 10.4,
       "Width": 2.4,
       "Height": 2.8,
-      "Color": "#64823E",
+      "Color": "#507A4A",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
@@ -986,7 +986,7 @@
       "Length": 8.6,
       "Width": 2.5,
       "Height": 3.25,
-      "Color": "#508567",
+      "Color": "#578367",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
@@ -1017,7 +1017,7 @@
       "Length": 12.8,
       "Width": 2.55,
       "Height": 3.6,
-      "Color": "#E9DCC7",
+      "Color": "#C75142",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
@@ -1052,7 +1052,7 @@
       "Length": 17.4,
       "Width": 3.2,
       "Height": 4.1,
-      "Color": "#BB8737",
+      "Color": "#B45E43",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
@@ -1115,16 +1115,16 @@
       "Kind": "school_bus",
       "Mass": 12500,
       "Speed": 6,
-      "Wheelbase": 6.1,
+      "Wheelbase": 6.45,
       "Length": 10.5,
       "Width": 2.5,
       "Height": 3.2,
-      "Color": "#E6B82F",
+      "Color": "#E4BB30",
       "FollowGap": 5,
       "MaxRampGrade": 0.5773502691896257,
       "Axles": [
         {
-          "Offset": 0,
+          "Offset": 0.35,
           "LoadFraction": 0.35
         },
         {

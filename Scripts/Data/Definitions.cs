@@ -142,9 +142,9 @@ namespace BridgeArchitect3D.Data
 
     public class VehicleDefinition
     {
-        public string Category { get; set; } = "通用载具";
-        public string Purpose { get; set; } = "道路通行与桥梁承载测试";
-        public string Features { get; set; } = "按车轴向桥梁施加载荷。";
+        public string Category { get; set; } = Loc.T("通用载具");
+        public string Purpose { get; set; } = Loc.T("道路通行与桥梁承载测试");
+        public string Features { get; set; } = Loc.T("按车轴向桥梁施加载荷。");
 
         public string Id { get; set; }
         public string Name { get; set; }

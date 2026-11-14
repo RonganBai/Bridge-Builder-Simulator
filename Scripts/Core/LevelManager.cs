@@ -21,6 +21,31 @@ namespace BridgeArchitect3D.Core
         private LevelDefinition _level;
         private DesignEditor _editor;
         private OrbitCamera _camera;
+        private WeatherVisuals _weatherFx;
+        private float _shakeClock;
+        private readonly System.Collections.Generic.Dictionary<Node3D, Vector3> _quakeBase = new();
+        /// <summary>Ground sway drawn this many times larger than the real (centimetre) ground displacement.</summary>
+        private const float QuakeSwayScale = 12f;
+
+        /// <summary>
+        /// Earthquake on the scenery: the right bank (terrain, trees, houses, right lift shaft) moves away by the
+        /// widening of the river, and both banks sway with the ground (the right bank slightly out of phase).
+        /// The bridge already follows the same support movement through the simulated displacements.
+        /// </summary>
+        private void ApplyQuakeScene(double accel, double widen)
+        {
+            if (accel == 0 && widen == 0 && _quakeBase.Count == 0) return;
+            // Ground displacement of harmonic shaking: x = −a / ω² (ω at the preset frequency)
+            double omega = 2 * Mathf.Pi * (_db.Weather.Preset("earthquake")?.QuakeFrequency ?? 1.2);
+            float sway = (float)(-accel / (omega * omega)) * QuakeSwayScale;
+            foreach (var node in GetTree().GetNodesInGroup(TerrainBuilder.QuakeRightGroup))
+            {
+                if (node is not Node3D n3 || !IsInstanceValid(n3)) continue;
+                if (!_quakeBase.TryGetValue(n3, out var p0)) { p0 = n3.Position; _quakeBase[n3] = p0; }
+                n3.Position = p0 + new Vector3((float)widen + sway * 0.85f, 0, 0);
+            }
+            if (accel == 0 && widen == 0) _quakeBase.Clear();
+        }
         private BridgeRenderer _renderer;
         private BuildingManager _building;
         private TrafficManager _traffic;
@@ -37,6 +62,7 @@ namespace BridgeArchitect3D.Core
             _level = _gm.ResolveLevel(_gm.CurrentLevelId) ?? _db.Levels[0];
 
             _decorations = TerrainBuilder.Build(this, _level);
+            _weatherFx = new WeatherVisuals(); AddChild(_weatherFx); _weatherFx.Setup(this, _level);
             foreach (var a in _level.Anchors.Where(a => a.Enabled))
             {
                 AddChild(new Label3D
@@ -203,6 +229,14 @@ namespace BridgeArchitect3D.Core
             _overlays ??= FindChild(TerrainBuilder.OverlayName, true, false) as Node3D;
             if (_overlays != null) _overlays.Visible = !_testing;
             UpdateFloodWater();
+            // Weather look: overcast sky and slanted rain; an earthquake shakes the camera
+            var look = _testing && _traffic.Sim != null ? _traffic.WeatherLook : (Rain: 0.0, Overcast: 0.0, Shake: 0.0, Widen: 0.0);
+            _weatherFx?.Apply(look.Rain, look.Overcast, delta);
+            _shakeClock += (float)delta;
+            float quake = (float)(look.Shake / 9.81);
+            _camera.HOffset = quake * 1.6f;
+            _camera.VOffset = Mathf.Abs(quake) * 0.5f * Mathf.Sin(_shakeClock * 31f);
+            ApplyQuakeScene(look.Shake, look.Widen);
             if (_hud != null && !_testing) _hud.SetContracts(EngineeringScore.ContractsFor(_level), _editor.Design.Contract);
             if (_follow && _testing && _traffic.LeadVehiclePosition() is { } lead) _camera.Follow(lead);
             if (_hud == null || !_testing || _traffic.Sim == null) return;
@@ -466,7 +500,7 @@ namespace BridgeArchitect3D.Core
                     var right=LiftStructure.Analyze(sample,_level,_db).First(l=>!l.Left);
                     var remove=right.Members.Select(m=>m.Id).ToHashSet();sample.Members.RemoveAll(m=>remove.Contains(m.Id));
                     sample.Nodes.RemoveAll(n=>!n.Provided&&!n.IsLiftFixed&&!sample.Members.Any(m=>m.StartNodeId==n.Id||m.EndNodeId==n.Id));
-                    _editor.ReplaceDesign(sample);_hud.ShowToast("已载入左岸电梯示意；右岸电梯由你完成，固定通道保持不变。再次点击可载入完整电梯参考方案。",false,9);return;
+                    _editor.ReplaceDesign(sample);_hud.ShowToast(Loc.T("已载入左岸电梯示意；右岸电梯由你完成，固定通道保持不变。再次点击可载入完整电梯参考方案。"),false,9);return;
                 }
                 // 局部示意：只保留左半座桥（构件两端都在河宽一半以内），其余留给玩家完成
                 double half = _level.Terrain.RiverWidth / 2 + 0.01;
@@ -541,7 +575,7 @@ namespace BridgeArchitect3D.Core
             else if (action.StartsWith("cable:")) r = _editor.SetTunnelCables(target, g.CableCount[te], action.Substring(6));
             else if (action.StartsWith("cables:")) r = _editor.SetTunnelCables(target, g.CableCount[te] + int.Parse(action.Substring(7)));
             else if (action.StartsWith("lift:")) r = _editor.SetLiftLength(g.LiftLength + int.Parse(action.Substring(5)) * TunnelRules.LiftCfg.LengthStep);
-            else if(action=="liftauto"&&_level.MechanicalLift)r=Building.BuildResult.Fail("机构电梯需要自行搭建；请铺路并安装液压缸或滑轮绳路");
+            else if(action=="liftauto"&&_level.MechanicalLift)r=Building.BuildResult.Fail(Loc.T("机构电梯需要自行搭建；请铺路并安装液压缸或滑轮绳路"));
             else if (action == "liftauto") { if(_level.ProvidedInfrastructure!=null)r=_editor.RebuildLifts("light");else{r = _editor.SetLiftLength(_editor.LiftLengthForLevel()); if (r.Ok) r = _editor.RebuildLifts();} }
             else r = _editor.SetTunnelReinforced(target, !g.Reinforced[te]);
             if(r.Ok&&action.StartsWith("lift"))_building.FocusTunnel("route",true);
@@ -559,7 +593,7 @@ namespace BridgeArchitect3D.Core
                     var copy=_editor.Design.Clone();var result=await System.Threading.Tasks.Task.Run(()=>LiftMechanics.Report(copy,_level,_db));
                     if(IsInsideTree())_hud.ShowStrategyResult(result,false);
                 }
-                catch(System.Exception ex){if(IsInsideTree())_hud.ShowStrategyResult("机构检查未完成："+ex.Message,false);}
+                catch(System.Exception ex){if(IsInsideTree())_hud.ShowStrategyResult(Loc.T("机构检查未完成：")+ex.Message,false);}
                 finally{_strategyBusy=false;}
                 return;
             }
@@ -569,7 +603,7 @@ namespace BridgeArchitect3D.Core
                 var report=await System.Threading.Tasks.Task.Run(()=>EngineeringStrategy.Analyze(new DesignEditor(design,level,db,migrate:false),element));
                 if(IsInsideTree() && GodotObject.IsInstanceValid(_hud))_hud.ShowStrategyResult(report.Text);
             }
-            catch(System.Exception ex){if(IsInsideTree() && GodotObject.IsInstanceValid(_hud))_hud.ShowStrategyResult("评估未完成："+ex.Message);}
+            catch(System.Exception ex){if(IsInsideTree() && GodotObject.IsInstanceValid(_hud))_hud.ShowStrategyResult(Loc.T("评估未完成：")+ex.Message);}
             finally{_strategyBusy=false;}
         }
 

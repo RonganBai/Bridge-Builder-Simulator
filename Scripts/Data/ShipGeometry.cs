@@ -1,13 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Linq;
 
 namespace BridgeArchitect3D.Data
 {
     public readonly record struct ShipBox(double X, double Y, double Z, double Width, double Height, double Length, int Material);
     public static class ShipGeometry
     {
+        private static readonly ConcurrentDictionary<(string,double,double,double,double),ShipBox[]> PartCache=new();
+        private static readonly ConcurrentDictionary<(string,double,double,double,double),ShipSolid[]> SolidCache=new();
+        private static (string,double,double,double,double) Key(TrafficEvent e)
+            =>(ShipCatalog.Kind(e),e.Width,e.Height,e.Length,ShipCatalog.Draft(e));
         public static IEnumerable<ShipBox> Parts(TrafficEvent e)
+            =>PartCache.GetOrAdd(Key(e),_=>BuildParts(e).ToArray());
+        private static IEnumerable<ShipBox> BuildParts(TrafficEvent e)
         {
+            foreach(var part in RawParts(e))if(!ShipDetailGeometry.Shaped(part))yield return part;
+        }
+        private static IEnumerable<ShipBox> RawParts(TrafficEvent e)
+        {
+            if(ExtendedShipGeometry.Supports(ShipCatalog.Kind(e)))
+            {foreach(var part in ExtendedShipGeometry.Parts(e))yield return part;yield break;}
             if(ShipCatalog.Kind(e)!="cargo")
             {foreach(var part in ShipProfileGeometry.Parts(e))yield return part;yield break;}
             double h=e.Height,w=e.Width,l=e.Length,hull=h*0.4,cabin=Math.Max(0.05,h-hull-0.5);
@@ -32,7 +46,13 @@ namespace BridgeArchitect3D.Data
         }
 
         public static IEnumerable<ShipSolid> Solids(TrafficEvent e)
+            =>SolidCache.GetOrAdd(Key(e),_=>BuildSolids(e).ToArray());
+        private static IEnumerable<ShipSolid> BuildSolids(TrafficEvent e)
         {
+            foreach(var part in RawParts(e))if(ShipDetailGeometry.Shaped(part))yield return ShipDetailGeometry.Shape(part);
+            foreach(var detail in ShipDetailGeometry.Fittings(e))yield return detail;
+            if(ExtendedShipGeometry.Supports(ShipCatalog.Kind(e)))
+            {foreach(var solid in ExtendedShipGeometry.Solids(e))yield return solid;yield break;}
             yield return ShipSolid.Hull(e);yield return ShipSolid.Hull(e,true);
             foreach(var solid in ShipProfileGeometry.ExtraSolids(e))yield return solid;
         }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using BridgeArchitect3D.Building;
 using BridgeArchitect3D.Data;
@@ -62,7 +62,7 @@ namespace BridgeArchitect3D.Traffic
             var color = MaterialManager.ParseColor(def.Color);
             var body = new StandardMaterial3D { AlbedoColor = color, Roughness = 0.45f, Metallic = 0.25f };
             var dark = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.12f, 0.13f), Roughness = 0.8f };
-            var glass = new StandardMaterial3D { AlbedoColor = new Color(0.55f, 0.75f, 0.9f), Roughness = 0.1f, Metallic = 0.5f };
+            var glass = new StandardMaterial3D { AlbedoColor = new Color(0.24f, 0.39f, 0.47f), Roughness = 0.1f, Metallic = 0.5f };
             var light = new StandardMaterial3D { AlbedoColor = new Color(0.86f, 0.87f, 0.88f), Roughness = 0.6f };
             float w = (float)def.Width, h = (float)def.Height, len = (float)def.Length;
             float rear = 0;
@@ -83,6 +83,7 @@ namespace BridgeArchitect3D.Traffic
                 SelectTractorVariant((long)GD.Randi());
                 return;
             }
+            float roadRadius = def.Kind == "car" ? 0.32f : def.Kind == "bus" ? 0.48f : 0.50f;
             switch (def.Kind)
             {
                 case "train":
@@ -98,14 +99,14 @@ namespace BridgeArchitect3D.Traffic
                         {
                             var nose=new[]{new Vector2(-cl,baseY),new Vector2(0.1f,baseY),new Vector2(0.17f,baseY+h*0.24f),new Vector2(0.1f,baseY+h*0.52f),new Vector2(-0.18f,baseY+h*0.76f),new Vector2(-0.65f,baseY+h*0.9f),new Vector2(-cl,baseY+h*0.9f)};
                             n.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(nose,w),MaterialOverride=body});
-                            CurvedMeshes.Windshield(n,0.11f,baseY+h*0.55f,-0.35f,baseY+h*0.83f,w*0.8f,0.06f,glass);
+                            CurvedMeshes.Windshield(n,0.082f,baseY+h*0.54f,-0.148f,baseY+h*0.74f,w*0.78f,0f,glass);
                         }
                         else AddBox(n, new Vector3(-cl / 2, baseY + h * 0.45f, 0), new Vector3(cl, h * 0.9f, w), light);
                         AddBox(n, new Vector3(-cl / 2, baseY + h * 0.92f, 0), new Vector3(cl - 0.4f, 0.12f, w * 0.85f), trim);          // 车顶
                         AddBox(n, new Vector3(-cl / 2, WheelR + 0.1f, 0), new Vector3(cl, 0.25f, w * 0.85f), dark);                       // 底架
                         if (loco)
                         {
-                            AddBox(n, new Vector3(-1.1f, baseY + h * 0.68f, 0), new Vector3(1.6f, h * 0.28f, w * 1.01f), glass);          // 驾驶室窗
+                            foreach(int side in new[]{-1,1}) AddBox(n,new Vector3(-1.22f,baseY+h*.66f,side*(w/2+.012f)),new Vector3(1.15f,h*.20f,.018f),glass);          // 驾驶室窗
                             AddBox(n, new Vector3(0.05f, baseY + 0.35f, 0), new Vector3(0.3f, 0.5f, w * 0.9f), dark);                     // 排障器
                             for (int s = -1; s <= 1; s += 2) AddBox(n, new Vector3(0.23f, baseY + h * 0.35f, s * (w / 2 - 0.35f)), new Vector3(0.06f, 0.22f, 0.3f), head);
                         }
@@ -181,8 +182,10 @@ namespace BridgeArchitect3D.Traffic
                     if (def.Kind == "truck")
                     {
                         float cabX = front - 1.1f;
-                        AddBox(n, new Vector3(cabX, WheelR + 1.05f, 0), new Vector3(2.2f, 2.0f, w), body);                          // 驾驶室
-                        AddBox(n, new Vector3(cabX + 0.35f, WheelR + 1.55f, 0), new Vector3(1.55f, 0.7f, w * 1.01f), glass);           // 车窗
+                        var cabProfile = new[] { new Vector2(front-2.2f,0.5f), new Vector2(front,0.5f), new Vector2(front,1.65f), new Vector2(front-0.23f,2.30f), new Vector2(front-0.48f,2.50f), new Vector2(front-2.2f,2.50f) };
+                        n.AddChild(new MeshInstance3D { Mesh = CurvedMeshes.Extrude(cabProfile,w*0.97f), MaterialOverride = body });                          // 驾驶室
+                        CurvedMeshes.Windshield(n,front+0.015f,1.68f,front-0.215f,2.30f,w*0.85f,0.035f,glass);
+                        foreach(int side in new[]{-1,1}) AddBox(n,new Vector3(cabX-0.15f,2.03f,side*w*.489f),new Vector3(1.1f,.58f,.025f),glass);           // 车窗
                         AddBox(n, new Vector3(front + 0.02f, WheelR + 0.55f, 0), new Vector3(0.08f, 0.6f, w * 0.7f), dark);            // 格栅
                         AddBox(n, new Vector3(front + 0.08f, WheelR + 0.12f, 0), new Vector3(0.18f, 0.25f, w), dark);                  // 保险杠
                         for (int s = -1; s <= 1; s += 2)
@@ -199,12 +202,12 @@ namespace BridgeArchitect3D.Traffic
                     }
                     else if (def.Kind == "bus")
                     {
-                        AddBox(n, new Vector3((front + back) / 2, WheelR + h / 2, 0), new Vector3(len, h - 0.2f, w), body);
+                        n.AddChild(new MeshInstance3D { Mesh = CurvedMeshes.RoundedBox(new Vector3(len,h-0.2f,w),0.18f), Position = new Vector3((front+back)/2,WheelR+h/2,0), MaterialOverride = body });
                         AddBox(n, new Vector3((front + back) / 2 - 0.3f, WheelR + h * 0.66f, 0), new Vector3(len * 0.86f, h * 0.3f, w * 1.01f), glass);   // 侧窗带
                         AddBox(n, new Vector3(front + 0.01f, WheelR + h * 0.6f, 0), new Vector3(0.05f, h * 0.5f, w * 0.9f), glass);                         // 前挡风
                         AddBox(n, new Vector3(front + 0.02f, WheelR + h * 0.92f, 0), new Vector3(0.05f, 0.25f, w * 0.6f), head);                           // 线路牌
-                        AddBox(n, new Vector3(front - 1.2f, WheelR + h * 0.42f, w / 2 + 0.01f), new Vector3(1.0f, h * 0.75f, 0.04f), trim);                 // 前门
-                        AddBox(n, new Vector3((front + back) / 2 - 0.5f, WheelR + h * 0.42f, w / 2 + 0.01f), new Vector3(1.0f, h * 0.75f, 0.04f), trim);    // 中门
+                        SpecialVehicleFactory.AddPassengerDoor(n,front-1.2f,w/2+.028f,h);                 // 前门
+                        SpecialVehicleFactory.AddPassengerDoor(n,(front+back)/2-.5f,w/2+.028f,h);    // 中门
                         AddBox(n, new Vector3((front + back) / 2 - 1.5f, WheelR + h + 0.05f, 0), new Vector3(2.0f, 0.3f, w * 0.6f), light);                 // 车顶空调
                         AddBox(n, new Vector3(front + 0.06f, WheelR + 0.15f, 0), new Vector3(0.15f, 0.25f, w), dark);
                         for (int s = -1; s <= 1; s += 2)
@@ -233,7 +236,7 @@ namespace BridgeArchitect3D.Traffic
                         }
                     }
                     foreach (var a in def.Axles)
-                        for (int s = -1; s <= 1; s += 2) AddWheel(n, new Vector3((float)a.Offset, WheelR, s * (w / 2 - 0.12f)), dark, chrome, def.Kind == "car" ? 0.28f : 0.38f);
+                        for (int s = -1; s <= 1; s += 2) AddWheel(n, new Vector3((float)a.Offset, roadRadius, s * (w / 2 - 0.12f)), dark, chrome, def.Kind == "car" ? 0.22f : 0.34f, roadRadius);
                     break;
                 }
             }
@@ -347,11 +350,12 @@ namespace BridgeArchitect3D.Traffic
         private static readonly CylinderMesh HubMesh = new() { TopRadius = WheelR * 0.55f, BottomRadius = WheelR * 0.55f, Height = 1f, RadialSegments = 8, Rings = 1 };
 
         /// <summary>车轮：轮胎 + 外侧轮毂。</summary>
-        private static void AddWheel(Node3D parent, Vector3 pos, Material tyre, Material hub, float width)
+        private static void AddWheel(Node3D parent, Vector3 pos, Material tyre, Material hub, float width, float radius = WheelR)
         {
-            parent.AddChild(new MeshInstance3D { Mesh = TyreMesh, MaterialOverride = tyre, Position = pos, RotationDegrees = new Vector3(90, 0, 0), Scale = new Vector3(1, width, 1) });
+            float radialScale = radius / WheelR;
+            parent.AddChild(new MeshInstance3D { Mesh = TyreMesh, MaterialOverride = tyre, Position = pos, RotationDegrees = new Vector3(90, 0, 0), Scale = new Vector3(radialScale, width, radialScale) });
             float side = pos.Z >= 0 ? 1 : -1;
-            parent.AddChild(new MeshInstance3D { Mesh = HubMesh, MaterialOverride = hub, Position = pos + new Vector3(0, 0, side * width * 0.5f), RotationDegrees = new Vector3(90, 0, 0), Scale = new Vector3(1, 0.04f, 1) });
+            parent.AddChild(new MeshInstance3D { Mesh = HubMesh, MaterialOverride = hub, Position = pos + new Vector3(0, 0, side * width * 0.5f), RotationDegrees = new Vector3(90, 0, 0), Scale = new Vector3(radialScale, 0.04f, radialScale) });
         }
 
         /// <summary>按路径摆放每个部件：eval(弧长) 返回路面上的点，frontS 为车头轴所在弧长。</summary>

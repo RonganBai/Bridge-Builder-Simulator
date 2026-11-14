@@ -22,6 +22,16 @@ namespace BridgeArchitect3D.Data
         public double PondRate { get; set; }
         /// <summary>The flood scours the bed in scour zones (shallow pier foundations, tunnel beds and anchors).</summary>
         public bool Scour { get; set; }
+        /// <summary>Visual only: rain intensity 0..1 (slanted rain drops) and how overcast the sky turns 0..1.</summary>
+        public double Rain { get; set; }
+        public double Overcast { get; set; }
+        /// <summary>Earthquake: the river widens by this much (right bank moves away, permanently), m.</summary>
+        public double QuakeWiden { get; set; }
+        /// <summary>Earthquake: peak horizontal ground acceleration, in g.</summary>
+        public double QuakeAccel { get; set; }
+        /// <summary>Earthquake: shaking frequency, Hz.</summary>
+        public double QuakeFrequency { get; set; } = 1.2;
+        public bool IsQuake => QuakeWiden > 0 || QuakeAccel > 0;
     }
 
     /// <summary>Flood protection of the tunnel portals (both banks).</summary>
@@ -67,8 +77,9 @@ namespace BridgeArchitect3D.Data
             Presets = new()
             {
                 ["normal"] = new WeatherPreset { Name = Loc.T("正常"), Current = 0.5 },
-                ["rainstorm"] = new WeatherPreset { Name = Loc.T("暴雨"), WaterRise = 2, Current = 0.8, GroundwaterRise = 0.75, SoilSoftening = 0.1, PondRate = 0.06 },
-                ["flood"] = new WeatherPreset { Name = Loc.T("严重洪水"), WaterRise = 5, Current = 1.1, GroundwaterRise = 2, SoilSoftening = 0.25, PondRate = 0.03, Scour = true },
+                ["rainstorm"] = new WeatherPreset { Name = Loc.T("暴雨"), WaterRise = 2, Current = 0.8, GroundwaterRise = 0.75, SoilSoftening = 0.1, PondRate = 0.06, Rain = 1, Overcast = 0.85 },
+                ["flood"] = new WeatherPreset { Name = Loc.T("严重洪水"), WaterRise = 5, Current = 1.1, GroundwaterRise = 2, SoilSoftening = 0.25, PondRate = 0.03, Scour = true, Rain = 0.7, Overcast = 0.75 },
+                ["earthquake"] = new WeatherPreset { Name = Loc.T("地震"), Current = 0.5, QuakeWiden = 0.3, QuakeAccel = 0.15, QuakeFrequency = 1.2, Overcast = 0.2 },
             },
         };
     }

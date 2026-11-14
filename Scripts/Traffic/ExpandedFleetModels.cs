@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using BridgeArchitect3D.Data;
 using BridgeArchitect3D.World;
@@ -38,8 +38,7 @@ namespace BridgeArchitect3D.Traffic
                 Box(n,new(back-0.02f,0.91f,side*w*0.36f),new(0.06f,0.22f,0.22f),Red);
                 if(school)foreach(float y in new[]{0.95f,1.15f,1.36f})Box(n,new(center,y,side*w*0.506f),new(length*0.97f,0.055f,0.025f),Dark);
             }
-            Box(n,new(front-1,1.38f,w*0.509f),new(0.72f,1.65f,0.035f),Dark);
-            Box(n,new(front-1,1.7f,w*0.52f),new(0.55f,0.8f,0.03f),Glass);
+            AddPassengerDoor(n,front-1,w/2+.028f,h);
             Box(n,new(front+0.04f,h-0.2f,0),new(0.05f,0.28f,w*0.6f),Dark);
         }
         private static bool BuildExpandedFleet(VehicleDefinition d,Func<float,float,Node3D> unit,Material paint)

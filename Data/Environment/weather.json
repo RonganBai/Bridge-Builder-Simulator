@@ -1,10 +1,12 @@
 {
   "_units": "统一天气（桥梁与隧道共用，游戏平衡参数）：WaterRise 河水上涨 m；Current 流速 m/s；GroundwaterRise 雨水下渗带来的地下水上涨 m（另加河水上涨经地层传过去的部分）；SoilSoftening 土体软化比例（地基 / 锚点承载 ×(1−s)，盾构所需覆土与土压 ×(1+s)）；PondRate 雨水流进隧道入口的积水速度 m/s（游戏时间）；Scour 是否冲刷河床。天气不会直接降低材料强度。",
   "RampTime": 2,
+  "_visual": "Rain 雨量 0~1（倾斜雨滴）、Overcast 天空变阴 0~1，只影响画面。地震：QuakeWiden 河道永久变宽 m（右岸整体外移，河床内的基础按位置线性分摊）；QuakeAccel 水平地面加速度峰值（g，桥梁全部质量受水平惯性力）；QuakeFrequency 摇晃频率 Hz。",
   "Presets": {
     "normal":    { "Name": "正常",     "WaterRise": 0, "Current": 0.5, "GroundwaterRise": 0,    "SoilSoftening": 0,    "PondRate": 0,    "Scour": false },
-    "rainstorm": { "Name": "暴雨",     "WaterRise": 2, "Current": 0.8, "GroundwaterRise": 0.75, "SoilSoftening": 0.10, "PondRate": 0.06, "Scour": false },
-    "flood":     { "Name": "严重洪水", "WaterRise": 5, "Current": 1.1, "GroundwaterRise": 2,    "SoilSoftening": 0.25, "PondRate": 0.03, "Scour": true }
+    "rainstorm": { "Name": "暴雨",     "WaterRise": 2, "Current": 0.8, "GroundwaterRise": 0.75, "SoilSoftening": 0.10, "PondRate": 0.06, "Scour": false, "Rain": 1,   "Overcast": 0.85 },
+    "flood":     { "Name": "严重洪水", "WaterRise": 5, "Current": 1.1, "GroundwaterRise": 2,    "SoilSoftening": 0.25, "PondRate": 0.03, "Scour": true,  "Rain": 0.7, "Overcast": 0.75 },
+    "earthquake": { "Name": "地震",   "WaterRise": 0, "Current": 0.5, "GroundwaterRise": 0,    "SoilSoftening": 0,    "PondRate": 0,    "Scour": false, "QuakeWiden": 0.3, "QuakeAccel": 0.15, "QuakeFrequency": 1.2, "Overcast": 0.2 }
   },
   "_portal": "隧道入口防洪（两岸入口同时设置）：抬高入口按米计土方费（多出的引道按坡道计费）；防洪闸挡住入口以上 GateHeight 米的洪水，关闭期间隧道不能通车；排水泵每秒排走 PumpRate 米积水，挡不住洪水。积水超过 PondBlockDepth 米车辆无法驶入。",
   "Portal": {

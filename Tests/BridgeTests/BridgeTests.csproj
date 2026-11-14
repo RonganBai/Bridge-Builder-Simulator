@@ -9,7 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="LiftBatchTests.cs" /><Compile Include="LiftQueueTests.cs" /><Compile Include="LevelEditTests.cs" />
-    <Compile Include="TunnelAccessTests.cs" /><Compile Include="TunnelStructureTests.cs" /><Compile Include="LiftStructureTests.cs" />
+    <Compile Include="TunnelAccessTests.cs" /><Compile Include="QuakeTests.cs" /><Compile Include="TunnelStructureTests.cs" /><Compile Include="LiftStructureTests.cs" />
     <Compile Include="RoadLayoutTests.cs" /><Compile Include="MechanicalLiftTests.cs" /><Compile Include="Program.cs" /><Compile Include="CustomLiftTests.cs" /><Compile Include="LiftChallengeTests.cs" /><Compile Include="StrategyTests.cs" /><Compile Include="LiveInfoTests.cs" /><Compile Include="SuvTests.cs" /><Compile Include="HarborTests.cs" /><Compile Include="IndependentFrameTests.cs" /><Compile Include="LinkageTests.cs" /><Compile Include="MotionRegressionTests.cs" /><Compile Include="ShipRigidTests.cs" /><Compile Include="CoupledTests.cs" /><Compile Include="SceneJointTests.cs" /><Compile Include="CrossBeamFixtures.cs" />
     <Compile Include="../../Scripts/Data/**/*.cs" />
     <Compile Include="../../Scripts/Physics/**/*.cs" />

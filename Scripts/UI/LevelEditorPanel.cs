@@ -33,7 +33,7 @@ namespace BridgeArchitect3D.UI
 		/// <summary>Raised after every edit (the host may track unsaved changes).</summary>
 		public event Action Changed;
 
-		private static readonly string[] Tabs = { "基本", "建材", "交通", "高级" };
+		private static readonly string[] Tabs = { Loc.T("基本"), Loc.T("建材"), Loc.T("交通"), Loc.T("高级") };
 
 		public static LevelEditorPanel Create(Control parent, VBoxContainer content, GameDatabase db)
 		{
@@ -358,22 +358,22 @@ namespace BridgeArchitect3D.UI
 		private void BuildBasics()
 		{
 			var l = Level; var o = l.Objectives;
-            Section("玩法类型");
-            string[] modes={"普通造桥关","电梯关 · 沉管通道","电梯关 · 悬浮通道","电梯关 · 盾构通道"};
+            Section(Loc.T("玩法类型"));
+            string[] modes={Loc.T("普通造桥关"),Loc.T("电梯关 · 沉管通道"),Loc.T("电梯关 · 悬浮通道"),Loc.T("电梯关 · 盾构通道")};
             string[] ids={null,"tunnel_immersed","tunnel_floating","tunnel_shield"};
             int mode=Array.IndexOf(ids,l.ProvidedInfrastructure?.Tunnel?.MaterialId);
-            var adapt=new CheckBox{Text="生成时自动适配河床深度和建造范围",ButtonPressed=true};
+            var adapt=new CheckBox{Text=Loc.T("生成时自动适配河床深度和建造范围"),ButtonPressed=true};
             void Generate(int selected)
             {
                 if(selected==0){l.ProvidedInfrastructure=null;l.ProvidedTerrainSignature=null;Rebuild();Edited();return;}
                 if(CustomLiftLevels.Generate(Level,_db,ids[selected],adapt.ButtonPressed,out var updated,out var error))
-                {Load(updated);Status("已生成固定通道及外部支撑。试玩时只设计电梯；预算可继续调整。",true);Edited();}
+                {Load(updated);Status(Loc.T("已生成固定通道及外部支撑。试玩时只设计电梯；预算可继续调整。"),true);Edited();}
                 else{Status(error);Rebuild();}
             }
-            Field("关卡类型",Options(modes,Math.Max(0,mode),Generate));
+            Field(Loc.T("关卡类型"),Options(modes,Math.Max(0,mode),Generate));
             _form.AddChild(adapt);
-            _form.AddChild(UiTheme.MakeButton("生成 / 更新固定通道",()=>Generate(Math.Max(1,mode)),240));
-            Hint(_form,"电梯关由作者提供固定通道，玩家设计两岸电梯。地形变动后请更新通道；首次生成会补齐电梯建材并给出预算，后续可自行调整。");
+            _form.AddChild(UiTheme.MakeButton(Loc.T("生成 / 更新固定通道"),()=>Generate(Math.Max(1,mode)),240));
+            Hint(_form,Loc.T("电梯关由作者提供固定通道，玩家设计两岸电梯。地形变动后请更新通道；首次生成会补齐电梯建材并给出预算，后续可自行调整。"));
 			Section(Loc.T("关卡信息"));
 			var name = new LineEdit { Text = l.Name ?? "", MaxLength = 40, PlaceholderText = Loc.T("关卡名称") };
 			name.TextChanged += s => { l.Name = s; Edited(); };

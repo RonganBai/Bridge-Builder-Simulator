@@ -202,7 +202,7 @@ namespace BridgeArchitect3D.Physics
                 if (j == 0 || j == g.Count) return Loc.T("岸边电梯井（铰接）");
                 var sup = SupportsOf(m, j).Where(k => !m.Broken[k]).ToList();
                 if (sup.Count == 0) return Loc.T("没有支撑（只靠管身抗弯）");
-                return string.Join("、", sup.Select(k => Loc.F("{0} {1:0.#} 吨{2}", (m.Mat[k].Name), (Math.Abs(status[k].Force) / 9810), (status[k].Mode == MemberMode.Slack ? Loc.T("（松弛）") : status[k].Force >= 0 ? Loc.T("拉") : Loc.T("压")))));
+                return string.Join(Loc.T("、"), sup.Select(k => Loc.F("{0} {1:0.#} 吨{2}", (m.Mat[k].Name), (Math.Abs(status[k].Force) / 9810), (status[k].Mode == MemberMode.Slack ? Loc.T("（松弛）") : status[k].Force >= 0 ? Loc.T("拉") : Loc.T("压")))));
             }
             return Loc.F("左接缝：{0}\n右接缝：{1}", Joint(i), Joint(i + 1));
         }

@@ -83,12 +83,15 @@ namespace BridgeArchitect3D.Physics
         public float[] Utilization;
         public double[] VehicleS;
         public double[] VehicleLiftDy;
+        /// <summary>Weather look at this frame: rain 0..1, overcast 0..1, ground shaking m/s².</summary>
+        public double Rain, Overcast, Shake, Widen;
         public double[] LiftPlatformDy, LiftDoorOpen;
         public bool[] VehicleActive;
         public void CopyFrom(SimFrame o)
         {
             Time = o.Time;
             BridgeState = o.BridgeState;
+            Rain = o.Rain; Overcast = o.Overcast; Shake = o.Shake; Widen = o.Widen;
             Array.Copy(o.Displacement, Displacement, Displacement.Length);
             Array.Copy(o.Kinematic, Kinematic, Kinematic.Length);
             Array.Copy(o.ShipZ, ShipZ, ShipZ.Length);
@@ -382,6 +385,12 @@ namespace BridgeArchitect3D.Physics
         public double GroundwaterDirect { get; private set; }
         public double Softening { get; private set; }
         public double PondRate { get; private set; }
+        /// <summary>Weather look (visual only): rain 0..1, overcast 0..1.</summary>
+        public double Rain { get; private set; }
+        public double Overcast { get; private set; }
+        /// <summary>Earthquake: horizontal ground acceleration now (m/s²) and how much wider the river is now (m).</summary>
+        public double GroundAccel { get; private set; }
+        public double QuakeWiden { get; private set; }
         /// <summary>Name of the strongest active weather event (null = normal).</summary>
         public string WeatherName { get; private set; }
         // Tunnel portals: ponding depth (m), gate state, traffic blocked at the entrance
@@ -397,7 +406,16 @@ namespace BridgeArchitect3D.Physics
             var wc = Db.Weather; var normal = wc.Normal;
             FloodRise = 0; FloodFraction = 0;
             Current = normal.Current; GroundwaterDirect = normal.GroundwaterRise; Softening = normal.SoilSoftening; PondRate = normal.PondRate; WeatherName = null;
-            double strongest = 0;
+            Rain = 0; Overcast = 0; GroundAccel = 0;
+            double strongest = 0, widen = 0;
+            // Earthquake widening is permanent: it ramps in with the event and stays after it ends
+            foreach (var e in TestEvents)
+            {
+                if (e.Type != TrafficEventType.Environment) continue;
+                var qp = wc.PresetOf(e);
+                if (qp.QuakeWiden > 0 && Time >= e.Time) widen = Math.Max(widen, qp.QuakeWiden * Math.Min(1, (Time - e.Time) / FloodRampTime));
+            }
+            QuakeWiden = widen;
             foreach (var e in TestEvents)
             {
                 if (e.Type != TrafficEventType.Environment) continue;
@@ -413,6 +431,9 @@ namespace BridgeArchitect3D.Physics
                 GroundwaterDirect = Math.Max(GroundwaterDirect, preset.GroundwaterRise * f);
                 Softening = Math.Max(Softening, preset.SoilSoftening * f);
                 PondRate = Math.Max(PondRate, preset.PondRate * (f > 0 ? 1 : 0));
+                Rain = Math.Max(Rain, preset.Rain * f); Overcast = Math.Max(Overcast, preset.Overcast * f);
+                if (preset.QuakeAccel > 0)
+                    GroundAccel += preset.QuakeAccel * StructuralModel.Gravity * f * Math.Sin(2 * Math.PI * preset.QuakeFrequency * t);
                 if (f * (1 + preset.WaterRise) > strongest) { strongest = f * (1 + preset.WaterRise); WeatherName = e.Name ?? preset.Name; }
                 double floodY = Level.Terrain.WaterLevel + height;
                 // Flood-vulnerable (wooden) piers are washed away once the rising water reaches them: when it covers
@@ -452,7 +473,22 @@ namespace BridgeArchitect3D.Physics
             if (_pierCap != null)
                 for (int i = 0; i < _pierCap.Length && i < Model.NodeCount; i++)
                     if (_pierCap[i] > 0 && Model.AnchorMaxLoad[i] > 0) Model.AnchorMaxLoad[i] = _pierCap[i] * (1 - Softening);
+            ApplyQuake();
             UpdatePortals();
+        }
+
+        /// <summary>
+        /// Earthquake on the structure: shaking as horizontal inertia, and the wider river as a prescribed
+        /// movement of the fixed supports (right bank by the full amount, foundations in the river in proportion).
+        /// </summary>
+        private void ApplyQuake()
+        {
+            Model.GroundAccel = GroundAccel;
+            if (QuakeWiden <= 0) { Model.SupportShiftX = null; return; }
+            double w = Math.Max(1e-6, Level.Terrain.RiverWidth);
+            if (Model.SupportShiftX == null || Model.SupportShiftX.Length != Model.NodeCount) Model.SupportShiftX = new double[Model.NodeCount];
+            for (int i = 0; i < Model.NodeCount; i++)
+                Model.SupportShiftX[i] = Model.FixX[i] ? QuakeWiden * Math.Clamp((i < Model.X0.Length ? Model.X0[i] : Model.X[i]) / w, 0, 1) : 0;
         }
 
         /// <summary>
@@ -1340,6 +1376,7 @@ namespace BridgeArchitect3D.Physics
         private void WriteFrame(SimFrame f)
         {
             f.Time = Time;
+            f.Rain = Rain; f.Overcast = Overcast; f.Shake = GroundAccel; f.Widen = QuakeWiden;
             Array.Copy(DisplayDisplacement, f.Displacement, Math.Min(DisplayDisplacement.Length, f.Displacement.Length));
             f.BridgeState = Bascule.StatusText;
             for(int i=0;i<f.LiftPlatformDy.Length;i++)

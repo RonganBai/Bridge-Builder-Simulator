@@ -201,7 +201,7 @@ namespace BridgeArchitect3D.Building
             var r = Design.Tunnel;
             if (r?.Lift == null) return BuildResult.Fail(Loc.T("没有隧道"));
             var c = LiftCfgOf;
-            if(Level.MechanicalLift)return BuildResult.Fail("请安装真实液压缸和配重块；本关没有内置驱动机。");
+            if(Level.MechanicalLift)return BuildResult.Fail(Loc.T("请安装真实液压缸和配重块；本关没有内置驱动机。"));
             if (drive != null && !c.Drives.ContainsKey(drive)) return BuildResult.Fail(Loc.T("没有这种驱动"));
             PushUndo();
             if (drive != null) r.Lift.Drive = drive;
@@ -416,22 +416,22 @@ namespace BridgeArchitect3D.Building
         public string DeviceProblem(int id,string material,bool remove=false)
         {
             var n=Design.FindNode(id);var mat=Db.GetMaterial(material);
-            if(n==null)return "请点击已有连接节点安装；可先从支点拉一段钢索生成端点";
-            if(mat?.DeviceKind==null||!Level.AllowedMaterials.Contains(material))return "本关不允许该设备";
-            if(n.Provided||n.TunnelPoint||n.IsTunnelSupport)return "请选择电梯内可编辑的支点或钢索端点";
+            if(n==null)return Loc.T("请点击已有连接节点安装；可先从支点拉一段钢索生成端点");
+            if(mat?.DeviceKind==null||!Level.AllowedMaterials.Contains(material))return Loc.T("本关不允许该设备");
+            if(n.Provided||n.TunnelPoint||n.IsTunnelSupport)return Loc.T("请选择电梯内可编辑的支点或钢索端点");
             if(remove)return null;
             if(mat.DeviceKind=="pulley")
             {
-                if(n.CounterweightTonnes>0)return "配重端点不能同时安装定滑轮";
-                if(!LiftMechanics.StableMount(Design,Db,id))return "安装失败：定滑轮需要稳定支点，先用梁或柱连接固定基础";
-                if(Design.Members.Count(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==id||m.EndNodeId==id))>2)return "定滑轮最多通过一根连续绳索（两段钢索）";
+                if(n.CounterweightTonnes>0)return Loc.T("配重端点不能同时安装定滑轮");
+                if(!LiftMechanics.StableMount(Design,Db,id))return Loc.T("安装失败：定滑轮需要稳定支点，先用梁或柱连接固定基础");
+                if(Design.Members.Count(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==id||m.EndNodeId==id))>2)return Loc.T("定滑轮最多通过一根连续绳索（两段钢索）");
             }
             else
             {
-                if(n.Pulley||LiftMechanics.StableMount(Design,Db,id))return "配重必须挂在可移动钢索端点上，不能挂在固定支点或滑轮轴上";
-                if(!Design.Members.Any(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==id||m.EndNodeId==id)))return "配重需要钢索连接，请先铺设钢索";
-                if(Design.Members.Any(m=>(m.StartNodeId==id||m.EndNodeId==id)&&Db.GetMaterial(m.MaterialId)?.IsCable==false&&Db.GetMaterial(m.MaterialId)?.Extendable==false))return "配重需要独立悬挂端点，不能与平台或井架刚接";
-                if(n.CounterweightTonnes>=100)return "该端点配重上限为 100 吨";
+                if(n.Pulley||LiftMechanics.StableMount(Design,Db,id))return Loc.T("配重必须挂在可移动钢索端点上，不能挂在固定支点或滑轮轴上");
+                if(!Design.Members.Any(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==id||m.EndNodeId==id)))return Loc.T("配重需要钢索连接，请先铺设钢索");
+                if(Design.Members.Any(m=>(m.StartNodeId==id||m.EndNodeId==id)&&Db.GetMaterial(m.MaterialId)?.IsCable==false&&Db.GetMaterial(m.MaterialId)?.Extendable==false))return Loc.T("配重需要独立悬挂端点，不能与平台或井架刚接");
+                if(n.CounterweightTonnes>=100)return Loc.T("该端点配重上限为 100 吨");
             }
             return null;
         }
@@ -439,13 +439,13 @@ namespace BridgeArchitect3D.Building
         {
             string why=DeviceProblem(id,material,remove);if(why!=null)return BuildResult.Fail(why);
             var n=Design.FindNode(id);var kind=Db.GetMaterial(material).DeviceKind;
-            if(remove && (kind=="pulley"?!n.Pulley:n.CounterweightTonnes==0))return BuildResult.Fail("该节点没有可拆除的设备");
-            if(!remove&&kind=="pulley"&&n.Pulley)return BuildResult.Fail("这里已有定滑轮；连接两段钢索，Shift 点击可拆除");
+            if(remove && (kind=="pulley"?!n.Pulley:n.CounterweightTonnes==0))return BuildResult.Fail(Loc.T("该节点没有可拆除的设备"));
+            if(!remove&&kind=="pulley"&&n.Pulley)return BuildResult.Fail(Loc.T("这里已有定滑轮；连接两段钢索，Shift 点击可拆除"));
             PushUndo();
             if(kind=="pulley")n.Pulley=!remove;
             else n.CounterweightTonnes=Math.Max(0,n.CounterweightTonnes+(remove?-5:5));
             Changed?.Invoke();
-            return BuildResult.Success(id,kind=="pulley"?(remove?"已拆除定滑轮并退还费用":"已安装定滑轮：连接两段钢索形成连续绳路，额定轴载 600 kN，不能分支。Shift 点击可拆除"):$"节点 #{id} 配重 {n.CounterweightTonnes:0} 吨，重量与费用已更新；Shift 点击减 5 吨");
+            return BuildResult.Success(id,kind=="pulley"?(remove?Loc.T("已拆除定滑轮并退还费用"):Loc.T("已安装定滑轮：连接两段钢索形成连续绳路，额定轴载 600 kN，不能分支。Shift 点击可拆除")):Loc.F("节点 #{0} 配重 {1:0} 吨，重量与费用已更新；Shift 点击减 5 吨", (id), (n.CounterweightTonnes)));
         }
         public BridgeNode NodeAt(double x, double y, double radius, int ignoreNodeId = -1)
         {
@@ -598,8 +598,8 @@ namespace BridgeArchitect3D.Building
             if(Level.ProvidedInfrastructure!=null && !TunnelRules.Shafts(Level,TunnelGeo).Any(shaft=>LiftStructure.InZone(LiftCfgOf,shaft,a.Position.X,a.Position.Y)&&LiftStructure.InZone(LiftCfgOf,shaft,b.Position.X,b.Position.Y)))return Loc.T("构件必须位于同一岸的电梯井内。");
             if (!Level.AllowedMaterials.Contains(mat.MaterialId)) return Loc.T("本关不允许使用该材料");
             if (LimitReached(mat)) return Loc.F("本关{0}限量 {1} 根，已用完", (mat.Name), (Level.MaterialLimits[mat.MaterialId]));
-            if(!mat.IsCable&&!mat.Extendable&&(a.CounterweightTonnes>0||b.CounterweightTonnes>0))return "配重块只能连接钢索或液压缸，不能与平台刚接";
-            if(mat.IsCable && new[]{a,b}.Any(n=>n.Pulley && Design.Members.Count(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==n.Id||m.EndNodeId==n.Id))>=2))return "定滑轮只接受两段钢索，不能分支";
+            if(!mat.IsCable&&!mat.Extendable&&(a.CounterweightTonnes>0||b.CounterweightTonnes>0))return Loc.T("配重块只能连接钢索或液压缸，不能与平台刚接");
+            if(mat.IsCable && new[]{a,b}.Any(n=>n.Pulley && Design.Members.Count(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==n.Id||m.EndNodeId==n.Id))>=2))return Loc.T("定滑轮只接受两段钢索，不能分支");
             if (a.Id == b.Id) return Loc.T("不能连接同一个节点");
             double len = Vec3d.Distance(a.Position, b.Position);
             if (len < MinMemberLength) return Loc.T("构件长度过短");
@@ -702,7 +702,7 @@ namespace BridgeArchitect3D.Building
             if (n.IsLiftFixed)
             {
                 // Only the outer platform end moves, and only sideways: it sets the platform length of both lifts
-                if(n.LiftRole?.StartsWith("mount")==true)return BuildResult.Fail("井道固定支点不可移动");
+                if(n.LiftRole?.StartsWith("mount")==true)return BuildResult.Fail(Loc.T("井道固定支点不可移动"));
                 bool outer = n.LiftRole == (n.LiftBank == 1 ? "deck0" : "deck1");
                 var other = Design.Nodes.FirstOrDefault(q => q.LiftBank == n.LiftBank && q.LiftRole == (n.LiftBank == 1 ? "deck1" : "deck0"));
                 if (!outer || other == null) return BuildResult.Fail(Loc.T("电梯井底基础和平台内端随隧道固定，不能移动（平台外端可以左右拖动改长度）"));
@@ -975,10 +975,10 @@ namespace BridgeArchitect3D.Building
         {
             if(Level.MechanicalLift)
             {
-                var rod=Design.FindMember(actuatorMemberId);if(rod==null)return "液压缸不存在";
+                var rod=Design.FindMember(actuatorMemberId);if(rod==null)return Loc.T("液压缸不存在");
                 var mat=Db.GetMaterial(rod.MaterialId);var lift=Lifts().FirstOrDefault(l=>l.Members.Any(m=>m.Id==actuatorMemberId));
-                string state=lift==null?"请连接电梯平台或滑轮绳路":LiftMechanics.Plan(Design,Level,Db,lift).Problem??"机构连接与行程检查通过，开始测试后校核拉压力";
-                return $"液压缸 #{rod.Id}：初始 {rod.Length:0.00} m，目标 {rod.Length*(1+(rod.Stroke??-mat.RetractRatio)):0.00} m，拉压力上限 {mat.ActuatorForce/1000:0} kN。\n{state}";
+                string state=lift==null?Loc.T("请连接电梯平台或滑轮绳路"):LiftMechanics.Plan(Design,Level,Db,lift).Problem??Loc.T("机构连接与行程检查通过，开始测试后校核拉压力");
+                return Loc.F("液压缸 #{0}：初始 {1:0.00} m，目标 {2:0.00} m，拉压力上限 {3:0} kN。\n{4}", (rod.Id), (rod.Length), (rod.Length*(1+(rod.Stroke??-mat.RetractRatio))), (mat.ActuatorForce/1000), (state));
             }
             var driver=Design.Mechanisms?.Linkage?.Drivers.FirstOrDefault(d=>d.MemberId==actuatorMemberId);
             if(driver!=null)

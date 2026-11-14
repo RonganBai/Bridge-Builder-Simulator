@@ -155,9 +155,13 @@ namespace BridgeArchitect3D.Traffic
             }
         }
 
+        /// <summary>Weather look of what is on screen (live test or the replayed frame): rain, overcast, ground shaking m/s².</summary>
+        public (double Rain, double Overcast, double Shake, double Widen) WeatherLook { get; private set; }
+
         public void UpdateVisuals()
         {
             if (Sim?.Model == null) return;
+            WeatherLook = (Sim.Rain, Sim.Overcast, Sim.GroundAccel, Sim.QuakeWiden);
             var m = Sim.Model;
             for (int k = 0; k < m.MemberCount; k++) _util[k] = (float)Sim.Status[k].Utilization;
             for (int i = 0; i < Sim.Ships.Count && i < _shipZ.Length; i++)
@@ -346,6 +350,7 @@ namespace BridgeArchitect3D.Traffic
 
         private void ApplyFrame(SimFrame f)
         {
+            WeatherLook = (f.Rain, f.Overcast, f.Shake, f.Widen);
             ApplyState(f.Displacement, f.Kinematic, f.Broken, f.Utilization, f.VehicleS.Length, i => f.VehicleS[i], i => f.VehicleActive[i], f.ShipZ, i => f.VehicleLiftDy != null && i < f.VehicleLiftDy.Length ? f.VehicleLiftDy[i] : 0);
             _renderer?.SetLiftPositions(f.LiftPlatformDy??Array.Empty<double>(),f.LiftDoorOpen);
         }

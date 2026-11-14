@@ -117,6 +117,7 @@ namespace BridgeArchitect3D.Building
         {
             if(!reserved&&design!=null){AddStructuralLift(parent,shaft,type,visuals,layout,design);return;}
             var root=new Node3D {Name=shaft.Left?"LeftLift":"RightLift"};parent.AddChild(root);
+            if(!shaft.Left)root.AddToGroup(World.TerrainBuilder.QuakeRightGroup);   // the right shaft moves with its bank in an earthquake
             var steel=reserved?_mm.PreviewOk:_mm.ForMaterial("steel");
             var deck=reserved?_mm.PreviewOk:_mm.ForMaterial("deck_steel");
             var concrete=reserved?_mm.PreviewOk:_mm.ForMaterial("concrete");
@@ -192,6 +193,7 @@ namespace BridgeArchitect3D.Building
         private void AddStructuralLift(Node3D parent,TunnelRules.LiftShaft shaft,TunnelTypeConfig type,List<LiftVisual> visuals,Physics.LiftLayout layout,BridgeDesign design)
         {
             var root=new Node3D {Name=shaft.Left?"LeftLift":"RightLift"};parent.AddChild(root);
+            if(!shaft.Left)root.AddToGroup(World.TerrainBuilder.QuakeRightGroup);   // the right shaft moves with its bank in an earthquake
             var steel=_mm.ForMaterial("steel");var concrete=_mm.ForMaterial("concrete");
             var cable=TerrainBuilder.Mat(new Color("555e69"));var accent=TerrainBuilder.Mat(new Color(shaft.Left?"4ebfa9":"d6a458"));
             var glass=new StandardMaterial3D {AlbedoColor=new Color(0.36f,0.6f,0.69f,0.2f),Transparency=BaseMaterial3D.TransparencyEnum.Alpha,Roughness=0.3f};

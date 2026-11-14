@@ -15,6 +15,8 @@ namespace BridgeArchitect3D.World
         public const string CutawayGroup = "cutaway";
         /// <summary>Front scenery (trees, houses...) hidden while the cutaway is on.</summary>
         public const string CutawayFrontGroup = "cutaway_front";
+        /// <summary>Right-bank scenery and terrain: shifted away by the earthquake widening.</summary>
+        public const string QuakeRightGroup = "quake_right";
 
         /// <summary>生成环境；返回装饰物根节点（建造侧视时可隐藏以减少干扰）。</summary>
         public static Node3D Build(Node3D root, LevelDefinition level,SceneryLayout layout=null)
@@ -22,6 +24,7 @@ namespace BridgeArchitect3D.World
             var t = level.Terrain;
             var art = LevelArtProfile.For(level.Id);
             float w = (float)t.RiverWidth;
+            int firstChild = root.GetChildCount();
             float bed = (float)t.RiverBedDepth;
             float lh = (float)t.LeftBankHeight, rh = (float)t.RightBankHeight;
             // Long tunnel ramps extend the banks beyond the standard scenery length
@@ -110,8 +113,15 @@ namespace BridgeArchitect3D.World
             root.AddChild(decoFront); decoFront.AddToGroup(CutawayFrontGroup);
             foreach (var child in deco.GetChildren())
                 if (child is Node3D n3 && n3.Position.Z > 0) { deco.RemoveChild(n3); decoFront.AddChild(n3); }
-            LowPolyDetails.Batch(deco);
-            LowPolyDetails.Batch(decoFront);
+            // Earthquake: the right bank moves away from the river, so its scenery is batched on its own
+            foreach (var holder in new[] { deco, decoFront })
+            {
+                var left = new Node3D { Name = "Left" }; var rightSide = new Node3D { Name = "Right" };
+                foreach (var child in holder.GetChildren())
+                    if (child is Node3D c3) { holder.RemoveChild(c3); (c3.Position.X > w / 2 ? rightSide : left).AddChild(c3); }
+                holder.AddChild(left); holder.AddChild(rightSide); rightSide.AddToGroup(QuakeRightGroup);
+                LowPolyDetails.Batch(left); LowPolyDetails.Batch(rightSide);
+            }
             // Build aids (ship lane outline, no-pier zones, slope bands, build boundary) are hidden while testing
             var overlays = new Node3D { Name = OverlayName };
             root.AddChild(overlays);
@@ -151,6 +161,9 @@ namespace BridgeArchitect3D.World
             root.AddChild(sun);
             var section = new TerrainSectionView { Name = "TerrainSectionView" };
             root.AddChild(section); section.Capture(root); section.SetEnabled(false);
+            // Terrain pieces of the right bank (soil, grass, walls, road, rails) follow the earthquake widening too
+            for (int i = firstChild; i < root.GetChildCount(); i++)
+                if (root.GetChild(i) is Node3D piece && piece != deco && piece != decoFront && piece.Position.X > w / 2 + 0.5f) piece.AddToGroup(QuakeRightGroup);
             return deco;
         }
 

@@ -39,13 +39,22 @@ void fragment() {
         }
 
         /// <param name="riverWidth">River channel spans x = 0..riverWidth; z spans the scene depth.</param>
-        public void Setup(TrafficEvent ev, double waterLevel, double riverWidth, double riverBed,bool showWake=true)
+        public void Setup(TrafficEvent ev, double waterLevel, double riverWidth, double riverBed,bool showWake=true,bool clipToRiver=true)
         {
             var min = new Vector3(0, (float)riverBed - 1, -World.TerrainBuilder.SceneDepth / 2);
             var max = new Vector3((float)riverWidth, 1e4f, World.TerrainBuilder.SceneDepth / 2);
+            if(!clipToRiver){min=new Vector3(-10000,-10000,-10000);max=new Vector3(10000,10000,10000);}
             string kind=ShipCatalog.Kind(ev);
             var colors=new[]{new Color(kind=="speedboat"?"2c7391":kind=="sailboat"?"e9e4d8":kind=="tugboat"?"324f65":"a44639"),
                 new Color("eee7d8"),new Color("263c4b"),new Color("537f7c"),new Color("a87c52"),new Color("73868d"),new Color("f4eee0"),new Color("da7753"),new Color("78b79e"),new Color("1c2429")};
+            colors[0]=new Color(kind switch {
+                "tourboat"=>"315e78", "catamaran"=>"316e82", "car_ferry"=>"365b65",
+                "container"=>"344f64", "sand_barge"=>"625b46", "tow_barge"=>"526254",
+                "fishing"=>"356f7c", "yacht"=>"d7dedc", "fireboat"=>"a52f29",
+                "folding_sail"=>"344f72", "sailboat"=>"d8d1bd", "speedboat"=>"28677e",
+                "tugboat"=>"304853", _=>"924239" });
+            colors[1]=new Color(kind=="container"?"d0d3ca":"e5e0d1");
+            colors[2]=new Color("253e4c");
             var materials=new Material[colors.Length];
             for(int i=0;i<colors.Length;i++)materials[i]=ClipMat(colors[i],i==2?0.16f:0.65f,min,max);
             foreach(var solid in ShipGeometry.Solids(ev))AddChild(new MeshInstance3D {Mesh=CurvedMeshes.Solid(solid),MaterialOverride=materials[solid.Material]});

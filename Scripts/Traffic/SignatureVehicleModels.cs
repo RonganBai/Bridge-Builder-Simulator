@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 using BridgeArchitect3D.Data;
 using System.Linq;
 using System.Collections.Generic;
@@ -15,9 +15,9 @@ namespace BridgeArchitect3D.Traffic
         }
         private static void SchoolBus(Node3D n,VehicleDefinition d,float front,float back,float w,Material paint)
         {
-            float bodyFront=front-2.1f,center=(back+bodyFront)/2,length=bodyFront-back,rear=(float)d.Axles.Min(a=>a.Offset);
-            var outline=new List<Vector2>{new(bodyFront,2.74f),new(back+0.2f,2.74f),new(back,2.5f),new(back,0.52f)};
-            foreach(float axle in new[]{rear,0f})
+            float bodyFront=front-2.1f,center=(back+bodyFront)/2,length=bodyFront-back,rear=(float)d.Axles.Min(a=>a.Offset),frontAxle=(float)d.Axles.Max(a=>a.Offset);
+            var outline=new List<Vector2>{new(bodyFront-.18f,2.74f),new(back+0.2f,2.74f),new(back,2.5f),new(back,0.52f)};
+            foreach(float axle in new[]{rear,frontAxle})
             {
                 outline.Add(new(axle-0.6f,0.52f));
                 for(int i=0;i<=12;i++){float a=Mathf.Pi-i*Mathf.Pi/12;outline.Add(new(axle+0.6f*Mathf.Cos(a),0.46f+0.6f*Mathf.Sin(a)));}
@@ -25,9 +25,9 @@ namespace BridgeArchitect3D.Traffic
             }
             // The forward wheel arch ends in the engine-bay fender rather than closing across the opening.
             outline.RemoveRange(outline.Count-15,15);
-            outline.Add(new(-0.6f,0.52f));
-            float endAngle=Mathf.Acos(Mathf.Clamp(bodyFront/0.6f,-1,1));
-            for(int i=0;i<=12;i++){float a=Mathf.Lerp(Mathf.Pi,endAngle,i/12f);outline.Add(new(.6f*Mathf.Cos(a),.46f+.6f*Mathf.Sin(a)));}
+            outline.Add(new(frontAxle-0.6f,0.52f));
+            float endAngle=Mathf.Acos(Mathf.Clamp((bodyFront-frontAxle)/0.6f,-1,1));
+            for(int i=0;i<=12;i++){float a=Mathf.Lerp(Mathf.Pi,endAngle,i/12f);outline.Add(new(frontAxle+.6f*Mathf.Cos(a),.46f+.6f*Mathf.Sin(a)));}
             n.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(outline.ToArray(),w*0.98f),MaterialOverride=paint});
             // Roof is a continuous arched cross section along the passenger compartment.
             var roof=new List<Vector2>{new(-w*.49f,2.64f)};
@@ -35,13 +35,25 @@ namespace BridgeArchitect3D.Traffic
             roof.Add(new(w*.49f,2.64f));
             n.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(roof.AsEnumerable().Reverse().ToArray(),length),Position=new(center,0,0),RotationDegrees=new(0,90,0),MaterialOverride=paint});
             // Long sloping bonnet and a separate tall radiator nose.
-            var bonnet=new[]{new Vector2(bodyFront,0.7f),new Vector2(front,0.7f),new Vector2(front,1.32f),new Vector2(bodyFront,1.57f)};
-            n.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(bonnet,w*0.72f),MaterialOverride=paint});
-            Box(n,new(front+0.015f,1.07f,0),new(0.04f,0.53f,w*0.48f),Dark);
-            for(int i=-4;i<=4;i++)Box(n,new(front+0.04f,1.07f,i*0.1f),new(0.02f,0.46f,0.035f),Alloy);
+            // A faceted crown rounds both shoulders without a high-resolution curved surface.
+            float hoodHalf=w*.43f;
+            var bonnet=new List<Vector2>{new(-hoodHalf,.74f),new(hoodHalf,.74f),new(hoodHalf,1.40f)};
+            for(int i=0;i<=8;i++)
+            {
+                float angle=i*Mathf.Pi/8;
+                bonnet.Add(new(hoodHalf*Mathf.Cos(angle),1.40f+.29f*Mathf.Sin(angle)));
+            }
+            var hood=new Node3D {Position=new((front+bodyFront)/2,0,0),RotationDegrees=new(0,0,-5)};
+            n.AddChild(hood);
+            hood.AddChild(new MeshInstance3D {Mesh=CurvedMeshes.Extrude(bonnet.ToArray(),front-bodyFront),RotationDegrees=new(0,90,0),MaterialOverride=paint});
+            // Mount front details in the hood frame so pitch and thickness cannot bury them.
+            float noseX=(front-bodyFront)/2;
+            Box(hood,new(noseX+.025f,1.18f,0),new(.05f,.68f,w*.43f),Alloy);
+            Box(hood,new(noseX+.055f,1.18f,0),new(.018f,.60f,w*.39f),Dark);
+            for(int i=-4;i<=4;i++)Box(hood,new(noseX+.072f,1.18f,i*w*.042f),new(.018f,.55f,.028f),Alloy);
             Box(n,new(front+0.04f,0.58f,0),new(0.16f,0.24f,w*0.94f),Dark);
-            Box(n,new(bodyFront+0.02f,2.24f,0),new(0.03f,0.8f,w*0.87f),Glass);
-            Box(n,new(bodyFront+0.045f,2.24f,0),new(0.035f,0.86f,0.06f),Dark);
+            CurvedMeshes.Windshield(n,bodyFront+.012f,1.85f,bodyFront-.158f,2.66f,w*.86f,0f,Glass);
+            CurvedMeshes.Windshield(n,bodyFront+.018f,1.85f,bodyFront-.152f,2.66f,.055f,0f,Dark);
             VehicleText(n,"SCHOOL BUS",new(bodyFront+0.035f,2.84f,0),new(0,90,0),0.0065f,52);
             VehicleText(n,"SCHOOL BUS",new(back-0.035f,2.84f,0),new(0,-90,0),0.0065f,52);
             foreach(int side in new[]{-1,1})
@@ -56,11 +68,12 @@ namespace BridgeArchitect3D.Traffic
                 for(int i=0;i<8;i++)
                 {
                     float a=Mathf.Pi/8+i*Mathf.Pi/8,b=a+Mathf.Pi/8;
-                    var p=new Vector3(.63f*Mathf.Cos(a),.46f+.63f*Mathf.Sin(a),side*w*.43f);
-                    var q=new Vector3(.63f*Mathf.Cos(b),.46f+.63f*Mathf.Sin(b),side*w*.43f);
+                    var p=new Vector3(frontAxle+.63f*Mathf.Cos(a),.46f+.63f*Mathf.Sin(a),side*w*.43f);
+                    var q=new Vector3(frontAxle+.63f*Mathf.Cos(b),.46f+.63f*Mathf.Sin(b),side*w*.43f);
                     Bar(n,p,q,0.09f,paint);
                 }
-                n.AddChild(new MeshInstance3D{Mesh=new CylinderMesh{TopRadius=.15f,BottomRadius=.15f,Height=.045f,RadialSegments=12},Position=new(front+.04f,1.19f,side*w*.34f),RotationDegrees=new(0,0,90),MaterialOverride=Lamp});
+                hood.AddChild(new MeshInstance3D{Mesh=new CylinderMesh{TopRadius=.18f,BottomRadius=.18f,Height=.05f,RadialSegments=12},Position=new(noseX+.03f,1.20f,side*w*.33f),RotationDegrees=new(0,0,90),MaterialOverride=Alloy});
+                hood.AddChild(new MeshInstance3D{Mesh=new CylinderMesh{TopRadius=.145f,BottomRadius=.145f,Height=.025f,RadialSegments=12},Position=new(noseX+.065f,1.20f,side*w*.33f),RotationDegrees=new(0,0,90),MaterialOverride=Lamp});
                 Box(n,new(bodyFront+.25f,2.25f,side*w*.57f),new(.17f,.44f,.09f),Dark);
                 foreach(float x in new[]{bodyFront+.04f,back-.04f})
                 {

@@ -14,6 +14,22 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        if(args.Contains("--ship-catalog-only"))
+        {
+            foreach(var type in ShipCatalog.Types.Where(t=>ExtendedShipGeometry.Supports(t.Id)))
+            {
+                var e=ShipCatalog.Create(type.Id,10);
+                var boxes=ShipGeometry.Parts(e).ToArray();
+                var solids=ShipGeometry.Solids(e).ToArray();
+                bool valid=boxes.Length>5 && solids.Length>=2 && boxes.All(b=>
+                    double.IsFinite(b.X+b.Y+b.Z+b.Width+b.Height+b.Length) && b.Width>0 && b.Height>0 && b.Length>0 &&
+                    Math.Abs(b.X)+b.Width/2<=e.Width/2+.05 && Math.Abs(b.Z)+b.Length/2<=e.Length/2+.05 && b.Y+b.Height/2<=e.Height+.1);
+                var sample=boxes[0];
+                bool collision=ShipGeometry.Intersects(e,0,0,10+sample.X-.03,sample.Y,10+sample.X+.03,sample.Y,sample.Z,.04,.04);
+                Check("Ship geometry: "+type.Id,valid && collision,$"parts={boxes.Length}, solids={solids.Length}, collision={collision}");
+            }
+            return _fail==0?0:1;
+        }
         _root = FindRoot();
         var db = GameDatabase.FromJson(
             File.ReadAllText(Path.Combine(_root, "Data/Materials/materials.json")),
@@ -76,6 +92,7 @@ internal static class Program
         Check("Tunnel ratings: absent configuration is safe", TunnelMaterialRatings.For(null, db.GetMaterial("tunnel_immersed")).Count == 0);
         if (args.Contains("--tunnel-guide-only")) return _fail == 0 ? 0 : 1;
         TunnelAccessTests.Run(db,_root,Check);
+        QuakeTests.Run(db,_root,Check);
         if(args.Contains("--tunnel-access-only"))return _fail==0?0:1;
         LiftBatchTests.Run(db,_root,Check);
         LiftQueueTests.Run(db,_root,Check);LiftAlignTests.Run(db,_root,Check);

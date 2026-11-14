@@ -212,7 +212,7 @@ namespace BridgeArchitect3D.Physics
         {
             if(!level.MechanicalLift)return CheckAtReference(design,level,db,L,axles);
             var plan=LiftMechanics.Plan(design,level,db,L);
-            if(plan.Problem!=null)return new LiftCheck{Stable=false,Util=99,Where=Name(L),Why=plan.Problem,Fix="调整液压缸行程、稳定支点与滑轮绳路"};
+            if(plan.Problem!=null)return new LiftCheck{Stable=false,Util=99,Where=Name(L),Why=plan.Problem,Fix=Loc.T("调整液压缸行程、稳定支点与滑轮绳路")};
             LiftCheck worst=null;
             foreach(double fraction in new[]{0d,.5,1d})
             {
@@ -280,12 +280,12 @@ namespace BridgeArchitect3D.Physics
                     {
                         double reaction=Math.Sqrt(o.Reaction[2*i]*o.Reaction[2*i]+o.Reaction[2*i+1]*o.Reaction[2*i+1]);
                         double u=reaction/m.AnchorMaxLoad[i];
-                        if(u>r.Util){r.Util=u;r.Governing="固定支点承载";r.Where=$"{Name(L)}固定支点 #{id}";r.Why=$"支反力 {reaction/1000:0} kN，承载 {m.AnchorMaxLoad[i]/1000:0} kN";r.Fix="分散滑轮和液压缸安装位置，或减少配重";return r;}
+                        if(u>r.Util){r.Util=u;r.Governing=Loc.T("固定支点承载");r.Where=Loc.F("{0}固定支点 #{1}", (Name(L)), (id));r.Why=Loc.F("支反力 {0:0} kN，承载 {1:0} kN", (reaction/1000), (m.AnchorMaxLoad[i]/1000));r.Fix=Loc.T("分散滑轮和液压缸安装位置，或减少配重");return r;}
                     }
             }
             if (r.DriveUtil >= wu)
             {
-                if(level.MechanicalLift){r.Governing="液压驱动";r.Where=Name(L);r.Why=$"液压缸拉压力利用率 {r.DriveUtil*100:0}%";r.Fix="增加液压缸数量或改进平台与配重布置";return r;}
+                if(level.MechanicalLift){r.Governing=Loc.T("液压驱动");r.Where=Name(L);r.Why=Loc.F("液压缸拉压力利用率 {0:0}%", (r.DriveUtil*100));r.Fix=Loc.T("增加液压缸数量或改进平台与配重布置");return r;}
                 r.Governing = Loc.T("驱动能力"); r.Where = Loc.F("{0}的驱动机（{1}）", (Name(L)), (drive.Name));
                 r.Why = Loc.F("吊索拉力 {0:0} kN − 配重 {1:0} kN = 不平衡力 {2:0} kN，驱动只能拉住 {3:0} kN", (r.RopePull / 1000), (cw / 1000), (r.DriveForce / 1000), (drive.Force / 1000));
                 r.Fix = r.RopePull > cw ? Loc.T("选中吊索顶端的滑轮节点，加大配重或换更强的驱动") : Loc.T("配重太重了：选中滑轮节点减小配重，或换更强的驱动");

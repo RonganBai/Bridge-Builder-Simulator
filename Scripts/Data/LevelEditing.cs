@@ -238,8 +238,8 @@ namespace BridgeArchitect3D.Data
         {
             var e = new List<string>();
             if (db.LevelError(l) is { } err) { e.Add(err); return e; }
-            if(l.ProvidedInfrastructure!=null && l.ProvidedTerrainSignature!=null && l.ProvidedTerrainSignature!=CustomLiftLevels.Fingerprint(l))e.Add("地形或固定节点已变更，请在基本页点击‘生成 / 更新固定通道’后保存。");
-            if(l.ProvidedInfrastructure!=null && l.TrafficEvents.Any(v=>v.VehicleId!=null && db.Vehicles.TryGetValue(v.VehicleId,out var def)&&RailTrack.IsTrain(def)) && !l.ProvidedInfrastructure.Members.Any(m=>db.GetMaterial(m.MaterialId)?.CarriesTrains==true))e.Add("当前电梯关未提供铁路通道，请移除火车或使用带固定铁路的关卡模板。");
+            if(l.ProvidedInfrastructure!=null && l.ProvidedTerrainSignature!=null && l.ProvidedTerrainSignature!=CustomLiftLevels.Fingerprint(l))e.Add(Loc.T("地形或固定节点已变更，请在基本页点击‘生成 / 更新固定通道’后保存。"));
+            if(l.ProvidedInfrastructure!=null && l.TrafficEvents.Any(v=>v.VehicleId!=null && db.Vehicles.TryGetValue(v.VehicleId,out var def)&&RailTrack.IsTrain(def)) && !l.ProvidedInfrastructure.Members.Any(m=>db.GetMaterial(m.MaterialId)?.CarriesTrains==true))e.Add(Loc.T("当前电梯关未提供铁路通道，请移除火车或使用带固定铁路的关卡模板。"));
             var t = l.Terrain;
             if (string.IsNullOrWhiteSpace(l.Name)) e.Add(Loc.T("请给关卡起个名字"));
             if (t.RiverWidth < MinRiverWidth || t.RiverWidth > MaxRiverWidth) e.Add(Loc.F("河宽应在 {0:0}~{1:0} m 之间", (MinRiverWidth), (MaxRiverWidth)));

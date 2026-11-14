@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Collections.Generic;
 using BridgeArchitect3D.Core;
@@ -22,6 +22,7 @@ namespace BridgeArchitect3D.UI
         private SubViewport _viewport;
         private Node3D _stage;
         private VehicleController _model;
+        private ShipController _ship;
         private Camera3D _camera;
         private CheckBox _spin,_lamps;
         private Button _variant;
@@ -43,13 +44,16 @@ namespace BridgeArchitect3D.UI
             var bg=new PanelContainer();bg.AddThemeStyleboxOverride("panel",UiTheme.Box(UiTheme.Bg,0,null,18));AddChild(bg);bg.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
             var body=new VBoxContainer();body.AddThemeConstantOverride("separation",10);bg.AddChild(body);
             var header=new HBoxContainer();body.AddChild(header);
-            header.AddChild(UiTheme.MakeLabel("载具图鉴",25,UiTheme.Accent));
+            header.AddChild(UiTheme.MakeLabel(Loc.T("载具图鉴"),25,UiTheme.Accent));
             _count=UiTheme.MakeLabel("",13,UiTheme.Muted);_count.SizeFlagsHorizontal=SizeFlags.ExpandFill;header.AddChild(_count);
-            header.AddChild(UiTheme.MakeButton("返回主菜单",()=>Hide(),130));
+            header.AddChild(UiTheme.MakeButton(Loc.T("返回主菜单"),()=>Hide(),130));
             var filters=new HBoxContainer();body.AddChild(filters);
-            _search=new LineEdit{PlaceholderText="搜索名称、用途或特点",SizeFlagsHorizontal=SizeFlags.ExpandFill};filters.AddChild(_search);
-            _category=new OptionButton{CustomMinimumSize=new(170,0)};filters.AddChild(_category);_category.AddItem("全部分类");
-            _all=_db.Vehicles.Values.ToArray();foreach(var cat in _all.Select(v=>v.Category).Distinct())_category.AddItem(cat);
+            _search=new LineEdit{PlaceholderText=Loc.T("搜索名称、用途或特点"),SizeFlagsHorizontal=SizeFlags.ExpandFill};filters.AddChild(_search);
+            _category=new OptionButton{CustomMinimumSize=new(170,0)};filters.AddChild(_category);_category.AddItem(Loc.T("全部分类"));
+            _all=_db.Vehicles.Values.Concat(ShipCatalog.Types.Select(t=>new VehicleDefinition {
+                Id="ship:"+t.Id,Name=t.Name,Kind="ship",Category=Loc.T("船只"),Length=t.Length,Width=t.Width,Height=t.Height,Speed=t.Speed,
+                Purpose=Loc.T("内河航运与桥下通航"),Features=ShipFeatures(t.Id)
+            })).ToArray();foreach(var cat in _all.Select(v=>v.Category).Distinct())_category.AddItem(cat);
             _search.TextChanged+=_=>Filter();_category.ItemSelected+=_=>Filter();
             var split=new HSplitContainer{SizeFlagsVertical=SizeFlags.ExpandFill,SplitOffsets=new int[]{245}};body.AddChild(split);
             _list=new ItemList{CustomMinimumSize=new(220,0),SizeFlagsVertical=SizeFlags.ExpandFill,AutoTranslateMode=AutoTranslateModeEnum.Disabled};split.AddChild(_list);_list.ItemSelected+=index=>Select(_shown[(int)index]);
@@ -63,11 +67,11 @@ namespace BridgeArchitect3D.UI
             _stage.AddChild(new MeshInstance3D{Mesh=new PlaneMesh{Size=new(200,200)},Position=new(0,-0.03f,0),MaterialOverride=new StandardMaterial3D{AlbedoColor=new Color("344b55"),Roughness=1}});
             _camera=new Camera3D{Current=true,Fov=40,Far=400};_stage.AddChild(_camera);canvas.GuiInput+=PreviewInput;
             var controls=new HBoxContainer();right.AddChild(controls);
-            _spin=new CheckBox{Text="自动旋转",ButtonPressed=true};controls.AddChild(_spin);
-            _lamps=new CheckBox{Text="展示警灯",ButtonPressed=true};controls.AddChild(_lamps);
-            _variant=UiTheme.MakeButton("切换外观",()=>_model?.SelectTractorVariant(++_trip),100);controls.AddChild(_variant);
-            controls.AddChild(UiTheme.MakeButton("复位视角",()=>{_angle=.5f;_pitch=.4f;_zoom=1;Aim();},100));
-            var help=UiTheme.MakeLabel("拖动模型区域旋转 · 滚轮缩放 · Esc 返回",12,UiTheme.Muted);help.ClipText=true;right.AddChild(help);
+            _spin=new CheckBox{Text=Loc.T("自动旋转"),ButtonPressed=true};controls.AddChild(_spin);
+            _lamps=new CheckBox{Text=Loc.T("展示警灯"),ButtonPressed=true};controls.AddChild(_lamps);
+            _variant=UiTheme.MakeButton(Loc.T("切换外观"),()=>_model?.SelectTractorVariant(++_trip),100);controls.AddChild(_variant);
+            controls.AddChild(UiTheme.MakeButton(Loc.T("复位视角"),()=>{_angle=.5f;_pitch=.4f;_zoom=1;Aim();},100));
+            var help=UiTheme.MakeLabel(Loc.T("拖动模型区域旋转 · 滚轮缩放 · Esc 返回"),12,UiTheme.Muted);help.ClipText=true;right.AddChild(help);
             _details=new RichTextLabel{BbcodeEnabled=true,ScrollActive=true,CustomMinimumSize=new(0,140),SizeFlagsVertical=SizeFlags.ExpandFill,SizeFlagsStretchRatio=1,SelectionEnabled=true};right.AddChild(_details);
             Filter();
         }
@@ -82,16 +86,18 @@ namespace BridgeArchitect3D.UI
             foreach(var v in _all)
                 if((category==null || v.Category==category) && (query.Length==0 || (v.Name+v.Purpose+v.Features).Contains(query,StringComparison.OrdinalIgnoreCase)))
                 {_shown.Add(v);_list.AddItem(v.Name);}
-            _count.Text=$"   共 {_all.Length} 种载具 · 当前 {_shown.Count} 种";
+            _count.Text=Loc.F("   共 {0} 种载具 · 当前 {1} 种", (_all.Length), (_shown.Count));
             if(_shown.Count>0){_list.Select(0);Select(_shown[0]);}
-            else{_title.Text="没有匹配的载具";_details.Text="试试其他名称或分类。";ClearModel();}
+            else{_title.Text=Loc.T("没有匹配的载具");_details.Text=Loc.T("试试其他名称或分类。");ClearModel();}
         }
         private void ClearModel()
         {
             if(_model!=null){_stage.RemoveChild(_model);_model.QueueFree();_model=null;}
+            if(_ship!=null){_stage.RemoveChild(_ship);_ship.QueueFree();_ship=null;}
         }
         private void Select(VehicleDefinition d)
         {
+            if(d.Kind=="ship"){SelectShip(d);return;}
             ClearModel();_model=new VehicleController();_stage.AddChild(_model);_model.Setup(d);
             _model.PlaceAlongPath(x=>new Vector3((float)x,0,0),0);
             _title.Text=d.Name+"  ·  "+d.Category;
@@ -99,25 +105,61 @@ namespace BridgeArchitect3D.UI
             _distance=Mathf.Max(5,(float)d.Length*0.8f+3);_zoom=1;_angle=d.Kind=="school_bus"?2.6f:.5f;_pitch=.4f;Aim();
             _variant.Disabled=d.Kind is not ("flatbed" or "semi");
             _lamps.Disabled=d.Kind is not ("ambulance" or "police" or "police_suv" or "fire_engine" or "utility" or "crane" or "garbage" or "pump" or "modular" or "tractor");
-            string surface=RailTrack.IsTrain(d)?"铁路 / 公铁复合桥面":"公路 / 公铁复合桥面";
+            string surface=RailTrack.IsTrain(d)?Loc.T("铁路 / 公铁复合桥面"):Loc.T("公路 / 公铁复合桥面");
             string Escape(string value)=>(value??"").Replace("[","[lb]");
             var rows=new List<string>{
-                $"[b]用途[/b]  {Escape(d.Purpose)}",$"[b]特点与功能[/b]  {Escape(d.Features)}","",
-                $"[b]总质量[/b]  {d.Mass/1000:0.##} 吨  ({d.Mass:N0} kg)",
-                $"[b]标称速度[/b]  {d.Speed:0.##} m/s  ({d.Speed*3.6:0.#} km/h)",
-                $"[b]长 × 宽 × 高[/b]  {d.Length:0.##} × {d.Width:0.##} × {d.Height:0.##} m",
-                $"[b]轴距 / 载荷跨度[/b]  {d.Wheelbase:0.##} m   [b]车轴 / 落点[/b]  {d.Axles.Count}",
-                $"[b]跟车间距[/b]  {d.FollowGap:0.##} m   [b]坡度上限[/b]  {Math.Atan(d.MaxRampGrade)*180/Math.PI:0.#}° ({d.MaxRampGrade*100:0.#}%)",
-                $"[b]通行路面[/b]  {surface}",$"[b]车身颜色[/b]  {Escape(d.Color)}",
-                $"[b]车身节数 / 队伍人数[/b]  {(d.Kind is "semi" or "tanker" or "tractor" or "articulated_bus" or "car_carrier"?2:d.Units)}   [b]单节标称长度[/b]  {(d.UnitLength>0?d.UnitLength.ToString("0.##")+" m":"—")}",
-                "","[b]各轴 / 落点载荷[/b]  （0 为前轴，负值向后）"};
+                Loc.F("[b]用途[/b]  {0}", (Escape(d.Purpose))),Loc.F("[b]特点与功能[/b]  {0}", (Escape(d.Features))),"",
+                Loc.F("[b]总质量[/b]  {0:0.##} 吨  ({1:N0} kg)", (d.Mass/1000), (d.Mass)),
+                Loc.F("[b]标称速度[/b]  {0:0.##} m/s  ({1:0.#} km/h)", (d.Speed), (d.Speed*3.6)),
+                Loc.F("[b]长 × 宽 × 高[/b]  {0:0.##} × {1:0.##} × {2:0.##} m", (d.Length), (d.Width), (d.Height)),
+                Loc.F("[b]轴距 / 载荷跨度[/b]  {0:0.##} m   [b]车轴 / 落点[/b]  {1}", (d.Wheelbase), (d.Axles.Count)),
+                Loc.F("[b]跟车间距[/b]  {0:0.##} m   [b]坡度上限[/b]  {1:0.#}° ({2:0.#}%)", (d.FollowGap), (Math.Atan(d.MaxRampGrade)*180/Math.PI), (d.MaxRampGrade*100)),
+                Loc.F("[b]通行路面[/b]  {0}", (surface)),Loc.F("[b]车身颜色[/b]  {0}", (Escape(d.Color))),
+                Loc.F("[b]车身节数 / 队伍人数[/b]  {0}   [b]单节标称长度[/b]  {1}", ((d.Kind is "semi" or "tanker" or "tractor" or "articulated_bus" or "car_carrier"?2:d.Units)), ((d.UnitLength>0?d.UnitLength.ToString("0.##")+" m":"—"))),
+                "",Loc.T("[b]各轴 / 落点载荷[/b]  （0 为前轴，负值向后）")};
             for(int i=0;i<d.Axles.Count;i++)
             {
                 var a=d.Axles[i];double mass=d.Mass*a.LoadFraction;
-                rows.Add($"{i+1:00}   位置 {a.Offset:0.##} m   ·   {a.LoadFraction*100:0.##}%   ·   {mass/1000:0.##} 吨 / {mass*9.81/1000:0.#} kN");
+                rows.Add(Loc.F("{0:00}   位置 {1:0.##} m   ·   {2:0.##}%   ·   {3:0.##} 吨 / {4:0.#} kN", (i+1), (a.Offset), (a.LoadFraction*100), (mass/1000), (mass*9.81/1000)));
             }
-            rows.Add("\n[color=#9daeb8]速度与轴重为游戏设定；坡度、排队和限高会影响实际通行。图鉴中的旋转、警灯和外观切换仅用于预览。[/color]");
+            rows.Add(Loc.T("\n[color=#9daeb8]速度与轴重为游戏设定；坡度、排队和限高会影响实际通行。图鉴中的旋转、警灯和外观切换仅用于预览。[/color]"));
             _details.Text=string.Join("\n",rows);_details.ScrollToLine(0);
+        }
+        private static string ShipFeatures(string id)=>id switch
+        {
+            "cargo"=>Loc.T("内河货轮，甲板货物与驾驶楼；注意上层建筑净空。"),
+            "sailboat"=>Loc.T("高桅帆船，船体较小但桅杆需要较大净空。"),
+            "speedboat"=>Loc.T("低矮快艇，航速较快；净空足够时无需开桥。"),
+            "tugboat"=>Loc.T("紧凑拖轮，驾驶楼、烟囱与护舷。"),
+            "tourboat"=>Loc.T("观光船，连续舷窗、座椅与遮阳顶。"),
+            "catamaran"=>Loc.T("双体渡轮，分离船体和宽甲板，注意桥墩间距。"),
+            "car_ferry"=>Loc.T("汽车渡船，载车甲板与两端跳板。"),
+            "container"=>Loc.T("集装箱货轮，分层货箱和高驾驶楼，需提前开桥。"),
+            "sand_barge"=>Loc.T("运砂驳船，低矮敞口货舱，航速较慢。"),
+            "tow_barge"=>Loc.T("拖轮船队，分段船体，需等待整队驶离再关桥。"),
+            "fishing"=>Loc.T("渔船，网架、鱼箱和桅杆均参与净空判定。"),
+            "yacht"=>Loc.T("游艇，分层舱室与宽舷窗。"),
+            "fireboat"=>Loc.T("消防船，驾驶楼、甲板水炮与航行灯。"),
+            "folding_sail"=>Loc.T("降桅帆船，固定降桅状态，尚无运行时升降桅动画。"),
+            _=>Loc.T("内河船只。")
+        };
+        private void SelectShip(VehicleDefinition d)
+        {
+            ClearModel();
+            var definition=ShipCatalog.Create(d.Id.Substring(5),0);
+            _ship=new ShipController();_stage.AddChild(_ship);
+            _ship.Setup(definition,0,100,-10,false,false);_ship.Position=Vector3.Zero;
+            _title.Text=d.Name+Loc.T("  ·  船只");
+            _target=new(0,(float)d.Height*.40f,0);
+            _distance=Mathf.Max(6,(float)d.Length*.85f+3);_zoom=1;_angle=.7f;_pitch=.4f;Aim();
+            _variant.Disabled=true;_lamps.Disabled=true;
+            _details.Text=Loc.F("[b]用途[/b]  {0}\n[b]特点[/b]  {1}\n\n", (d.Purpose), (d.Features))+
+                Loc.F("[b]长 × 宽 × 水面以上高度[/b]  {0:0.##} × {1:0.##} × {2:0.##} m\n", (d.Length), (d.Width), (d.Height))+
+                Loc.F("[b]航速[/b]  {0:0.##} m/s  ({1:0.#} km/h)\n", (d.Speed), (d.Speed*3.6))+
+                Loc.F("[b]默认吃水[/b]  {0:0.##} m\n", (ShipCatalog.Draft(definition)))+
+                Loc.T("[b]通行方式[/b]  河道航行；模型与碰撞共用船体及部件几何。\n")+
+                Loc.T("[color=#9daeb8]净空充足时无需开桥；船只不等待开桥。关卡可调整尺寸、航速和航线。[/color]");
+            _details.ScrollToLine(0);
         }
         private void PreviewInput(InputEvent e)
         {
@@ -145,7 +187,7 @@ namespace BridgeArchitect3D.UI
         {
             _smoke=true;_shots=shots;Open();
             if(System.Array.IndexOf(OS.GetCmdlineUserArgs(),"--catalog-small")>=0){GetWindow().Mode=Window.ModeEnum.Windowed;GetWindow().Size=new(1280,720);}
-            _search.Text="钢卷";Filter();
+            _search.Text=Loc.T("钢卷");Filter();
             if(!_shown.Any(v=>v.Kind=="flatbed"))throw new InvalidOperationException("Catalogue feature search failed.");
             _search.Text="__no_such_vehicle__";Filter();
             if(_shown.Count!=0 || _model!=null)throw new InvalidOperationException("Catalogue empty search failed.");

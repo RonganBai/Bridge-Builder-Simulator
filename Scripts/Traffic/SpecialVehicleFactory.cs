@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using BridgeArchitect3D.Data;
 using BridgeArchitect3D.World;
@@ -56,10 +56,10 @@ namespace BridgeArchitect3D.Traffic
             Round(n,new(cx,0.8f,0),new(l,0.65f,w),0.28f,paint);Box(n,new(cx,0.5f,0),new(l*0.9f,0.16f,w*0.86f),Dark);
             bool pickup=def.Kind=="pickup";
             float cabinLength=pickup?l*0.47f:l*0.75f,cabinCenter=pickup?front-cabinLength/2-0.15f:cx-0.1f,roof=h-0.13f;
-            var profile=new[]{new Vector2(cabinCenter-cabinLength/2,0.95f),new Vector2(cabinCenter+cabinLength/2,0.95f),new Vector2(cabinCenter+cabinLength/2-0.35f,roof),new Vector2(cabinCenter-cabinLength/2+0.24f,roof)};
+            var profile=new[]{new Vector2(cabinCenter-cabinLength/2,0.95f),new Vector2(cabinCenter+cabinLength/2,0.95f),new Vector2(cabinCenter+cabinLength/2-0.48f,roof),new Vector2(cabinCenter-cabinLength/2+0.30f,roof)};
             n.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(profile,w*0.91f),MaterialOverride=paint});
-            CurvedMeshes.Windshield(n,cabinCenter+cabinLength/2+0.015f,1.07f,cabinCenter+cabinLength/2-0.35f,roof-0.08f,w*0.84f,0.08f,Glass);
-            CurvedMeshes.Windshield(n,cabinCenter-cabinLength/2-0.015f,1.07f,cabinCenter-cabinLength/2+0.24f,roof-0.08f,w*0.84f,-0.06f,Glass);
+            CurvedMeshes.Windshield(n,cabinCenter+cabinLength/2+0.015f,1.07f,cabinCenter+cabinLength/2-0.48f,roof-0.08f,w*0.84f,0.08f,Glass);
+            CurvedMeshes.Windshield(n,cabinCenter-cabinLength/2-0.015f,1.07f,cabinCenter-cabinLength/2+0.30f,roof-0.08f,w*0.84f,-0.06f,Glass);
             foreach(int side in new[]{-1,1})
             {
                 Box(n,new(cabinCenter,1.16f+(roof-1.16f)/2,side*w*0.46f),new(cabinLength*0.7f,Math.Max(0.15f,roof-1.3f),0.025f),Glass);
@@ -93,10 +93,10 @@ namespace BridgeArchitect3D.Traffic
             var originalCab= new Node3D {Name="CabOver"};originalCab.SetMeta("vehicle_variant",true);cab.AddChild(originalCab);
             var cabRoot=cab;cab=originalCab;
             Box(cab,new(-1.6f,0.84f,0),new(7,0.28f,w*0.65f),Dark);
-            var profile=new[]{new Vector2(front-3.7f,0.8f),new Vector2(front,0.8f),new Vector2(front+0.05f,1.9f),new Vector2(front-0.01f,2.8f),new Vector2(front-0.17f,3.52f),new Vector2(front-0.55f,3.82f),new Vector2(front-3.7f,3.82f)};
+            var profile=new[]{new Vector2(front-3.7f,0.8f),new Vector2(front,0.8f),new Vector2(front+0.05f,1.9f),new Vector2(front-0.01f,2.8f),new Vector2(front-0.27f,3.52f),new Vector2(front-0.55f,3.82f),new Vector2(front-3.7f,3.82f)};
             cab.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(profile,w*0.94f),MaterialOverride=paint});
-            CurvedMeshes.Windshield(cab,front+0.025f,2.35f,front-0.13f,3.42f,w*0.84f,0.04f,Glass);
-            CurvedMeshes.Windshield(cab,front+0.031f,2.35f,front-0.124f,3.42f,0.055f,0.04f,Dark);
+            CurvedMeshes.Windshield(cab,front+0.016f,2.35f,front-0.242f,3.42f,w*0.81f,0f,Glass);
+            CurvedMeshes.Windshield(cab,front+0.022f,2.35f,front-0.236f,3.42f,0.045f,0f,Dark);
             Round(cab,new(-0.95f,3.9f,0),new(2.1f,0.25f,w*0.85f),0.16f,paint);
             Box(cab,new(front+0.09f,1.83f,0),new(0.06f,0.56f,w*0.65f),Dark);
             for(int i=0;i<4;i++)Box(cab,new(front+0.125f,1.64f+i*0.13f,0),new(0.025f,0.035f,w*0.6f),Alloy);

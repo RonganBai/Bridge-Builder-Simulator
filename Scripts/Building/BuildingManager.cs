@@ -460,7 +460,7 @@ namespace BridgeArchitect3D.Building
                 string reason=Editor.DeviceProblem(sn?.Id??-1,mat,Input.IsKeyPressed(Key.Shift));ok=reason==null;
                 _cursor.Visible=true;_cursor.Position=new Vector3(snapped.X,snapped.Y,BuildPlane.FrontZ);
                 _cursor.MaterialOverride=ok?_mm.PreviewOk:_mm.PreviewBad;
-                text=reason??(Editor.Db.GetMaterial(mat).DeviceKind=="pulley"?"点击安装定滑轮（$1800）；Shift 点击拆除":"点击挂载 5 吨配重（$1300）；Shift 点击减重");
+                text=reason??(Editor.Db.GetMaterial(mat).DeviceKind=="pulley"?Loc.T("点击安装定滑轮（$1800）；Shift 点击拆除"):Loc.T("点击挂载 5 吨配重（$1300）；Shift 点击减重"));
             }
             else if (mat != null && Editor.Db.GetMaterial(mat).IsPier)
             {

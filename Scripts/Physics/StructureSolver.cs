@@ -191,6 +191,8 @@ namespace BridgeArchitect3D.Physics
             if (_f.Length < nf) _f = new double[nf];
             Array.Clear(_k, 0, nf * nf);
             Array.Clear(_f, 0, nf);
+            var shift = m.SupportShiftX;
+            if (shift != null && Array.TrueForAll(shift, v => v == 0)) shift = null;
             for (int i = 0; i < n; i++)
             {
                 if (_dofMap[3 * i] >= 0) _f[_dofMap[3 * i]] += loads[2 * i];
@@ -204,6 +206,13 @@ namespace BridgeArchitect3D.Physics
                 GlobalStiffness(m, k);
                 int a = m.A[k], b = m.B[k];
                 for (int d = 0; d < 3; d++) { _idx[d] = _dofMap[3 * a + d]; _idx[3 + d] = _dofMap[3 * b + d]; }
+                if (shift != null)
+                {
+                    // Prescribed support movement: move K·u of the fixed dof to the right-hand side
+                    double ua = _idx[0] < 0 && a < shift.Length ? shift[a] : 0, ub = _idx[3] < 0 && b < shift.Length ? shift[b] : 0;
+                    if (ua != 0 || ub != 0)
+                        for (int p = 0; p < 6; p++) if (_idx[p] >= 0) _f[_idx[p]] -= _kg[p * 6 + 0] * ua + _kg[p * 6 + 3] * ub;
+                }
                 for (int p = 0; p < 6; p++)
                 {
                     if (_idx[p] < 0) continue;
@@ -269,7 +278,7 @@ namespace BridgeArchitect3D.Physics
                 for (int d = 0; d < 3; d++)
                 {
                     int g = _dofMap[3 * i + d];
-                    double v = g >= 0 ? _f[g] : 0;
+                    double v = g >= 0 ? _f[g] : (d == 0 && shift != null && i < shift.Length && m.FixX[i] ? shift[i] : 0);
                     if (double.IsNaN(v) || double.IsInfinity(v) || (d < 2 && Math.Abs(v) > limit))
                     {
                         o.Stable = false; o.UnstableNodeId = m.NodeIds[i];

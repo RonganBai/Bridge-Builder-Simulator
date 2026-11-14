@@ -86,8 +86,8 @@ namespace BridgeArchitect3D.Data
             sb.AppendLine(Loc.T("单车居中：减轻偏载、便于使用较轻结构，但车辆不能合乘，通行时间可能增加。多车合乘：减少升降趟数，实际合乘载荷仍逐组检查。"));
             if(editor.Level.ProvidedInfrastructure!=null)
             {
-                sb.AppendLine("\n[b]关卡提供的固定设施[/b]\n隧道、外部支撑和地面通道由关卡提供，不计入电梯设计预算，也不能移动、删除或升级。玩家负责平台、吊索、井架、驱动、配重与运营方式。");
-                sb.AppendLine("\n[color=#e3c384]这里只预检空载和单车停靠，不覆盖车辆进出、合乘与整场交通；采用方案后仍需完整测试。[/color]");
+                sb.AppendLine(Loc.T("\n[b]关卡提供的固定设施[/b]\n隧道、外部支撑和地面通道由关卡提供，不计入电梯设计预算，也不能移动、删除或升级。玩家负责平台、吊索、井架、驱动、配重与运营方式。"));
+                sb.AppendLine(Loc.T("\n[color=#e3c384]这里只预检空载和单车停靠，不覆盖车辆进出、合乘与整场交通；采用方案后仍需完整测试。[/color]"));
                 report.Text=sb.ToString();return report;
             }
             sb.AppendLine("\n"+Loc.T("[b]隧道局部升级与全线升级[/b]"));element=Math.Clamp(element,0,g.Count-1);

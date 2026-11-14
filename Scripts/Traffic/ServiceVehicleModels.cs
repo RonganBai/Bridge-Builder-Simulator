@@ -1,4 +1,4 @@
-using Godot;
+﻿using Godot;
 
 namespace BridgeArchitect3D.Traffic
 {
@@ -67,12 +67,12 @@ namespace BridgeArchitect3D.Traffic
             Round(n,new(pivot+0.5f,2.57f,-0.77f),new(1.45f,1.55f,1.05f),0.08f,paint);
             Box(n,new(pivot+1.24f,2.75f,-0.77f),new(0.025f,0.88f,0.84f),Glass);
             Box(n,new(pivot+0.5f,2.78f,-1.305f),new(1.12f,0.9f,0.025f),Glass);
-            float boomStart=back+1.3f,boomEnd=front-0.08f;
+            float boomStart=pivot-0.25f,boomEnd=front+0.75f;
             for(int i=0;i<4;i++)
             {
-                float start=boomStart+i*1.5f,end=boomEnd-(3-i)*1.2f;
-                Round(n,new((start+end)/2,3.35f+i*0.07f,0.22f),new(end-start,0.66f-i*0.12f,0.78f-i*0.14f),0.04f,i==3?Dark:paint);
-                Box(n,new(end-0.08f,3.35f+i*0.07f,0.22f),new(0.14f,0.73f-i*0.12f,0.85f-i*0.14f),Dark);
+                float start=boomStart+i*(boomEnd-boomStart)*0.13f,end=boomEnd-(3-i)*0.32f;
+                Round(n,new((start+end)/2,3.35f,0.22f),new(end-start,0.66f-i*0.12f,0.78f-i*0.14f),0.04f,i==3?Dark:paint);
+                Box(n,new(end-0.08f,3.35f,0.22f),new(0.14f,0.73f-i*0.12f,0.85f-i*0.14f),Dark);
             }
             foreach(int side in new[]{-1,1})
             {
@@ -80,13 +80,13 @@ namespace BridgeArchitect3D.Traffic
                 Bar(n,a,a.Lerp(b,0.62f),0.14f,paint);Bar(n,a.Lerp(b,0.58f),b,0.085f,Alloy);
             }
             float hookX=boomEnd-0.08f;
-            Bar(n,new(hookX,3.56f,0.22f),new(hookX,3.56f,1.42f),0.12f,Dark);
-            foreach(float z in new[]{1.32f,1.52f})Bar(n,new(hookX,3.53f,z),new(hookX,2.6f,z),0.025f,Dark);
-            Box(n,new(hookX,2.48f,1.42f),new(0.36f,0.38f,0.34f),paint);
+            Bar(n,new(hookX,3.56f,.06f),new(hookX,3.56f,.38f),0.12f,Dark);
+            foreach(float z in new[]{.12f,.32f})Bar(n,new(hookX,3.53f,z),new(hookX,2.6f,z),0.025f,Dark);
+            Box(n,new(hookX,2.48f,.22f),new(0.36f,0.38f,0.34f),paint);
             for(int i=0;i<6;i++)
             {
                 float a=Mathf.DegToRad(90+i*43),b=Mathf.DegToRad(90+(i+1)*43);
-                Bar(n,new(hookX+0.3f*Mathf.Cos(a),2.05f+0.3f*Mathf.Sin(a),1.42f),new(hookX+0.3f*Mathf.Cos(b),2.05f+0.3f*Mathf.Sin(b),1.42f),0.085f,Dark);
+                Bar(n,new(hookX+0.3f*Mathf.Cos(a),2.05f+0.3f*Mathf.Sin(a),.22f),new(hookX+0.3f*Mathf.Cos(b),2.05f+0.3f*Mathf.Sin(b),.22f),0.085f,Dark);
             }
             Beacon(n,front-1.05f,2.9f,w,new[]{"Amber","Amber"});
             foreach(int side in new[]{-1,1})AmberMarker(n,new(back+0.3f,1.6f,side*w*0.49f),new(0.34f,0.14f,0.12f));
