@@ -21,6 +21,7 @@ namespace BridgeArchitect3D.Building
             public int Id; public bool Anchor;
             public Material BaseMaterial;
             public MeshInstance3D Front, Back, Tie;
+            public Node3D Device;
             /// <summary>Second end of a released deck seam (model node -Id); shown only while the seam is split.</summary>
             public MeshInstance3D TwinFront, TwinBack;
             public Vector3 Base;
@@ -101,8 +102,24 @@ namespace BridgeArchitect3D.Building
                 // No cross beam inside the vehicle height envelope above the road (or at cable / hydraulic-only nodes)
                 v.Tie.Visible = HeightClearance.NeedsCrossTie(design, _mm.Db, Level, n);
                 _nodes[n.Id] = v; _nodeList.Add(v);
+                if(n.Pulley || n.CounterweightTonnes>0)
+                {
+                    v.Device=new Node3D {Name="LiftDevice_"+n.Id};_container.AddChild(v.Device);
+                    if(n.Pulley)
+                    {
+                        var wheel=new MeshInstance3D{Mesh=new TorusMesh{InnerRadius=.23f,OuterRadius=.43f,Rings=20,RingSegments=10},MaterialOverride=_mm.Chrome,Rotation=new Vector3(Mathf.Pi/2,0,0)};
+                        v.Device.AddChild(wheel);
+                        v.Device.AddChild(new MeshInstance3D{Mesh=new CylinderMesh{TopRadius=.1f,BottomRadius=.1f,Height=.32f},MaterialOverride=_mm.Foundation,Rotation=new Vector3(Mathf.Pi/2,0,0)});
+                    }
+                    else
+                    {
+                        float height=.4f+(float)n.CounterweightTonnes*.035f;
+                        v.Device.AddChild(new MeshInstance3D{Mesh=new BoxMesh{Size=new Vector3(.85f,height,.8f)},MaterialOverride=_mm.Foundation,Position=new Vector3(0,-height/2-.15f,0)});
+                    }
+                }
                 if (n.PierBase) AddFoundation(n);
-                if (n.IsTunnelSupport) NewMesh(new BoxMesh { Size = new Vector3(1.6f, 0.4f, 5.6f) }, _mm.Foundation).Position = ToV(n.Position) + new Vector3(0, -0.2f, 0);
+                // Tube joint connection point: a thin bearing plate under the tube bottom (carries nothing by itself)
+                if (n.IsTunnelSupport) NewMesh(new BoxMesh { Size = new Vector3(0.9f, 0.15f, 3.0f) }, _mm.Foundation).Position = ToV(n.Position) + new Vector3(0, -0.08f, 0);
             }
             AddTunnel(design);
             BuildClearanceMarks(design);
@@ -200,7 +217,7 @@ namespace BridgeArchitect3D.Building
             _tubeGeo = TunnelGeometry.Build(design, _mm.Db);
             var g = _tubeGeo;
             if (g == null) return;
-            float h = (float)g.Type.TubeHeight, w = (float)g.Type.TubeWidth, fl = (float)g.Type.FloorHeight;
+            float h = (float)g.Type.TubeHeight, w = RoadLayout.TubeEnvelope(g.Type.TubeWidth), fl = (float)g.Type.FloorHeight;
             var angles = new float[g.Count];
             for (int i = 0; i < g.Count; i++) angles[i] = Mathf.Atan2((float)(g.Y1[i] - g.Y0[i]), (float)(g.X1[i] - g.X0[i]));
             for (int i = 0; i < g.Count; i++)
@@ -222,7 +239,7 @@ namespace BridgeArchitect3D.Building
                 var floor = TunnelVisualMesh.Floor(shape,len,w,h,wall,fl,out float floorWidth);
                 shell.AddChild(new MeshInstance3D {Name="FloorSlab",Mesh=floor,MaterialOverride=solid});
                 var road = new StandardMaterial3D {AlbedoColor = new Color("3c4851"),Roughness=0.95f};
-                float roadWidth = Mathf.Min(4.4f,floorWidth-0.4f);
+                float roadWidth = Mathf.Min(RoadLayout.Width,floorWidth-0.4f);
                 // Separate the pavement and paint from the slab to prevent coplanar depth flicker.
                 TubeBox(shell,"RoadSurface",new Vector3(0,-h/2+fl+0.005f,0),new Vector3(len,0.05f,roadWidth),road);
                 var paint = new StandardMaterial3D {AlbedoColor=new Color("e5dcb5"),Roughness=0.8f};
@@ -235,6 +252,7 @@ namespace BridgeArchitect3D.Building
                 }
                 else if(g.Type.IsFloating)
                 {
+                    AddBallast(shell,len,h,w,g.Buoy[i].Ratio);
                     float podHeight = 0.35f + Mathf.Clamp((float)(g.Buoy[i].Ratio-1)*1.4f,0,0.6f);
                     for(int side=-1;side<=1;side+=2)
                     {
@@ -254,16 +272,16 @@ namespace BridgeArchitect3D.Building
                 // Miter both ends on the bisector of the joint angle: neighbouring elements meet without gap or overlap
                 float t0 = i > 0 ? Mathf.Tan((angles[i] - angles[i - 1]) / 2) : 0, t1 = i + 1 < g.Count ? Mathf.Tan((angles[i + 1] - angles[i]) / 2) : 0;
                 if (Mathf.Abs(t0) > 1e-5f || Mathf.Abs(t1) > 1e-5f) MiterTube(shell, Vector3.Zero, len, h, t0, t1);
-                if (g.Type.IsFloating) AddCables(g, i, a, b, w);
+                // Floating anchor cables are the player's own cable members (drawn with the structure)
                 else if (g.Reinforced[i] && g.Type.IsShield)
                     NewMesh(new BoxMesh { Size = new Vector3(len, 0.6f, w + 2f) }, _mm.Foundation).Position = (a + b) / 2 - new Vector3(0, 0.3f, 0);
                 _tubes.Add((shell, mat, centre));
             }
-            AddTunnelAccess(g);
+            AddTunnelAccess(g, design);
             SetCutaway(_cutaway);
             // Static check (normal water level, no vehicles) so the build view shows the risk colours at once
             if (_mm.Db.TunnelConfig != null)
-                ShowTunnel(Physics.TunnelAnalysis.Evaluate(g, Level, _mm.Db.TunnelConfig, Physics.TunnelAnalysis.StaticEnvironment(Level, _mm.Db.TunnelConfig)), false);
+                ShowTunnel(Physics.BridgeSimulation.StaticTunnel(design, Level, _mm.Db), false);
         }
 
         /// <summary>
@@ -500,9 +518,10 @@ namespace BridgeArchitect3D.Building
         {
             foreach (var v in _nodeList)
             {
-                var p = NodePos(v, model, displacement, scale);
+                var p = NodePos(v, model, displacement, scale) + LiftOffset(v.Id);
                 float zf = BuildPlane.TrussOffset;
                 v.Front.Position = new Vector3(p.X, p.Y, zf);
+                if(v.Device!=null)v.Device.Position=new Vector3(p.X,p.Y,zf+.2f);
                 v.Back.Position = new Vector3(p.X, p.Y, -zf);
                 v.Tie.Transform = new Transform3D(new Basis(new Vector3(0.12f, 0, 0), new Vector3(0, 0.12f, 0), new Vector3(0, 0, 2 * zf)), p);
                 // A split seam has two model nodes; draw the other end too so both deck heads keep a node model
@@ -524,6 +543,8 @@ namespace BridgeArchitect3D.Building
                 if (model != null && displacement != null && model.MemberIndex.TryGetValue(m.Id, out int mk))
                 { a = ModelPos(model, model.A[mk], displacement, scale); b = ModelPos(model, model.B[mk], displacement, scale); }
                 else { a = NodePos(_nodes[m.A], model, displacement, scale); b = NodePos(_nodes[m.B], model, displacement, scale); }
+                // Lift platform members ride with their cab; hoist ropes stretch between cab and sheave
+                a += LiftOffset(m.A); b += LiftOffset(m.B);
                 if (m.Mat.IsDeck)
                 {
                     float th = (float)m.Mat.VisualThickness;
@@ -659,6 +680,7 @@ namespace BridgeArchitect3D.Building
         /// <summary>建造模式着色：材料颜色 + 选中/悬停高亮；可选叠加静力受力颜色。</summary>
         public void ColorForBuild(ICollection<int> selNodes, ICollection<int> selMembers, int hoverNode, int hoverMember, StructuralModel model, MemberStatus[] status)
         {
+            _forceDisplay=model!=null;
             foreach (var v in _nodeList)
             {
                 Material mat = selNodes.Contains(v.Id) ? _mm.NodeSelected : v.Id == hoverNode ? _mm.Hover : v.BaseMaterial;
@@ -675,6 +697,7 @@ namespace BridgeArchitect3D.Building
                     m.Bow = 1 - (float)Math.Min(1, status[k].Utilization);
                     if (m.Mat.PrestressLoad > 0) _bowDirty = true;
                 }
+                else if(_forceDisplay)mat=_mm.Gray;
                 else mat = m.Aged ? _mm.Aged(_mm.ForMaterial(m.Mat.MaterialId)) : _mm.ForMaterial(m.Mat.MaterialId);
                 SetMemberMaterial(m, mat);
                 SetMemberVisible(m, true);
@@ -694,6 +717,7 @@ namespace BridgeArchitect3D.Building
         /// <summary>测试模式着色。broken / utilization 来自模拟或回放帧。</summary>
         public void ColorForTest(StructuralModel model, bool[] broken, float[] utilization, bool showStress, int selMember)
         {
+            _forceDisplay=showStress;
             foreach (var v in _nodeList)
             {
                 Material mat = v.BaseMaterial;
@@ -713,15 +737,30 @@ namespace BridgeArchitect3D.Building
             }
         }
 
+        private bool _forceDisplay;
+        private readonly Dictionary<StandardMaterial3D,StandardMaterial3D> _forceMaterials=new();
+        private Material ForceMaterial(Material source)
+        {
+            if(source is not StandardMaterial3D original)return source;
+            if(!_forceMaterials.TryGetValue(original,out var overlay))
+            {
+                overlay=(StandardMaterial3D)original.Duplicate();
+                overlay.NoDepthTest=true;overlay.ShadingMode=BaseMaterial3D.ShadingModeEnum.Unshaded;
+                overlay.RenderPriority=10;overlay.RimEnabled=false;
+                _forceMaterials[original]=overlay;
+            }
+            return overlay;
+        }
         private void SetMemberMaterial(MemberVisual m, Material mat)
         {
             var baseMat = _mm.ForMaterial(m.Mat.MaterialId);
             // 梁 / 立柱在受力着色时使用带轮廓高光的材质，与桥面、钢索一眼区分
             if (mat is StandardMaterial3D sm && mat != baseMat && !m.Mat.IsDeck && !m.Mat.IsCable) mat = _mm.WithRim(sm);
+            if(_forceDisplay)mat=ForceMaterial(mat);
             if (ReferenceEquals(m.Applied, mat)) return;
             m.Applied = mat;
             for (int i = 0; i < m.Parts.Length; i++)
-                m.Parts[i].MaterialOverride = m.Special[i] != null && (mat == baseMat || m.Mat.IsDeck) ? m.Special[i] : mat;
+                m.Parts[i].MaterialOverride = m.Special[i] != null && !_forceDisplay && (mat == baseMat || m.Mat.IsDeck) ? m.Special[i] : mat;
         }
 
         // ---------------- 拾取 ----------------

@@ -108,8 +108,10 @@ namespace BridgeArchitect3D.World
             var meshes=new List<(MeshInstance3D mesh,Transform3D transform)>();
             void Collect(Node3D node,Transform3D transform)
             {
-                foreach(var child in node.GetChildren().OfType<Node3D>())
+                // Animated parts (tank tracks, road wheels: meta "animated") keep their own nodes so they can move
+                foreach(var child in node.GetChildren().OfType<Node3D>().Where(c=>!c.HasMeta("animated")))
                 {
+                    if(child.HasMeta("vehicle_variant")){Batch(child);continue;}
                     var local=transform*child.Transform;
                     if(child is MeshInstance3D mesh && mesh.Mesh!=null)meshes.Add((mesh,local));
                     else Collect(child,local);

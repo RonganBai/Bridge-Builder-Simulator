@@ -127,31 +127,46 @@ namespace BridgeArchitect3D.Core
         // ---------------- Custom levels (user://custom_levels) ----------------
         private const string CustomDir = "user://custom_levels";
 
-        public static bool SaveCustomLevel(CustomLevelSpec spec, out string error)
+        /// <summary>Saves a custom level (a full level definition) as user://custom_levels/{id}.json.</summary>
+        public static bool SaveCustomLevel(LevelDefinition level, out string error)
         {
             error = null;
             if (WritesSuspended) return true;
             try
             {
                 DirAccess.MakeDirRecursiveAbsolute(CustomDir);
-                spec.Id = CustomLevelBuilder.IdFor(spec.Name);
-                using var f = Godot.FileAccess.Open($"{CustomDir}/{spec.Id}.json", Godot.FileAccess.ModeFlags.Write);
+                using var f = Godot.FileAccess.Open($"{CustomDir}/{level.Id}.json", Godot.FileAccess.ModeFlags.Write);
                 if (f == null) { error = Loc.T("无法写入关卡：") + Godot.FileAccess.GetOpenError(); return false; }
-                f.StoreString(JsonSerializer.Serialize(spec, GameDatabase.JsonOptions));
+                f.StoreString(GameDatabase.SerializeLevel(level));
                 return true;
             }
             catch (Exception e) { error = e.Message; return false; }
         }
 
-        public static CustomLevelSpec LoadCustomLevel(string id) => ReadUserJson<CustomLevelSpec>($"{CustomDir}/{id}.json");
+        public static bool HasCustomLevel(string id) => Godot.FileAccess.FileExists($"{CustomDir}/{id}.json");
 
-        public static System.Collections.Generic.List<CustomLevelSpec> ListCustomLevels()
+        /// <summary>Reads a custom level; files from the old designer (level specs) are converted on load.</summary>
+        public static LevelDefinition LoadCustomLevel(string id, GameDatabase db) => ReadCustomFile($"{CustomDir}/{id}.json", db, id);
+
+        private static LevelDefinition ReadCustomFile(string path, GameDatabase db, string id)
         {
-            var list = new System.Collections.Generic.List<CustomLevelSpec>();
+            try
+            {
+                if (!Godot.FileAccess.FileExists(path)) return null;
+                var l = LevelEditing.ReadCustomLevel(Godot.FileAccess.GetFileAsString(path), db);
+                if (l != null) l.Id = id;
+                return l;
+            }
+            catch (Exception e) { GD.PushWarning(Loc.F("读取 {0} 失败：{1}", (path), (e.Message))); return null; }
+        }
+
+        public static System.Collections.Generic.List<LevelDefinition> ListCustomLevels(GameDatabase db)
+        {
+            var list = new System.Collections.Generic.List<LevelDefinition>();
             var dir = DirAccess.Open(CustomDir);
             if (dir == null) return list;
             foreach (var file in dir.GetFiles())
-                if (file.EndsWith(".json") && ReadUserJson<CustomLevelSpec>($"{CustomDir}/{file}") is { } s) list.Add(s);
+                if (file.EndsWith(".json") && ReadCustomFile($"{CustomDir}/{file}", db, file.Substring(0, file.Length - 5)) is { } l) list.Add(l);
             list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.CurrentCulture));
             return list;
         }

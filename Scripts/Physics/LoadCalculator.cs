@@ -19,6 +19,7 @@ namespace BridgeArchitect3D.Physics
         public static void Compute(StructuralModel m, AxleLoad[] axles, int axleCount, double[] loads)
         {
             Array.Clear(loads, 0, loads.Length);
+            if (m.NodeLoadY != null) for (int i = 0; i < m.NodeLoadY.Length && 2 * i + 1 < loads.Length; i++) loads[2 * i + 1] += m.NodeLoadY[i];
             for (int k = 0; k < m.MemberCount; k++)
             {
                 if (m.Broken[k]) continue;

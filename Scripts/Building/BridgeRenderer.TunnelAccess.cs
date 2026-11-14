@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using BridgeArchitect3D.Data;
 using BridgeArchitect3D.World;
 using Godot;
@@ -29,6 +30,10 @@ namespace BridgeArchitect3D.Building
             public SlidingGate CageEntry,CageExit,LandingEntry,LandingExit;
             public readonly List<(MeshInstance3D mesh,Vector3 top,Vector3 attachment)> Ropes=new();
             public MeshInstance3D CounterRope;
+            /// <summary>Built lift (members drawn with the structure): counterweights hang from the sheave nodes.</summary>
+            public bool Structural;
+            public readonly List<(Node3D weight,Vector3 sheave,float hang)> Weights=new();
+            public readonly Dictionary<Node3D,MeshInstance3D> WeightRopes=new();
             public Vector3 CounterRopeTop;
         }
         private readonly List<LiftVisual> _liftPlatforms=new();
@@ -48,35 +53,69 @@ namespace BridgeArchitect3D.Building
             if(_reservedAccess!=null)_reservedAccess.Visible=visible;
         }
 
-        private void AddTunnelAccess(TunnelGeometry geometry)
+        /// <summary>Design node id -> index of the lift whose platform it belongs to (moves with the cab).</summary>
+        private readonly Dictionary<int,int> _liftNodeOf=new();
+        private readonly List<float> _liftDy=new();
+        private readonly Dictionary<int,float> _liftRatio=new();
+        private Vector3 LiftOffset(int nodeId)=>_liftNodeOf.TryGetValue(nodeId,out int k)&&k<_liftDy.Count?new Vector3(0,_liftDy[k]*_liftRatio.GetValueOrDefault(nodeId,1),0):Vector3.Zero;
+
+        private void AddTunnelAccess(TunnelGeometry geometry,BridgeDesign design)
         {
-            _liftPlatforms.Clear();var plan=new TunnelAccessPlan(Level,geometry);
+            _liftPlatforms.Clear();_liftNodeOf.Clear();_liftDy.Clear();_liftRatio.Clear();var plan=new TunnelAccessPlan(Level,geometry);
             var root=new Node3D {Name="TunnelLifts"};_container.AddChild(root);
-            AddLift(root,plan.Left,geometry.Type,false,_liftPlatforms);AddLift(root,plan.Right,geometry.Type,false,_liftPlatforms);
-            SetLiftPositions(Array.Empty<double>());
+            var layouts=_mm.Db==null?Array.Empty<Physics.LiftLayout>():Physics.LiftStructure.Analyze(design,Level,_mm.Db);
+            var shafts=new[]{plan.Left,plan.Right};
+            for(int k=0;k<2;k++)
+            {
+                var layout=layouts.ElementAtOrDefault(k);
+                if(layout!=null)
+                {
+                    foreach(int id in layout.Platform)_liftNodeOf[id]=k;
+                    if(Level.MechanicalLift)foreach(var motion in Physics.LiftMechanics.Plan(design,Level,_mm.Db,layout).Motion)
+                    {_liftNodeOf[motion.Key]=k;_liftRatio[motion.Key]=(float)motion.Value;}
+                }
+                AddLift(root,shafts[k],geometry.Type,false,_liftPlatforms,layout,design);
+                _liftDy.Add(0);
+            }
+            SetLiftPositions(Array.Empty<double>(),buildPose:true);
         }
 
-        public void SetLiftPositions(IReadOnlyList<double> dy,IReadOnlyList<double> doors=null)
+        public void SetLiftPositions(IReadOnlyList<double> dy,IReadOnlyList<double> doors=null,bool buildPose=false)
         {
             for(int i=0;i<_liftPlatforms.Count;i++)
             {
                 var lift=_liftPlatforms[i];if(!GodotObject.IsInstanceValid(lift.Platform))continue;
                 float rest=lift.Down?lift.Top:lift.Bottom;
-                float y=Mathf.Clamp(rest+(i<dy.Count?(float)dy[i]:0),lift.Bottom,lift.Top);
+                // Construction uses the same lower-landing coordinates as snapping and member creation.
+                float y=buildPose?lift.Bottom:Mathf.Clamp(rest+(i<dy.Count?(float)dy[i]:0),lift.Bottom,lift.Top);
                 lift.Platform.Position=new Vector3(0,y,0);
-                var counter=lift.Counterweight.Position;counter.Y=lift.Bottom+lift.Top-y+lift.CounterOffset;lift.Counterweight.Position=counter;
+                // The platform members are analysed at the lower landing: shift them by the cab's height above it
+                if(i<_liftDy.Count)_liftDy[i]=y-lift.Bottom;
+                if(lift.Structural)
+                {
+                    float rise=y-lift.Bottom;
+                    foreach(var (weight,sheave,hang) in lift.Weights)
+                    {
+                        weight.Position=new Vector3(sheave.X,sheave.Y-hang-rise,sheave.Z);
+                        if(lift.WeightRopes.TryGetValue(weight,out var r))SetCable(r,weight.Position,sheave,0.05f);
+                    }
+                }
+                else{var counter=lift.Counterweight.Position;counter.Y=lift.Bottom+lift.Top-y+lift.CounterOffset;lift.Counterweight.Position=counter;}
                 float open=doors!=null&&i<doors.Count?Mathf.Clamp((float)doors[i],0,1):1;
                 float entry=Mathf.Abs(y-rest)<0.001f?open:0;
                 float exit=Mathf.Abs(y-(lift.Down?lift.Bottom:lift.Top))<0.001f?open:0;
                 lift.CageEntry.SetOpen(entry);lift.LandingEntry.SetOpen(entry);
                 lift.CageExit.SetOpen(exit);lift.LandingExit.SetOpen(exit);
+                if(lift.Structural)continue;
                 foreach(var rope in lift.Ropes)SetCable(rope.mesh,lift.Platform.Position+rope.attachment,rope.top,0.045f);
-                SetCable(lift.CounterRope,counter+Vector3.Up*(lift.CounterOffset-0.4f),lift.CounterRopeTop,0.055f);
+                SetCable(lift.CounterRope,lift.Counterweight.Position+Vector3.Up*(lift.CounterOffset-0.4f),lift.CounterRopeTop,0.055f);
             }
         }
 
-        private void AddLift(Node3D parent,TunnelRules.LiftShaft shaft,TunnelTypeConfig type,bool reserved,List<LiftVisual> visuals)
+        private void AddLift(Node3D parent,TunnelRules.LiftShaft shaft,TunnelTypeConfig type,bool reserved,List<LiftVisual> visuals,
+            Physics.LiftLayout layout=null,BridgeDesign design=null)
         {
+            if(!reserved&&design!=null){AddStructuralLift(parent,shaft,type,visuals,layout,design);return;}
             var root=new Node3D {Name=shaft.Left?"LeftLift":"RightLift"};parent.AddChild(root);
             var steel=reserved?_mm.PreviewOk:_mm.ForMaterial("steel");
             var deck=reserved?_mm.PreviewOk:_mm.ForMaterial("deck_steel");
@@ -84,8 +123,8 @@ namespace BridgeArchitect3D.Building
             var cable=TerrainBuilder.Mat(new Color("555e69"));var accent=TerrainBuilder.Mat(new Color(shaft.Left?"4ebfa9":"d6a458"));
             var glass=new StandardMaterial3D {AlbedoColor=new Color(0.36f,0.6f,0.69f,0.2f),Transparency=BaseMaterial3D.TransparencyEnum.Alpha,Roughness=0.3f};
             float x0=(float)shaft.X0,x1=(float)shaft.X1,cx=(x0+x1)/2,length=x1-x0;
-            float bottom=(float)shaft.Bottom,top=(float)shaft.Top,w=(float)type.TubeWidth,head=(float)(type.TubeHeight-type.FloorHeight);
-            float frameTop=top+head,platformWidth=w-2,doorHeight=Mathf.Min(4.7f,head-0.45f),clear=Mathf.Min(3.8f,platformWidth-1);
+            float bottom=(float)shaft.Bottom,top=(float)shaft.Top,w=RoadLayout.TubeEnvelope(type.TubeWidth),head=(float)(type.TubeHeight-type.FloorHeight);
+            float frameTop=top+head,platformWidth=RoadLayout.Width+.8f,doorHeight=Mathf.Min(4.7f,head-0.45f),clear=RoadLayout.Width;
             var visual=new LiftVisual {Bottom=bottom,Top=top,Down=shaft.Left};
             foreach(float x in new[]{x0,x1})foreach(float z in new[]{-w/2,w/2})
                 TubeBox(root,"LiftColumn",new Vector3(x,(bottom+frameTop)/2,z),new Vector3(0.35f,frameTop-bottom,0.35f),steel);
@@ -145,6 +184,57 @@ namespace BridgeArchitect3D.Building
         }
 
         /// <summary>
+        /// A built lift: the platform, hoists and shaft columns are the player's members (drawn with the structure).
+        /// This adds only what is not a member: the shaft enclosure and landing doors, the cab dressing that rides on
+        /// the platform (doors, side walls, handrails) and a counterweight hanging from every sheave, sized by its
+        /// tonnage. The counterweight is at its highest while the cab is at the lower landing and drops as the cab rises.
+        /// </summary>
+        private void AddStructuralLift(Node3D parent,TunnelRules.LiftShaft shaft,TunnelTypeConfig type,List<LiftVisual> visuals,Physics.LiftLayout layout,BridgeDesign design)
+        {
+            var root=new Node3D {Name=shaft.Left?"LeftLift":"RightLift"};parent.AddChild(root);
+            var steel=_mm.ForMaterial("steel");var concrete=_mm.ForMaterial("concrete");
+            var cable=TerrainBuilder.Mat(new Color("555e69"));var accent=TerrainBuilder.Mat(new Color(shaft.Left?"4ebfa9":"d6a458"));
+            var glass=new StandardMaterial3D {AlbedoColor=new Color(0.36f,0.6f,0.69f,0.2f),Transparency=BaseMaterial3D.TransparencyEnum.Alpha,Roughness=0.3f};
+            var c=Physics.LiftStructure.Cfg(_mm.Db);
+            float x0=(float)shaft.X0,x1=(float)shaft.X1,cx=(x0+x1)/2,length=x1-x0;
+            float bottom=(float)shaft.Bottom,top=(float)shaft.Top,w=RoadLayout.TubeEnvelope(type.TubeWidth),head=(float)(type.TubeHeight-type.FloorHeight);
+            float pit=(float)Physics.LiftStructure.PitY(c,shaft),headY=(float)Physics.LiftStructure.HeadY(c,shaft);
+            float platformWidth=RoadLayout.Width+.8f,doorHeight=Mathf.Min(4.7f,head-0.45f),clear=RoadLayout.Width;
+            var visual=new LiftVisual {Bottom=bottom,Top=top,Down=shaft.Left,Structural=true};
+            var platform=new Node3D {Name="LiftCab",Position=new Vector3(0,shaft.Left?top:bottom,0)};root.AddChild(platform);visual.Platform=platform;
+            foreach(float z in new[]{-platformWidth/2,platformWidth/2})
+            {
+                TubeBox(platform,"Handrail",new Vector3(cx,1.05f,z),new Vector3(length-0.3f,0.08f,0.08f),accent);
+                for(float x=x0+2;x<x1-1;x+=3)TubeBox(platform,"RailPost",new Vector3(x,0.7f,z),new Vector3(0.06f,0.7f,0.06f),steel);
+            }
+            foreach(float x in new[]{x0+0.4f,x1-0.4f})TubeBox(platform,"WarningSill",new Vector3(x,0.015f,0),new Vector3(0.14f,0.03f,platformWidth),accent);
+            visual.CageEntry=AddGate(platform,"CageEntryDoor",x0+0.12f,0,clear,platformWidth/2,doorHeight,steel,glass,accent);
+            visual.CageExit=AddGate(platform,"CageExitDoor",x1-0.12f,0,clear,platformWidth/2,doorHeight,steel,glass,accent);
+            visual.LandingEntry=AddGate(root,"BoardingLandingDoor",x0-0.12f,shaft.Left?top:bottom,clear,platformWidth/2,doorHeight,steel,glass,accent);
+            visual.LandingExit=AddGate(root,"ExitLandingDoor",x1+0.12f,shaft.Left?bottom:top,clear,platformWidth/2,doorHeight,steel,glass,accent);
+            TubeBox(root,"LiftPit",new Vector3(cx,pit-0.15f,0),new Vector3(length+1.4f,0.3f,w+0.4f),concrete);
+            double tonnes=Level.MechanicalLift?0:design.Tunnel?.Lift?.Counterweight??0;
+            if(layout!=null&&tonnes>0)
+            {
+                int ropes=Math.Max(1,layout.Sheaves.Values.Sum());
+                foreach(var (id,n) in layout.Sheaves)
+                {
+                    var s=design.FindNode(id);if(s==null)continue;
+                    float share=(float)(tonnes*n/ropes),hgt=Mathf.Clamp(share/6f,0.5f,3f);
+                    var sheave=new Vector3((float)s.Position.X,(float)s.Position.Y,-w/2+0.5f);
+                    var weight=new Node3D {Name="LiftCounterweight"};root.AddChild(weight);
+                    TubeBox(weight,"WeightBlock",new Vector3(0,-hgt/2,0),new Vector3(0.9f,hgt,0.7f),cable);
+                    AddPulley(root,sheave+Vector3.Back*0.26f,steel);
+                    visual.WeightRopes[weight]=TubeBox(root,"CounterweightRope",Vector3.Zero,Vector3.One,cable);
+                    visual.Weights.Add((weight,sheave,1.2f));
+                }
+            }
+            AddEnclosure(root,platform,false,x0,x1,pit+0.6f,headY,w,platformWidth,doorHeight,clear,
+                shaft.Left?top:bottom,shaft.Left?bottom:top,concrete,steel);
+            visuals?.Add(visual);
+        }
+
+        /// <summary>
         /// Closes the shaft and the cab: continuous concrete shaft walls (side, end and existing pit / head slab)
         /// with openings only at the two landing doors, and steel cab side walls plus a roof.
         /// The front (+z) walls of shaft and cab join the cutaway toggle so the inside can still be inspected.
@@ -152,7 +242,7 @@ namespace BridgeArchitect3D.Building
         private void AddEnclosure(Node3D root,Node3D platform,bool reserved,float x0,float x1,float bottom,float frameTop,
             float w,float platformWidth,float doorHeight,float clear,float entryY,float exitY,Material wallMat,Material cabMat)
         {
-            const float t=0.25f;
+            const float t=(float)TunnelRules.LiftEndWallThickness;
             float length=x1-x0,cx=(x0+x1)/2,yLow=bottom-0.9f,yHigh=frameTop+0.05f,half=w/2+0.3f;
             void Front(MeshInstance3D m){if(!reserved)_tubeFrontDetails.Add(m);}
             // Side walls of the shaft (back and front)
@@ -162,7 +252,8 @@ namespace BridgeArchitect3D.Building
                 if(side>0)Front(wall);
             }
             // End walls: solid except one door-sized opening at the landing on that end
-            foreach(var (x,landing) in new[]{(x0-0.45f,entryY),(x1+0.45f,exitY)})
+            float wallOffset=(float)TunnelRules.LiftEndWallOffset;
+            foreach(var (x,landing) in new[]{(x0-wallOffset,entryY),(x1+wallOffset,exitY)})
             {
                 float openTop=landing+doorHeight+0.3f,zOpen=clear/2+0.3f,zWall=half-t/2;
                 if(landing-0.12f>yLow)TubeBox(root,"ShaftEndWall",new Vector3(x,(yLow+landing-0.12f)/2,0),new Vector3(t,landing-0.12f-yLow,2*zWall),wallMat);
@@ -174,6 +265,7 @@ namespace BridgeArchitect3D.Building
                     if(side>0)Front(jamb);
                 }
             }
+            if(Level.MechanicalLift)return;
             // Cab: closed side walls and a roof; doors at both ends already close the openings
             float cabH=doorHeight+0.35f;
             foreach(int side in new[]{-1,1})

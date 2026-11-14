@@ -1,3 +1,4 @@
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using BridgeArchitect3D.Building;
@@ -134,16 +135,19 @@ namespace BridgeArchitect3D.UI
 			desc.CustomMinimumSize = new Vector2(300, 0);
 			_matInfoBox.AddChild(desc);
 
+            if(m.DeviceKind!=null)
+            {
+                _matInfoBox.AddChild(UiTheme.MakeLabel(m.DeviceKind=="pulley"?"每个 $1800 · 额定轴载 600 kN\n定滑轮不省力，改变绳索方向；需要两段钢索。":"每块 5 吨 / $1300 · 每端最多 100 吨\n挂在钢索端点；配重也增加滑轮和支点负荷。",12,UiTheme.Accent));
+                _matInfoBox.AddChild(UiTheme.MakeLabel("Shift 点击可拆除滑轮或减少配重；支持撤销。",12,UiTheme.Muted));return;
+            }
 			if (m.IsLift)
 			{
 				// Lift: 5-cell bars like the other materials (platform range, load, speed, price)
 				var lc = TunnelRules.LiftCfg;
 				var lg = MakeGrid(detail);
 				AddStatRow(lg, Loc.T("最长平台"), MaterialRatings.LinearCells(lc.MaxLength, 30), UiTheme.Accent, Loc.F("{0:0}~{1:0} m", (lc.MinLength), (lc.MaxLength)));
-				AddStatRow(lg, Loc.T("最大载重"), MaterialRatings.LinearCells(TunnelRules.LiftCapacity(lc.MaxLength) / 9810, 100), UiTheme.Accent, Loc.F("{0:0} 吨", (TunnelRules.LiftCapacity(lc.MaxLength) / 9810)));
 				AddStatRow(lg, Loc.T("升降速度"), MaterialRatings.LinearCells(lc.Speed, 5), UiTheme.Accent, Loc.F("{0:0.#} m/s", (lc.Speed)));
-				AddStatRow(lg, Loc.T("井道价格"), MaterialRatings.LinearCells(lc.ShaftCostPerMeter, 1000), UiTheme.Warn, Loc.F("${0:0}/m 高", (lc.ShaftCostPerMeter)));
-				AddStatRow(lg, Loc.T("平台价格"), MaterialRatings.LinearCells(lc.PlatformCostPerMeter, 1000), UiTheme.Warn, Loc.F("${0:0}/m 长", (lc.PlatformCostPerMeter)));
+				AddStatRow(lg, Loc.T("价格"), MaterialRatings.LinearCells(3, 5), UiTheme.Warn, Loc.T("平台、吊索、柱子按构件计价；另计驱动、配重、井壁拉结和井道开挖"));
 				_matInfoBox.AddChild(lg);
 				if (_levelVehicles.Count > 0)
 				{
@@ -555,7 +559,19 @@ namespace BridgeArchitect3D.UI
 			return ImageTexture.CreateFromImage(img);
 			}
 			var col = string.IsNullOrEmpty(m.Color) ? new Color(0.7f, 0.7f, 0.7f) : new Color(m.Color);
-			if (m.IsDeck) { for (int y = 12; y < 19; y++) for (int x = 2; x < 28; x++) Px(x, y, col); Line(5, 15, 25, 15, 1, new Color(0.95f, 0.92f, 0.75f)); }
+            if(m.DeviceKind=="pulley")
+            {
+                for(int y=0;y<N;y++)for(int x=0;x<N;x++){float r=new Vector2(x-15,y-15).Length();if(r>7&&r<11)Px(x,y,new Color("e5ba55"));}
+                Line(7,15,23,15,2,UiTheme.Text);Line(15,7,15,23,2,UiTheme.Text);
+                Line(4,15,4,28,2,UiTheme.Text);Line(26,15,26,28,2,UiTheme.Text);
+            }
+            else if(m.DeviceKind=="counterweight")
+            {
+                Line(15,1,15,9,2,UiTheme.Text);
+                for(int y=10;y<27;y++)for(int x=5;x<25;x++)Px(x,y,new Color("8c9eac"));
+                Line(8,14,22,14,2,new Color("e5ba55"));Line(8,23,22,23,2,new Color("e5ba55"));
+            }
+			else if (m.IsDeck) { for (int y = 12; y < 19; y++) for (int x = 2; x < 28; x++) Px(x, y, col); Line(5, 15, 25, 15, 1, new Color(0.95f, 0.92f, 0.75f)); }
 			else if (m.Extendable) { Line(4, 25, 16, 13, 7, col); Line(14, 15, 26, 4, 3, new Color(0.85f, 0.87f, 0.9f)); }
 			else if (m.ComponentType == ComponentType.Cable) Line(4, 26, 26, 4, 2, col);
 			else if (m.ComponentType == ComponentType.Column) { for (int y = 3; y < 27; y++) for (int x = 11; x < 19; x++) Px(x, y, col); }
@@ -574,6 +590,7 @@ namespace BridgeArchitect3D.UI
 			var vb = new VBoxContainer {SizeFlagsHorizontal=SizeFlags.ExpandFill};
 			scroll.AddChild(vb);_propertyContent=vb;
 			vb.MinimumSizeChanged+=()=>Callable.From(LayoutProperties).CallDeferred();
+			BuildLiveMetrics(vb);
 			_props = new RichTextLabel { BbcodeEnabled = true, FitContent = true, ScrollActive = false, CustomMinimumSize = new Vector2(270, 0) };
 			vb.AddChild(_props);
 			// 旧构件修复按钮（加固关）
@@ -622,12 +639,27 @@ namespace BridgeArchitect3D.UI
 			_tunnelRaiseLabel = new Label();
 			_tunnelPortalRow.AddChild(_tunnelRaiseLabel);
 			_tunnelPortalRow.AddChild(UiTheme.MakeButton("+", () => _ctl.TunnelAction("lift:+1"), 36));
-			_tunnelGate = UiTheme.MakeButton(Loc.T("电梯按本关车辆自动配"), () => _ctl.TunnelAction("liftauto"), 240);
-			_tunnelGate.TooltipText = Loc.T("选能装下并承载本关所有车辆的最短平台（最省钱）");
+			_tunnelGate = UiTheme.MakeButton(Loc.T("重建电梯结构（按本关车辆）"), () => _ctl.TunnelAction("liftauto"), 240);
+			_tunnelGate.TooltipText = Loc.T("删掉两个井道里的电梯构件，按本关车辆选平台长度，并用最便宜的够用模板重新搭出平台、吊索和柱子；之后可以像建桥一样逐根修改");
 			_tunnelPump = new Button { Visible = false };
 			_tunnelBox.AddChild(_tunnelPortalRow);
 			_tunnelBox.AddChild(_tunnelGate);
+			_liftSummary = UiTheme.MakeLabel("", 12, UiTheme.Muted);
+			_liftSummary.AutowrapMode = TextServer.AutowrapMode.WordSmart; _liftSummary.CustomMinimumSize = new Vector2(240, 0);
+			_tunnelBox.AddChild(_liftSummary);
+            BuildOperationChoices(_tunnelBox);
 			vb.AddChild(_tunnelBox);
+			// Lift sheave node (top of a hoist rope): drive and counterweight
+			_sheaveBox = new VBoxContainer { Visible = false };
+			_sheaveLabel = UiTheme.MakeLabel("", 13, UiTheme.Accent);
+			_sheaveLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart; _sheaveLabel.CustomMinimumSize = new Vector2(240, 0);
+			_sheaveBox.AddChild(_sheaveLabel);
+			_driveRow = new HBoxContainer(); _sheaveBox.AddChild(_driveRow);
+			var cwRow = new HBoxContainer();
+			cwRow.AddChild(UiTheme.MakeButton(Loc.T("配重 −"), () => _ctl.TunnelAction("liftset:cw:-1"), 118));
+			cwRow.AddChild(UiTheme.MakeButton(Loc.T("配重 +"), () => _ctl.TunnelAction("liftset:cw:1"), 118));
+			_sheaveBox.AddChild(cwRow);
+			vb.AddChild(_sheaveBox);
 			// Movable bridge: deck lock on a node, bascule leaf on a hydraulic member, split a member at its midpoint
 			_lockBtn = UiTheme.MakeButton(Loc.T("设为中央锁扣"), () => _ctl.MechanismAction(_lockIsSet ? "unlock" : "lock"), 240);
 			_lockBtn.TooltipText = Loc.T("把桥面接缝节点拆成左右两个节点：闭合时锁扣传递力，解锁后两侧完全分开");
@@ -713,14 +745,37 @@ namespace BridgeArchitect3D.UI
 		private HBoxContainer _tunnelPortalRow;
 		private Button _tunnelGate, _tunnelPump;
 
-		/// <summary>Portal protection readout of the tunnel row.</summary>
-		/// <summary>Lift row: platform length, what fits and what it carries.</summary>
-		public void SetLiftRow(double length)
+		private Label _liftSummary;
+		private VBoxContainer _sheaveBox;
+		private Label _sheaveLabel;
+		private HBoxContainer _driveRow;
+
+		/// <summary>Lift row on a tube element: platform length and the state of both lifts (built from members in the map).</summary>
+		public void SetLiftRow(double length, string summary,string operation=LiftOperation.Shared)
 		{
 			if (_tunnelRaiseLabel == null) return;
 			var lc = TunnelRules.LiftCfg;
-			_tunnelRaiseLabel.Text = Loc.F("平台 {0:0} m\n总载重 {1:0} 吨\n支持多车合乘",length,TunnelRules.LiftCapacity(length)/9810);
-			_tunnelRaiseLabel.TooltipText = Loc.F("两岸各一部，平台 {0:0}~{1:0} m，速度 {2:0.#} m/s；费用 = 井道 ${3:0}/m（高度）+ 平台 ${4:0}/m（长度）", (lc.MinLength), (lc.MaxLength), (lc.Speed), (lc.ShaftCostPerMeter), (lc.PlatformCostPerMeter));
+			_tunnelRaiseLabel.Text = Loc.F("平台 {0:0} m\n能装车身 ≤ {1:0.#} m\n{2}", (length), (TunnelRules.LiftFits(length)),LiftOperation.Name(operation));
+			_tunnelRaiseLabel.TooltipText = Loc.F("两岸各一部，平台 {0:0}~{1:0} m，速度 {2:0.#} m/s；也可以直接拖动平台外端节点改长度。载重由你在井道里搭的平台、吊索和柱子决定", (lc.MinLength), (lc.MaxLength), (lc.Speed));
+			if (_liftSummary != null) _liftSummary.Text = summary;
+            MarkOperation(operation);
+		}
+
+		/// <summary>Machine row on a selected sheave node (top of a hoist rope): drive and counterweight of both lifts.</summary>
+		public void SetSheaveRow(bool visible, LiftDesign lift = null, GameDatabase db = null)
+		{
+			if (_sheaveBox == null) return;
+			_sheaveBox.Visible = visible && lift != null && db != null;
+			if (!_sheaveBox.Visible) return;
+			var c = Physics.LiftStructure.Cfg(db);
+			if (_driveRow.GetChildCount() == 0)
+				foreach (var (id, dr) in c.Drives)
+				{
+					var b = UiTheme.MakeButton(Loc.F("{0}\n{1:0} kN ${2:0}", (dr.Name), (dr.Force / 1000), (dr.Cost)), () => _ctl.TunnelAction("liftset:drive:" + id), 80);
+					b.SetMeta("drive", id); _driveRow.AddChild(b);
+				}
+			foreach (var ch in _driveRow.GetChildren()) if (ch is Button b) b.Disabled = (string)b.GetMeta("drive") == lift.Drive;
+			_sheaveLabel.Text = Loc.F("电梯滑轮：配重 {0:0} 吨（每 {1:0} 吨 ${2:0}），两岸共用", (lift.Counterweight), (c.CounterweightStep), (c.CounterweightStep * c.CounterweightCostPerTonne));
 		}
 		private TunnelTypeConfig _tunnelRowType;
 		public bool TunnelApplyAll => _tunnelAll?.ButtonPressed ?? false;
@@ -753,14 +808,10 @@ namespace BridgeArchitect3D.UI
 					if (c is Button b && b.HasMeta(meta)) b.Disabled = (string)b.GetMeta(meta) == current && !TunnelApplyAll;
 			}
 			Mark(_tunnelGrades, "grade", grade);
-			_tunnelBuoy.Visible = _tunnelCableRow.Visible = _tunnelCableKinds.Visible = type.IsFloating;
-			if (type.IsFloating)
-			{
-				Mark(_tunnelBuoy, "buoy", buoyancy);
-				Mark(_tunnelCableKinds, "cable", cable);
-				_tunnelCableLabel.Text = Loc.F("  锚索 {0} 根  ", (cables));
-
-			}
+			// Anchor cables are built by the player as members now: only the buoyancy level stays a tube setting
+			_tunnelBuoy.Visible = type.IsFloating;
+			_tunnelCableRow.Visible = _tunnelCableKinds.Visible = false;
+			if (type.IsFloating) Mark(_tunnelBuoy, "buoy", buoyancy);
 			else if (type.IsShield)
 			{
 				_tunnelReinforce.Text = reinforced ? Loc.T("取消注浆加固") : Loc.F("注浆加固地层 ${0:0}/m", (type.ReinforceCostPerMeter));
@@ -782,9 +833,12 @@ namespace BridgeArchitect3D.UI
 			{
 				string Pf(double u) => $"[color={(u >= 1 ? "#e04436" : u >= cfg.RiskOrange ? "#ef8a2e" : u >= cfg.RiskYellow ? "#e8c33a" : "#4caf50")}]{u * 100:0}%[/color]";
 				double t = 1000 * cfg.Gravity;
-				sb.Append(Loc.F("{0} · {1} 根{2}\n", (g.Buoy[i].Name), (g.CableCount[i]), (g.Cable[i].Name)));
+				sb.Append(Loc.F("{0}（配重 {1:0.#} 吨/m）\n", (g.Buoy[i].Name), (Physics.TunnelStructure.Ballast(g, level, cfg, i) / 1000)));
 				sb.Append(Loc.F("水压 {0:0} / {1:0} kPa  {2}\n", (st.Pressure[i] / 1000), (g.Grade[i].PressureCapacity / 1000), Pf(st.PressureUtil[i])));
-				sb.Append(Loc.F("锚索拉力 {0:0} / {1:0} 吨（每根）  {2}\n", (st.Tension[i] / t), (g.Cable[i].Capacity / t), Pf(st.CableUtil[i])));
+				sb.Append(Loc.F("净上浮力 {0:0} 吨/节 → 管身 → 接缝 → 你建的锚索\n", (st.NetBuoyancy[i] / t)));
+				sb.Append(Loc.F("接缝弯矩 {0:0.0} / {1:0.0} MN·m  {2}\n", (System.Math.Abs(st.Moment[i]) / 1e6), (Physics.TunnelStructure.JointMomentCapacity(g.Type, g.Grade[i]) / 1e6), Pf(st.BendUtil[i])));
+				if (st.LoadPath[i] != null) sb.Append(st.LoadPath[i]).Append('\n');
+				sb.Append(Loc.F("横向摆动（简化估算）{0:0} cm，不参与判定\n", (st.Sway[i] * 100)));
 				sb.Append(Loc.F("强度利用率 {0}", Pf(st.Util[i])));
 			}
 			else if (st != null && i < st.Count && g.Type.IsShield)
@@ -800,6 +854,9 @@ namespace BridgeArchitect3D.UI
 			{
 				string Pct(double u) => $"[color={(u >= 1 ? "#e04436" : u >= cfg.RiskOrange ? "#ef8a2e" : u >= cfg.RiskYellow ? "#e8c33a" : "#4caf50")}]{u * 100:0}%[/color]";
 				sb.Append(Loc.F("水压 {0:0} / {1:0} kPa  {2}\n", (st.Pressure[i] / 1000), (g.Grade[i].PressureCapacity / 1000), Pct(st.PressureUtil[i])));
+				sb.Append(Loc.F("净重 {0:0} 吨/节 → 管身 → 接缝 → 你建的桥墩 / 柱子\n", (-st.NetBuoyancy[i] / (1000 * cfg.Gravity))));
+				sb.Append(Loc.F("接缝弯矩 {0:0.0} / {1:0.0} MN·m  {2}\n", (System.Math.Abs(st.Moment[i]) / 1e6), (Physics.TunnelStructure.JointMomentCapacity(g.Type, g.Grade[i]) / 1e6), Pct(st.BendUtil[i])));
+				if (st.LoadPath[i] != null) sb.Append(st.LoadPath[i]).Append('\n');
 				sb.Append(Loc.F("强度利用率 {0}", Pct(st.Util[i])));
 			}
 			return sb.ToString();
@@ -1079,10 +1136,11 @@ namespace BridgeArchitect3D.UI
 			_statusLabel.AddThemeColorOverride("font_color", c);
 		}
 
-		public void ShowProperties(string bbcode)
+		public void ShowProperties(string bbcode, System.Collections.Generic.IReadOnlyList<LivePropertyMetric> metrics=null)
 		{
 			_rightPanel.Visible = !string.IsNullOrEmpty(bbcode);
 			_props.Text = bbcode ?? "";
+            SetLiveMetrics(metrics,bbcode);
 			Callable.From(LayoutProperties).CallDeferred();
 		}
 
@@ -1319,10 +1377,24 @@ namespace BridgeArchitect3D.UI
 		// ---------------- 属性文本 ----------------
 		public static string NodeProperties(BridgeNode n, LevelDefinition level, BridgeDesign d, BridgeSimulation stat)
 		{
+            if(n.Provided)return Loc.F("[b]关卡提供的固定节点[/b]\n位置：{0}\n隧道、通道和外部支撑不占电梯预算，不能移动或删除。请在两岸电梯井内设计平台、吊索与井架。",n.Position);
 			if(n.TunnelPoint)return Loc.F("[b]隧道路线控制点[/b]\n位置：X {0:0.00} m · 底部标高 {1:0.00} m\n",n.Position.X,n.Position.Y)
-				+Loc.T("[color=#21c6e1]拖动青色圆点：调整埋深（两端贴合岸壁，只能上下）\n双击圆点：放大后精细调整[/color]\n两岸垂直电梯随端点自动连接。\n每个管节接缝上都有圆点（沉管只有两端），角度变化时管节自动拼合。点击管体可选择管节。\n连接混凝土构件请使用橙色方形支点。");
-			var sb = new StringBuilder();
+				+Loc.T("[color=#21c6e1]拖动青色圆点：调整埋深（两端贴合岸壁，只能上下）\n双击圆点：放大后精细调整[/color]\n两岸垂直电梯随端点自动连接。\n每个管节接缝上都有圆点（沉管只有两端），角度变化时管节自动拼合。点击管体可选择管节。\n管底橙色方点是接缝连接点：在下面立桥墩 / 柱子或拉锚索来承担管身。");
+            var sb = new StringBuilder();
+            if(n.Pulley)sb.Append("[b]定滑轮[/b] · 额定轴载 600 kN · $1800\n两段钢索为一根连续绳索，两侧等张力；Shift 用滑轮工具点击拆除。\n");
+            if(n.CounterweightTonnes>0)sb.Append($"[b]配重块 {n.CounterweightTonnes:0} 吨[/b] · 自重 {n.CounterweightTonnes*9.81:0.0} kN · ${n.CounterweightTonnes*260:0}\n用配重工具点击增重，Shift 点击减重。\n");
 			sb.Append(n.IsAnchor ? Loc.F("[b]固定锚点 {0}[/b]\n", (n.AnchorId)) : n.PierBase ? Loc.F("[b]桥墩基础 #{0}[/b]\n", (n.Id)) : Loc.F("[b]节点 #{0}[/b]{1}\n", (n.Id), ((n.PierPart ? Loc.T("（桥墩支点）") : ""))));
+            if(n.Pulley && stat?.Output.Stable==true && stat.Model.NodeIndex.TryGetValue(n.Id,out int pulleyIndex))
+            {
+                double fx=0,fy=0;
+                foreach(var rope in d.Members.Where(m=>stat.Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==n.Id||m.EndNodeId==n.Id)))
+                    if(stat.Model.MemberIndex.TryGetValue(rope.Id,out int k))
+                    {
+                        double t=stat.Output.AxialForce[k],sign=rope.StartNodeId==n.Id?1:-1;
+                        fx+=sign*t*stat.Model.Cos[k];fy+=sign*t*stat.Model.Sin[k];sb.Append($"钢索 #{rope.Id} 张力 {System.Math.Max(0,t)/1000:0.0} kN\n");
+                    }
+                sb.Append($"滑轮轴合力 {System.Math.Sqrt(fx*fx+fy*fy)/1000:0.0} / 600 kN\n");
+            }
 			if (n.IsTunnelSupport)
 			{
 				var db = stat?.Db ?? Core.GameManager.Instance?.Db;
@@ -1331,8 +1403,9 @@ namespace BridgeArchitect3D.UI
 				int j = n.TunnelJoint;
 				if (g != null && j > 0 && j < g.Count)
 				{
-					var gr = g.Grade[j - 1].SupportLoad <= g.Grade[j].SupportLoad ? g.Grade[j - 1] : g.Grade[j];
-					sb.Append(Loc.F("隧道支点（第 {0} 道接缝，{1}）\n地基：{2}\n支点承载力：{3:0} kN（比桥墩低）\n只能连接混凝土类建材\n", (j), (gr.Name), (zone.Name), (TunnelRules.SupportCapacity(db.TunnelConfig, gr, zone) / 1000)));
+					double cap = System.Math.Min(Physics.TunnelStructure.JointMomentCapacity(g.Type, g.Grade[j - 1]), Physics.TunnelStructure.JointMomentCapacity(g.Type, g.Grade[j]));
+					int held = d.Members.Count(m => m.StartNodeId == n.Id || m.EndNodeId == n.Id);
+					sb.Append(Loc.F("隧道接缝圆点（第 {0} 道接缝，管底）\n接缝抗弯 {1:0.0} MN·m\n这里接了 {2} 根构件{3}\n可以接桥墩、柱子、梁或钢索（不能接桥面）；构件在这里铰接\n", (j), (cap / 1e6), (held), (held == 0 ? Loc.T("：没有支撑，荷载只靠管身传到相邻接缝") : "")));
 				}
 			}
 			if (n.PierBase)
@@ -1374,6 +1447,7 @@ namespace BridgeArchitect3D.UI
 			var mat = db.GetMaterial(m.MaterialId);
 			var sb = new StringBuilder();
 			sb.Append(Loc.F("[b]构件 #{0}[/b]  {1}\n", (m.Id), (mat?.Name)));
+            if(m.Provided)sb.Append(Loc.T("[color=#a3afbf]关卡提供的固定设施 · 不计设计费用 · 不可修改[/color]\n"));
 			if (m.Existing)
 			{
 				string col = m.Condition >= 0.999 ? "#8ecdb1" : m.Condition >= 0.7 ? "#e3c384" : "#e3b67b";
@@ -1395,7 +1469,7 @@ namespace BridgeArchitect3D.UI
 					sb.Append(mat.BaseRule == BaseRule.Land ? Loc.T("基础：底端须在陆地上，形成固定基础\n") : Loc.T("基础：须建在地图锚点上，形成刚接基础\n"));
 					sb.Append(Loc.F("最大倾角：{0:0}°\n", (mat.MaxTiltDegrees)));
 				}
-				if (mat.Extendable) sb.Append(Loc.T("[color=#e3c384]行程固定 50%：仅选择收缩或伸展[/color]\n"));
+				if (mat.Extendable) sb.Append(Loc.F("液压行程：收缩 {0:0%} / 伸长 {1:0%}；驱动力 {2:0} 吨\n",mat.RetractRatio,mat.ExtendRatio,MaterialRatings.Tonnes(mat.ActuatorForce)));
 				if (!string.IsNullOrEmpty(mat.Description)) sb.Append($"[color=#a3afbf]{mat.Description}[/color]\n");
 			}
 			sb.Append($"\n[color=#a3afbf]{loadCase}[/color]\n");

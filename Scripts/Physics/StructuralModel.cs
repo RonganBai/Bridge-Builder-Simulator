@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using BridgeArchitect3D.Data;
@@ -14,6 +14,9 @@ namespace BridgeArchitect3D.Physics
     {
         public const double Gravity = 9.81; // m/s²
 
+        public readonly Dictionary<int,double> PulleyBearings=new();
+        public readonly List<PulleyRope> PulleyRopes=new();
+        public readonly HashSet<int> PulleyMembers=new();
         public int NodeCount;
         public int[] NodeIds;
         public double[] X, Y;
@@ -44,6 +47,19 @@ namespace BridgeArchitect3D.Physics
         /// <summary>Node positions as designed (mechanism motion changes X / Y during a test).</summary>
         public double[] X0, Y0;
         public readonly Dictionary<int, int> MemberIndex = new();
+
+        /// <summary>A model with no nodes or members, to be filled with TunnelStructure.AddNode / AddMember.</summary>
+        public static StructuralModel Empty() => new StructuralModel
+        {
+            NodeIds = Array.Empty<int>(), X = Array.Empty<double>(), Y = Array.Empty<double>(), X0 = Array.Empty<double>(), Y0 = Array.Empty<double>(),
+            FixX = Array.Empty<bool>(), FixY = Array.Empty<bool>(), FixRot = Array.Empty<bool>(), IsAnchor = Array.Empty<bool>(), IsFoundation = Array.Empty<bool>(),
+            AnchorMaxLoad = Array.Empty<double>(), AnchorIds = Array.Empty<string>(), Alias = Array.Empty<int>(), AliasRot = Array.Empty<bool>(),
+            PierFoundation = Array.Empty<FoundationType>(), ScourZone = Array.Empty<bool>(), TunnelOf = Array.Empty<int>(),
+            MemberIds = Array.Empty<int>(), A = Array.Empty<int>(), B = Array.Empty<int>(), Length = Array.Empty<double>(), Cos = Array.Empty<double>(), Sin = Array.Empty<double>(),
+            EA = Array.Empty<double>(), EI = Array.Empty<double>(), Mass = Array.Empty<double>(), Pinned = Array.Empty<bool>(), Mat = Array.Empty<MaterialDefinition>(),
+            Broken = Array.Empty<bool>(), Slack = Array.Empty<bool>(), ReleaseA = Array.Empty<bool>(), ReleaseB = Array.Empty<bool>(),
+            Prestrain = Array.Empty<double>(), Condition = Array.Empty<double>(), Existing = Array.Empty<bool>(), NodeLoadY = Array.Empty<double>()
+        };
 
         public static StructuralModel Build(BridgeDesign design, LevelDefinition level, GameDatabase db)
         {
@@ -134,6 +150,7 @@ namespace BridgeArchitect3D.Physics
             m.PierFoundation = new FoundationType[n];
             m.ScourZone = new bool[n];
             m.TunnelOf = new int[n];
+            m.NodeLoadY = new double[n];
             // 桥墩墩底：固定支座（约束 X、Y 与转角），承载力取决于地基（软土 / 岩石）与基础类型（浅基础 / 桩基础）
             for (int i = 0; i < n; i++)
             {
@@ -147,22 +164,11 @@ namespace BridgeArchitect3D.Physics
                 m.PierFoundation[i] = node.Foundation;
                 m.ScourZone[i] = zone.Scour;
             }
-            // Underwater tunnel support points (element joints): fixed like a pier foundation; capacity from the
-            // weaker of the two joined elements and the soil
-            var tgeo = TunnelGeometry.Build(design, db);
-            for (int i = 0; i < n && tgeo != null; i++)
-            {
-                var node = design.Nodes[i];
-                if (!node.IsTunnelSupport || node.TunnelJoint >= tgeo.Count) continue;
-                int j = node.TunnelJoint;
-                var grade = tgeo.Grade[j - 1].SupportLoad <= tgeo.Grade[j].SupportLoad ? tgeo.Grade[j - 1] : tgeo.Grade[j];
-                var zone = level.Terrain.ZoneAt(node.Position.X);
-                m.FixX[i] = true; m.FixY[i] = true; m.FixRot[i] = true;
-                m.IsAnchor[i] = true;
-                m.AnchorIds[i] = Loc.F("隧道支点 #{0}（{1}，{2}）", (node.Id), (grade.Name), (zone.Name));
-                m.AnchorMaxLoad[i] = TunnelRules.SupportCapacity(db.TunnelConfig, grade, zone);
-                m.TunnelOf[i] = j;
-            }
+            // Immersed / floating tube: model-only beam chain pinned at the bank shafts; carried only by player members
+            var tubeGeo = TunnelGeometry.Build(design, db);
+            TunnelStructure.Append(m, design, level, db, tubeGeo);
+            // Bank lifts: pit bases, platform guide, lining ties and the counterweight on the sheaves
+            if (tubeGeo != null) LiftStructure.ApplySupports(m, LiftStructure.Analyze(design, level, db, TunnelRules.Shafts(level, tubeGeo)), level.MechanicalLift?0:design.Tunnel?.Lift?.Counterweight ?? 0);
             for (int k = 0; k < c; k++)
             {
                 var mat = m.Mat[k];
@@ -187,6 +193,7 @@ namespace BridgeArchitect3D.Physics
                 if(m.NodeIndex.TryGetValue(joint.NodeA,out int a) && m.NodeIndex.TryGetValue(joint.NodeB,out int b) &&
                    Math.Abs(m.X[a]-m.X[b])<=BasculeSystem.AlignTolerance && Math.Abs(m.Y[a]-m.Y[b])<=BasculeSystem.AlignTolerance)
                 {m.Alias[b]=a;m.AliasRot[b]=true;}
+            LiftMechanics.ConfigureModel(m,design,level,db);
             return m;
         }
 
@@ -204,7 +211,7 @@ namespace BridgeArchitect3D.Physics
             AnchorMaxLoad = Grow(AnchorMaxLoad, 0.0); AnchorIds = Grow(AnchorIds, (string)null);
             Alias = Grow(Alias, -1); AliasRot = Grow(AliasRot, false);
             FixRot = Grow(FixRot, false); IsFoundation = Grow(IsFoundation, false);
-            PierFoundation = Grow(PierFoundation, FoundationType.None); ScourZone = Grow(ScourZone, false); TunnelOf = Grow(TunnelOf, 0);
+            PierFoundation = Grow(PierFoundation, FoundationType.None); ScourZone = Grow(ScourZone, false); TunnelOf = Grow(TunnelOf, 0); NodeLoadY = Grow(NodeLoadY, 0.0);
             NodeIndex[-NodeIds[i]] = j;
             foreach (int k in memberIndices)
             {
@@ -231,6 +238,10 @@ namespace BridgeArchitect3D.Physics
         public bool[] ScourZone;
         /// <summary>Tunnel section id of a tunnel support node (0 = none).</summary>
         public int[] TunnelOf;
+        /// <summary>Extra fixed vertical load per node, N (down negative): lift counterweights on their sheaves.</summary>
+        public double[] NodeLoadY = Array.Empty<double>();
+        /// <summary>Model member index of each tube element / node index of each tube joint (empty = no structural tube).</summary>
+        public int[] TubeMember = Array.Empty<int>(), TubeNode = Array.Empty<int>();
 
         /// <summary>节点转角被约束（立柱刚接基础）。</summary>
         public bool[] FixRot;

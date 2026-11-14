@@ -7,6 +7,7 @@ namespace BridgeArchitect3D.Data
     public enum HarborOperation { RoadOpen, Draining, LoweringGates, Opening, ShipPassage, Closing, RaisingGates }
     public sealed class HarborCar
     {
+        public int Direction { get; internal set; }=1;
         public long Id { get; internal set; }
         public VehicleDefinition Definition { get; internal set; }
         public double Front { get; internal set; }
@@ -38,6 +39,7 @@ namespace BridgeArchitect3D.Data
         private double _accumulator,_stateTime,_nextSpawn;
         private int _nextVehicle,_nextShip;
         private long _nextId;
+        private readonly bool _bidirectional;
         private HarborBoat _crossing;
         public double Time { get; private set; }
         public HarborOperation Operation { get; private set; }=HarborOperation.RoadOpen;
@@ -59,9 +61,10 @@ namespace BridgeArchitect3D.Data
             HarborOperation.RaisingGates=>HarborTimeline.Smooth(_stateTime/2),
             _=>0
         };
-        public HarborTraffic(IEnumerable<VehicleDefinition> definitions,double waterLevel=HarborTimeline.WaterLevel,double closedNavigationBottom=HarborTimeline.ClosedNavigationBottom)
+        public HarborTraffic(IEnumerable<VehicleDefinition> definitions,double waterLevel=HarborTimeline.WaterLevel,double closedNavigationBottom=HarborTimeline.ClosedNavigationBottom,bool bidirectional=false)
         {
             if(!double.IsFinite(waterLevel) || !double.IsFinite(closedNavigationBottom))throw new ArgumentOutOfRangeException(nameof(waterLevel));
+            _bidirectional=bidirectional;
             _waterLevel=waterLevel;_closedNavigationBottom=closedNavigationBottom;
             _fleet=definitions.Where(v=>v.Kind!="tank" && v.Kind!="train" && v.Kind!="pedestrians")
                 .OrderBy(v=>v.Id=="car"?0:1).ThenBy(v=>v.Id).ToArray();
@@ -88,9 +91,10 @@ namespace BridgeArchitect3D.Data
         {
             if(Time<_nextSpawn)return;var definition=_fleet[_nextVehicle%_fleet.Length];
             if(_cars.Any(c=>c.Definition.Id==definition.Id))return;
-            var last=_cars.OrderBy(c=>c.Front).FirstOrDefault();
+            int direction=_bidirectional&&_nextVehicle%2==1?-1:1;
+            var last=_cars.Where(c=>c.Direction==direction).OrderBy(c=>c.Front).FirstOrDefault();
             if(last!=null && last.Rear<HarborTimeline.SpawnX+Math.Max(3,definition.FollowGap))return;
-            _cars.Add(new HarborCar {Id=_nextId++,Definition=definition,CruiseSpeed=CruiseSpeedFor(definition),Front=HarborTimeline.SpawnX});
+            _cars.Add(new HarborCar {Id=_nextId++,Direction=direction,Definition=definition,CruiseSpeed=CruiseSpeedFor(definition),Front=HarborTimeline.SpawnX});
             _nextVehicle++;_nextSpawn=Time+3.8;
         }
         private void BeginDrain()
@@ -104,9 +108,10 @@ namespace BridgeArchitect3D.Data
         }
         private void MoveCars()
         {
-            HarborCar leader=null;
+            var leaders=new Dictionary<int,HarborCar>();
             foreach(var car in _cars.OrderByDescending(c=>c.Front))
             {
+                var leader=leaders.GetValueOrDefault(car.Direction);
                 double gap=Math.Max(3,car.Definition.FollowGap),limit=double.PositiveInfinity,leaderSpeed=0;
                 double obstruction=double.PositiveInfinity;
                 if(leader!=null){obstruction=leader.Rear;leaderSpeed=leader.Speed;limit=leader.Rear-gap;}
@@ -132,9 +137,9 @@ namespace BridgeArchitect3D.Data
                 if(Time<car.ReactionUntil)speed=0;
                 double front=car.Front+(car.Speed+speed)*FixedStep/2;
                 if(front>limit){front=Math.Max(car.Front,limit);speed=Math.Min(speed,Math.Max(0,(front-car.Front)/FixedStep));}
-                car.Front=front;car.Speed=speed;leader=car;
+                car.Front=front;car.Speed=speed;leaders[car.Direction]=car;
                 // Emergency mode is latched for this trip, including subsequent traffic stops.
-                if(car.Definition.Kind=="ambulance" && speed>=Math.Min(6,car.CruiseSpeed*0.65))car.EmergencyLightsOn=true;
+                if((car.Definition.Kind is "ambulance" or "police" or "police_suv" or "fire_engine" or "utility" or "crane" or "garbage" or "pump" or "modular" or "tractor") && speed>=Math.Min(6,car.CruiseSpeed*0.65))car.EmergencyLightsOn=true;
             }
             _cars.RemoveAll(c=>c.Rear>=HarborTimeline.RightPortal+35);
         }

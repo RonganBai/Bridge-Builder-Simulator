@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using BridgeArchitect3D.Data;
@@ -99,6 +99,7 @@ namespace BridgeArchitect3D.Building
         {
             StressView = on;
             RefreshStatic();
+            if(on && StaticSim!=null && !StaticSim.Output.Stable)Message?.Invoke(Loc.T("结构不稳定，无法计算有效受力：灰色表示尚无有效结果。请补齐平台、吊索和井架支撑后再查看。"),true);
             Recolor();
             SelectionChanged?.Invoke();
         }
@@ -150,8 +151,8 @@ namespace BridgeArchitect3D.Building
             if (SelectedMemberId >= 0) _hlMembers.Add(SelectedMemberId);
             if (_hintNode >= 0 && Editor.Design.Members.Count == 0) _hlNodes.Add(_hintNode);
             foreach (var id in _problemMembers) _hlMembers.Add(id);
-            bool stress = StressView && StaticSim != null && StaticSim.Output.Stable;
-            _renderer.ColorForBuild(_hlNodes, _hlMembers, _hoverNode, _hoverMember, stress ? StaticSim.Model : null, stress ? StaticSim.Status : null);
+            bool stress = StressView && StaticSim != null;
+            _renderer.ColorForBuild(_hlNodes, _hlMembers, _hoverNode, _hoverMember, stress ? StaticSim.Model : null, stress && StaticSim.Output.Stable ? StaticSim.Status : null);
             _renderer.RefreshBowIfNeeded();
         }
 
@@ -180,8 +181,10 @@ namespace BridgeArchitect3D.Building
             var access=new TunnelAccessPlan(Editor.Level,geometry);
             if(destination=="entry"||destination=="exit")
             {
-                var p=destination=="entry"?access.Entry:access.Exit;
-                camera.FrameDiagnostic(new Vector3((float)p.X,(float)p.Y+3,0),new Vector3(30,18,0));
+                var shaft=destination=="entry"?access.Left:access.Right;
+                float lower=(float)Physics.LiftStructure.PitY(Editor.LiftCfgOf,shaft)-2;
+                float upper=(float)Physics.LiftStructure.HeadY(Editor.LiftCfgOf,shaft)+2;
+                camera.FrameDiagnostic(new Vector3((float)(shaft.X0+shaft.X1)/2,(lower+upper)/2,0),new Vector3((float)(shaft.X1-shaft.X0)+12,upper-lower+8,0),2000);
             }
             else
             {
@@ -197,7 +200,7 @@ namespace BridgeArchitect3D.Building
         private int TunnelHandleAtMouse(int ignore=-1)
         {
             int best=-1;float distance=14;
-            foreach(var n in Editor.Design.Nodes.Where(n=>n.IsTunnelNode&&n.Id!=ignore))
+            foreach(var n in Editor.Design.Nodes.Where(n=>(n.IsTunnelNode||Editor.Level.ProvidedInfrastructure!=null)&&!n.Provided&&n.Id!=ignore))
             {
                 var world=new Vector3((float)n.Position.X,(float)n.Position.Y,BuildPlane.FrontZ);
                 if(_camera.IsPositionBehind(world))continue;
@@ -452,6 +455,13 @@ namespace BridgeArchitect3D.Building
                 _cursor.Position = new Vector3(snapped.X, snapped.Y, BuildPlane.FrontZ);
                 text = ok ? Loc.F("移动到 ({0:0.00}, {1:0.00})", (snapped.X), (snapped.Y)) : reason;
             }
+            else if(mat!=null && Editor.Db.GetMaterial(mat).DeviceKind!=null)
+            {
+                string reason=Editor.DeviceProblem(sn?.Id??-1,mat,Input.IsKeyPressed(Key.Shift));ok=reason==null;
+                _cursor.Visible=true;_cursor.Position=new Vector3(snapped.X,snapped.Y,BuildPlane.FrontZ);
+                _cursor.MaterialOverride=ok?_mm.PreviewOk:_mm.PreviewBad;
+                text=reason??(Editor.Db.GetMaterial(mat).DeviceKind=="pulley"?"点击安装定滑轮（$1800）；Shift 点击拆除":"点击挂载 5 吨配重（$1300）；Shift 点击减重");
+            }
             else if (mat != null && Editor.Db.GetMaterial(mat).IsPier)
             {
                 // 桥墩工具：点击河道中的位置（或桥面节点）从河床立起桥墩
@@ -544,7 +554,7 @@ namespace BridgeArchitect3D.Building
             if(_dragNode<0&&handle>=0&&Editor.Design.FindNode(handle) is { } node)
                 text=node.TunnelPoint?Loc.T("青色控制点：拖动调整埋深（两端只能沿岸壁上下）；双击放大；电梯随端点自动更新")
                     :Loc.T("橙色结构支点：可连接混凝土构件；路线请拖动青色控制点");
-            else if(text==null&&Editor.TunnelElementAt(p.X,p.Y)>=0)text=Loc.T("点击管节：设置等级；上下拖动接缝圆点调整埋深");
+            else if(text==null&&Editor.TunnelElementAt(p.X,p.Y)>=0)text=Editor.Level.ProvidedInfrastructure!=null?Loc.T("关卡提供的固定隧道：点击查看电梯设计设置"):Loc.T("点击管节：设置等级；上下拖动接缝圆点调整埋深");
             Preview?.Invoke(text, _lastMouse, ok);
             RefreshTunnelGuide();
             if (oldN != _hoverNode || oldM != _hoverMember) Recolor();
@@ -597,6 +607,7 @@ namespace BridgeArchitect3D.Building
                 default:
                 {
                     if (mat == null) break;
+                    if(Editor.Db.GetMaterial(mat).DeviceKind!=null){BuildClick(snapped,sn,mat);break;}
                     // 按在普通节点上：先不执行点击，等待判断是“点击”还是“长按拖动”
                     if (sn != null && !sn.IsAnchor && !sn.IsTunnelSupport)
                     {
@@ -633,6 +644,11 @@ namespace BridgeArchitect3D.Building
         /// <summary>建造工具的点击：选择起点，或连接到终点（已有节点或新位置）。</summary>
         private void BuildClick(Vector2 snapped, BridgeNode sn, string mat)
         {
+            if(Editor.Db.GetMaterial(mat).DeviceKind!=null)
+            {
+                var result=Editor.InstallDevice(sn?.Id??-1,mat,Input.IsKeyPressed(Key.Shift));
+                Message?.Invoke(result.Message,!result.Ok);return;
+            }
             if (Editor.Db.GetMaterial(mat).IsLift)
             {
                 // Lifts come with the tunnel; clicking selects the tunnel so the lift row shows

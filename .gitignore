@@ -9,3 +9,6 @@ export/
 Media/
 .hydraulic-fix-backups/
 work/
+
+# Local diagnostics and verification output
+*.log

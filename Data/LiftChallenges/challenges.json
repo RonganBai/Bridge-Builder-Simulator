@@ -1,0 +1,17 @@
+[
+  {
+    "LevelId": "level13",
+    "Design": "res://Data/LiftChallenges/level13_provided.json",
+    "BudgetFactor": 1.2
+  },
+  {
+    "LevelId": "level14",
+    "Design": "res://Data/LiftChallenges/level14_provided.json",
+    "BudgetFactor": 1.2
+  },
+  {
+    "LevelId": "level15",
+    "Design": "res://Data/LiftChallenges/level15_provided.json",
+    "BudgetFactor": 1.2
+  }
+]

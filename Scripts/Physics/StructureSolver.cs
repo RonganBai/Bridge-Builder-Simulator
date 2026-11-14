@@ -1,4 +1,4 @@
-using BridgeArchitect3D.Data;
+﻿using BridgeArchitect3D.Data;
 using System;
 
 namespace BridgeArchitect3D.Physics
@@ -37,9 +37,15 @@ namespace BridgeArchitect3D.Physics
                 SolveLinear(m, loads, o);
                 if (!o.Stable) return;
                 bool changed = false;
+                foreach(var rope in m.PulleyRopes)
+                {
+                    double elong=rope.Extension(m,o.Displacement);
+                    bool slack=elong < -1e-9;
+                    foreach(int k in rope.Members)if(m.Slack[k]!=slack){m.Slack[k]=slack;changed=true;}
+                }
                 for (int k = 0; k < m.MemberCount; k++)
                 {
-                    if (m.Broken[k] || !m.Mat[k].IsCable) continue;
+                    if (m.Broken[k] || !m.Mat[k].IsCable || m.PulleyMembers.Contains(k)) continue;
                     double elong = Elongation(m, o.Displacement, k);
                     if (!m.Slack[k] && elong < 0) { m.Slack[k] = true; changed = true; }
                     else if (m.Slack[k] && elong > 1e-9) { m.Slack[k] = false; changed = true; }
@@ -194,6 +200,7 @@ namespace BridgeArchitect3D.Physics
             for (int k = 0; k < m.MemberCount; k++)
             {
                 if (!m.IsActive(k)) continue;
+                if(m.PulleyMembers.Contains(k))continue;
                 GlobalStiffness(m, k);
                 int a = m.A[k], b = m.B[k];
                 for (int d = 0; d < 3; d++) { _idx[d] = _dofMap[3 * a + d]; _idx[3 + d] = _dofMap[3 * b + d]; }
@@ -208,6 +215,16 @@ namespace BridgeArchitect3D.Physics
                 }
             }
 
+            foreach(var rope in m.PulleyRopes)
+            {
+                if(!rope.Active(m))continue;
+                var g=rope.Gradient(m);double stiffness=rope.Stiffness(m);
+                foreach(var a in g)foreach(var b in g)
+                {
+                    int ia=_dofMap[3*(a.Key/2)+a.Key%2],ib=_dofMap[3*(b.Key/2)+b.Key%2];
+                    if(ia>=0&&ib>=0)_k[ia*nf+ib]+=stiffness*a.Value*b.Value;
+                }
+            }
             // 平动刚度与转角刚度量级不同，分别取最大对角元作为主元容差基准
             double maxT = 0, maxR = 0;
             for (int i = 0; i < 3 * n; i++)
@@ -285,6 +302,8 @@ namespace BridgeArchitect3D.Physics
                 double u1 = c * u[2 * a] + s * u[2 * a + 1], v1 = -s * u[2 * a] + c * u[2 * a + 1];
                 double u2 = c * u[2 * b] + s * u[2 * b + 1], v2 = -s * u[2 * b] + c * u[2 * b + 1];
                 double n = m.EA[k] / L * (u2 - u1);
+                if(m.PulleyMembers.Contains(k))
+                    foreach(var rope in m.PulleyRopes)if(Array.IndexOf(rope.Members,k)>=0){n=rope.Stiffness(m)*rope.Extension(m,u);break;}
                 double v = 0, m1 = 0, m2 = 0;
                 if (!m.Pinned[k])
                 {

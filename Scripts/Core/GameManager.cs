@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using BridgeArchitect3D.Data;
@@ -190,6 +190,7 @@ namespace BridgeArchitect3D.Core
             }
             if (Db != null)
             {
+                LiftChallengeRules.Load(Db,ReadRes("res://Data/LiftChallenges/challenges.json"),ReadRes);
                 // Built-in data stays available for "restore defaults"; player level settings replace it
                 foreach (var l in Db.Levels) _defaultLevels[l.Id] = GameDatabase.SerializeLevel(l);
                 if (!Benchmark.Requested(out _))
@@ -197,6 +198,7 @@ namespace BridgeArchitect3D.Core
                         if (SaveManager.LoadLevelOverride(id) is { } o)
                         {
                             o.Id = id;
+                            if(Db.GetLevel(id)?.ProvidedInfrastructure is {} supplied){if(o.ProvidedInfrastructure==null){o.Budget=Db.GetLevel(id).Budget;o.Name=Db.GetLevel(id).Name;o.StartDesign=null;o.StartHint=Db.GetLevel(id).StartHint;}o.ProvidedInfrastructure=supplied;o.MechanicalLift=Db.GetLevel(id).MechanicalLift;if(o.MechanicalLift)Physics.LiftMechanics.Enable(o,Db);}
                             if (Db.LevelError(o) is { } err) GD.PushWarning(Loc.F("关卡设置 {0} 无效，使用内置设置：{1}", (id), (err)));
                             else Db.ReplaceLevel(o);
                         }
@@ -345,14 +347,37 @@ namespace BridgeArchitect3D.Core
 
         private readonly System.Collections.Generic.Dictionary<string, string> _defaultLevels = new();
 
-        /// <summary>Level settings: replace this level's data for this player and restart it.</summary>
+        /// <summary>
+        /// Level settings: built-in levels get a per-player override; a custom level is saved straight back into its
+        /// own file (the same file the level designer edits), so both editors always show the same level. Restarts it.
+        /// </summary>
         public bool SaveLevelSettings(LevelDefinition level, out string error)
         {
-            error = Db.LevelError(level);
-            if (error != null || !SaveManager.SaveLevelOverride(level, out error)) return false;
-            if (!Db.ReplaceLevel(level)) { }   // custom level: ResolveLevel applies the override
+            var errs = LevelEditing.Validate(level, Db);
+            error = errs.Count > 0 ? string.Join("；", errs) : null;
+            if (error != null) return false;
+            if (CustomLevelBuilder.IsCustom(level.Id))
+            {
+                if (!SaveManager.SaveCustomLevel(level, out error)) return false;
+                SaveManager.RemoveLevelOverride(level.Id);   // older builds stored custom-level settings as an override
+            }
+            else
+            {
+                if (!SaveManager.SaveLevelOverride(level, out error)) return false;
+                Db.ReplaceLevel(level);
+            }
             StartLevel(level.Id, true);
             return true;
+        }
+
+        /// <summary>Saves a copy of a level (built-in or custom) as a new custom level; returns its id, or null.</summary>
+        public string SaveAsCustomLevel(LevelDefinition level, out string error)
+        {
+            var c = LevelEditing.AsCustom(level);
+            var errs = LevelEditing.Validate(c, Db);
+            error = errs.Count > 0 ? string.Join("；", errs) : null;
+            if (error != null || !SaveManager.SaveCustomLevel(c, out error)) return null;
+            return c.Id;
         }
 
         /// <summary>Level settings: back to the built-in (or designed) data.</summary>
@@ -380,9 +405,9 @@ namespace BridgeArchitect3D.Core
         {
             var lv = Db?.GetLevel(levelId);
             if (lv != null || !CustomLevelBuilder.IsCustom(levelId)) return lv;
-            if (SaveManager.LoadLevelOverride(levelId) is { } o && Db.LevelError(o) == null) { o.Id = levelId; return o; }
-            var spec = SaveManager.LoadCustomLevel(levelId);
-            return spec == null ? null : CustomLevelBuilder.Build(spec, Db);
+            // Older builds kept in-game settings of a custom level as an override; it wins until saved again
+            if (SaveManager.LoadLevelOverride(levelId) is { } o && Db.LevelError(o) == null) { o.Id = levelId;if(o.ProvidedInfrastructure!=null)Physics.LiftMechanics.Enable(o,Db); return o; }
+            return SaveManager.LoadCustomLevel(levelId, Db);
         }
 
         public string NextLevelId(string levelId)

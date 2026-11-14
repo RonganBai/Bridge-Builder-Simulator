@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -102,6 +102,71 @@ namespace BridgeArchitect3D.Data
         public double CapacityPerMeter { get; set; } = 25000;
         public double ShaftCostPerMeter { get; set; } = 300;
         public double PlatformCostPerMeter { get; set; } = 250;
+
+        // ---- Structural lift (LiftStructure): the platform, hoists and shaft are ordinary members in each shaft ----
+        /// <summary>Head room above the upper landing (sheave height), m; pit below the lower landing, m.</summary>
+        public double HeadRoom { get; set; } = 7;
+        public double Pit { get; set; } = 3;
+        /// <summary>Default shaft columns stand this far outside the platform ends, m (in the shaft end walls).</summary>
+        public double ColumnOffset { get; set; } = 0.3;
+        /// <summary>A node this close to a shaft end wall face is tied to the lining (held sideways), m.</summary>
+        public double TieTolerance { get; set; } = 0.2;
+        /// <summary>Longest shaft-column segment a template generates, m (below CrossBeams.MinLength).</summary>
+        public double ColumnSegment { get; set; } = 4.5;
+        public double MaxCounterweight { get; set; } = 60;
+        public double CounterweightStep { get; set; } = 5;
+        /// <summary>Counterweight price per tonne; lining tie (lateral restraint) price each.</summary>
+        public double CounterweightCostPerTonne { get; set; } = 60;
+        public double BraceCost { get; set; } = 150;
+        public Dictionary<string, LiftDriveConfig> Drives { get; set; } = new()
+        {
+            ["standard"] = new() { Name = Loc.T("标准驱动"), Force = 300e3, Cost = 3000 },
+            ["strong"] = new() { Name = Loc.T("加强驱动"), Force = 600e3, Cost = 5500 },
+            ["heavy"] = new() { Name = Loc.T("重型驱动"), Force = 1000e3, Cost = 9000 },
+        };
+        /// <summary>Starting layouts for "rebuild the lift structure": they only generate ordinary members, which the
+        /// player then edits with the normal build tools.</summary>
+        public Dictionary<string, LiftDesign> Templates { get; set; } = new()
+        {
+            ["light"] = new() { Template = "light", Deck = "road", TrussDepth = 1.5, Panel = 5, Web = "steel", Chord = "cable", Diagonal = "cable", Hoist = "cable", Column = "concrete", Drive = "standard", Counterweight = 5 },
+            ["standard"] = new() { Template = "standard", Deck = "deck_steel", TrussDepth = 2.5, Panel = 5, Web = "steel", Chord = "cable_composite", Diagonal = "cable_composite", Hoist = "cable", Column = "concrete", Drive = "strong", Counterweight = 20 },
+            ["heavy"] = new() { Template = "heavy", Deck = "deck_steel", TrussDepth = 2.5, Panel = 4, Web = "steel", Chord = "cable_composite", Diagonal = "cable_composite", Hoist = "cable_composite", Column = "concrete", Drive = "heavy", Counterweight = 30 },
+        };
+        public static string TemplateName(string id) => id switch { "light" => Loc.T("轻型模板"), "standard" => Loc.T("标准模板"), "heavy" => Loc.T("重型模板"), _ => Loc.T("自定义") };
+    }
+
+    public class LiftDriveConfig
+    {
+        public string Name { get; set; }
+        /// <summary>Largest out-of-balance rope force the machine holds (|ropes − counterweight|), N.</summary>
+        public double Force { get; set; }
+        public double Cost { get; set; }
+    }
+
+    /// <summary>
+    /// Lift settings of both bank lifts (TunnelRoute.Lift). The structure itself (platform, hoist ropes, shaft
+    /// columns) is ordinary members in each shaft; this keeps the machine choice (drive, counterweight) and the
+    /// template the members were first generated from (Deck … Column).
+    /// </summary>
+    public class LiftDesign
+    {
+        public string BoardingPolicy { get; set; } = LiftOperation.Shared;
+        public string Template { get; set; }
+        public string Deck { get; set; } = "deck_steel";
+        /// <summary>Platform truss under the deck: depth (0 = deck only), panel length, web and bottom chord materials.</summary>
+        public double TrussDepth { get; set; } = 2.5;
+        public double Panel { get; set; } = 5;
+        public string Web { get; set; } = "steel";
+        public string Chord { get; set; } = "cable_composite";
+        /// <summary>Platform truss diagonals (tension in a hanging platform).</summary>
+        public string Diagonal { get; set; } = "cable_composite";
+        public string Hoist { get; set; } = "cable";
+        public string Column { get; set; } = "concrete";
+        public string Drive { get; set; } = "strong";
+        public double Counterweight { get; set; } = 20;
+        /// <summary>Members generated in the shafts (null = older save: generated once from the values above).</summary>
+        public int? Built { get; set; }
+        public LiftDesign Clone() => (LiftDesign)MemberwiseClone();
     }
 
     public class TunnelTypeConfig
@@ -114,6 +179,14 @@ namespace BridgeArchitect3D.Data
         /// <summary>Floating: water above the tube roof (ships, waves) and clearance below the tube, m.</summary>
         public double MinCover { get; set; }
         public double MinBedClearance { get; set; }
+        /// <summary>Immersed tube: highest the tube bottom may sit above the bed (room for the player's supports), m.</summary>
+        public double MaxBedClearance { get; set; }
+        // Longitudinal structure of the tube (immersed / floating): the tube is a chain of beam elements in the
+        // structural model. EA / EI of the element body, rotational stiffness of one joint (N·m/rad); a joint
+        // opens fully at the grade's JointRotation, so its moment capacity is JointStiffness × JointRotation.
+        public double TubeEA { get; set; } = 9e11;
+        public double TubeEI { get; set; } = 7.7e12;
+        public double JointStiffness { get; set; } = 8e8;
         public Dictionary<string, BuoyancyConfig> Buoyancy { get; set; } = new();
         public string DefaultBuoyancy { get; set; }
         public Dictionary<string, CableConfig> Cables { get; set; } = new();
@@ -216,8 +289,13 @@ namespace BridgeArchitect3D.Data
         /// <summary>Platform length of both bank lifts, m (null = the longest platform, fits every vehicle).
         /// PortalRaise / FloodGate / Pump are kept only so old saves load; lifts replaced the ramps and portals.</summary>
         public double? LiftLength { get; set; }
+        /// <summary>Structural tube version: null = older save whose tube had built-in supports / cable counts;
+        /// 1 = the tube is carried by the player's members (old capacity migrated into visible piers / cables once).</summary>
+        public int? Structure { get; set; }
+        /// <summary>Structure of both lifts (null = older save: its old platform capacity is migrated into a template once).</summary>
+        public LiftDesign Lift { get; set; }
         public TunnelRoute Clone() => new() { MaterialId = MaterialId, PointNodeIds = PointNodeIds.ToList(), Elements = Elements.Select(e => e.Clone()).ToList(), Cost = Cost,
-            PortalRaise = PortalRaise, FloodGate = FloodGate, Pump = Pump, LiftLength = LiftLength };
+            PortalRaise = PortalRaise, FloodGate = FloodGate, Pump = Pump, LiftLength = LiftLength, Structure = Structure, Lift = Lift?.Clone() };
     }
 
     /// <summary>Save version 4 tunnel section (read only, migrated to <see cref="TunnelRoute"/> on load).</summary>
@@ -253,8 +331,9 @@ namespace BridgeArchitect3D.Data
         /// <summary>Portal flood protection copied from the route.</summary>
         public double PortalRaise;
         public bool FloodGate, Pump;
-        /// <summary>Platform length of the bank lifts, m.</summary>
+        /// <summary>Platform length of the bank lifts, m, and their structure.</summary>
         public double LiftLength;
+        public LiftDesign Lift;
 
         public double MidX(int i) => (X0[i] + X1[i]) / 2;
         public double BottomMin(int i) => Math.Min(Y0[i], Y1[i]);
@@ -303,7 +382,7 @@ namespace BridgeArchitect3D.Data
             if (type == null || type.Grades.Count == 0) return null;
             // Lifts replaced ramps and portals: raise / gate / pump of old saves no longer do anything
             var lc = db.TunnelConfig.Lift ?? new LiftConfig();
-            var g = new TunnelGeometry { Material = mat, Type = type, LiftLength = Math.Clamp(r.LiftLength ?? lc.MaxLength, lc.MinLength, lc.MaxLength) };
+            var g = new TunnelGeometry { Material = mat, Type = type, LiftLength = Math.Clamp(r.LiftLength ?? lc.MaxLength, lc.MinLength, lc.MaxLength), Lift = r.Lift };
             foreach (int id in r.PointNodeIds) { var pn = d.FindNode(id); if (pn != null) g.Points.Add(pn.Position); }
             g.Points.Sort((a, b) => a.X.CompareTo(b.X));
             if (g.Points.Count < 2) return null;
@@ -469,16 +548,26 @@ namespace BridgeArchitect3D.Data
         public static double Cost(TunnelGeometry g, LevelDefinition level)
         {
             if (g == null) return 0;
+            if(level.MechanicalLift)return 0;
             var t = level.Terrain;
             // Both bank lifts: shaft height and platform length
             double c = 0;
-            foreach (var s in Shafts(level, g)) c += LiftCost(s.Top - s.Bottom, g.LiftLength);
+            // Lifts: every platform, rope, column, restraint, drive and counterweight at its material price
+            // Lift members are ordinary members (priced as members); here: drive, counterweight and shaft excavation per lift
+            var lc = LiftCfg;
+            foreach (var s in Shafts(level, g))
+            {
+                var drive = g.Lift == null ? null : lc.Drives.GetValueOrDefault(g.Lift.Drive ?? "");
+                c += (level.ProvidedInfrastructure==null?Math.Max(0, s.Top - s.Bottom) * lc.ShaftCostPerMeter:0) + (drive?.Cost ?? 0) + (g.Lift?.Counterweight ?? 0) * lc.CounterweightCostPerTonne;
+            }
+            if(level.ProvidedInfrastructure!=null)return c;
             double bed = BedY(t);
             for (int i = 0; i < g.Count; i++)
             {
                 double trench = Math.Max(0, bed - (g.Y0[i] + g.Y1[i]) / 2);
                 c += g.Len[i] * (g.Grade[i].CostPerMeter + (g.Reinforced[i] && g.Type.IsShield ? g.Type.ReinforceCostPerMeter : 0) + trench * g.Type.DredgeCostPerMeterDepth);
-                if (g.Type.IsFloating) c += g.Len[i] * g.Buoy[i].CostPerMeter + g.CableCount[i] * CableLength(g, t, i) * g.Cable[i].CostPerMeter;
+                // Anchor cables of floating tubes are ordinary members now (priced as members); only the buoyancy / ballast level
+                if (g.Type.IsFloating) c += g.Len[i] * g.Buoy[i].CostPerMeter;
                 if (g.Type.IsShield && _db?.TunnelConfig != null)
                     c += g.Len[i] * _db.TunnelConfig.Geo(SoilAt(t, g.MidX(i), (g.Y0[i] + g.Y1[i]) / 2 + g.Type.TubeHeight / 2)).ExcavationCost;
             }
@@ -495,7 +584,7 @@ namespace BridgeArchitect3D.Data
             double bed = BedY(t);
             if (type.IsFloating) { lo = bed + type.MinBedClearance; hi = t.WaterLevel - type.MinCover - type.TubeHeight; }
             else if (type.IsShield) { lo = bed - type.MaxDepthBelowBed; hi = bed - type.TubeHeight - 1; }
-            else { lo = bed - type.MaxTrenchDepth; hi = bed; }
+            else { lo = bed + type.MinBedClearance; hi = Math.Max(lo, Math.Min(bed + type.MaxBedClearance, (t.HasWater ? t.WaterLevel : bed + 99) - type.MinCover - type.TubeHeight)); }
             // Never deeper than the level's build area
             lo = Math.Max(lo, t.BuildMinY);
         }
@@ -504,7 +593,7 @@ namespace BridgeArchitect3D.Data
         public static double DefaultBottom(TerrainConfig t, TunnelTypeConfig type)
         {
             BottomRange(t, type, out double lo, out double hi);
-            return type.IsFloating ? Math.Max(lo, hi) : type.IsShield ? Math.Max(lo, bed() - type.TubeHeight - type.DefaultCover) : hi;
+            return type.IsFloating ? Math.Max(lo, hi) : type.IsShield ? Math.Max(lo, bed() - type.TubeHeight - type.DefaultCover) : lo;
             double bed() => BedY(t);
         }
 
@@ -560,12 +649,12 @@ namespace BridgeArchitect3D.Data
             if (t == null) return rows;
             bool sup = t.HasSupports;
             var head = new List<string> { Loc.T("等级"), Loc.T("价格 $/m"), Loc.T("承压 MPa"), Loc.T("自重 吨/m") };
-            if (sup) { head.Add(Loc.T("接缝转角 rad")); head.Add(Loc.T("支点承载 吨")); }
+            if (sup) { head.Add(Loc.T("接缝转角 rad")); head.Add(Loc.T("接缝抗弯 MN·m")); }
             rows.Add(head.ToArray());
             foreach (var g in t.Grades.Values)
             {
                 var r = new List<string> { g.Name, g.CostPerMeter.ToString("0"), (g.PressureCapacity / 1e6).ToString("0.00"), (g.MassPerMeter / 1000).ToString("0.#") };
-                if (sup) { r.Add(g.JointRotation.ToString("0.###")); r.Add((g.SupportLoad / 9810).ToString("0")); }
+                if (sup) { r.Add(g.JointRotation.ToString("0.###")); r.Add((t.JointStiffness * g.JointRotation / 1e6).ToString("0.#")); }
                 rows.Add(r.ToArray());
             }
             return rows;
@@ -578,11 +667,13 @@ namespace BridgeArchitect3D.Data
             var n = new List<string>();
             if (t == null) return n;
             n.Add(Loc.F("管身 {0:0.#} × {1:0.#} m，每节 {2:0} m；两端自动贴合岸壁，两岸自动配垂直电梯", (t.TubeWidth), (t.TubeHeight), (cfg.ElementLength)));
-            n.Add(Loc.T("只会因为材料强度不够而损坏：管片承压（水压 + 土压）") + (t.IsFloating ? Loc.T("、锚索拉力") : ""));
+            n.Add(t.IsShield ? Loc.T("只会因为材料强度不够而损坏：管片承压（水压 + 土压）")
+                : Loc.T("管身是结构里的连续梁，两端铰接在两岸电梯井，中间全靠你建的结构承担：管壁承压（水压）与接缝弯矩都要校核；支撑 / 锚索按普通构件校核，河床基础按浅基础 / 桩基础承载"));
             if (t.IsFloating)
             {
                 n.Add(Loc.T("浮力等级：") + string.Join(" · ", t.Buoyancy.Values.Select(b => Loc.F("{0} ×{1:0.00}（+${2:0}/m）", (b.Name), (b.Ratio), (b.CostPerMeter)))));
-                n.Add(Loc.F("锚索 0~{0} 根 / 节：", (t.MaxCableCount)) + string.Join(" · ", t.Cables.Values.Select(c => Loc.F("{0} {1:0} 吨（${2:0}/m）", (c.Name), (c.Capacity / 9810), (c.CostPerMeter)))));
+                n.Add(Loc.T("锚索自己建：选钢索或复合钢索，从管底接缝圆点拉到河床（自动生成锚块，可选浅基础 / 桩基础）、岸上锚点或其他结构；锚索只受拉，长度、角度、截面都计入。浮力越高锚索拉力越大；浮力越低，车辆越容易把管身压沉（锚索松弛后只靠管身抗弯）"));
+                n.Add(Loc.T("横向水流摆动是简化估算，只显示，不参与判定"));
                 n.Add(Loc.F("水面以下至少 {0:0.#} m，离河床至少 {1:0.#} m；不能在上面建桥", (t.MinCover), (t.MinBedClearance)));
             }
             else if (t.IsShield)
@@ -592,9 +683,9 @@ namespace BridgeArchitect3D.Data
             }
             else
             {
-                n.Add(Loc.F("整节预制直管，不能弯曲：只能上下拖动两端；挖槽最深 {0:0.#} m，${1:0}/m·m", (t.MaxTrenchDepth), (t.DredgeCostPerMeterDepth)));
+                n.Add(Loc.F("整节预制直管，不能弯曲：只能上下拖动两端；管底离河床 {0:0.#}~{1:0.#} m", (t.MinBedClearance), (t.MaxBedClearance)));
                 n.Add(Loc.T("基础价最便宜，但升级为加强 / 重型管节比其他隧道贵得多"));
-                n.Add(Loc.T("接缝处有支点，可以在上面接混凝土类建材"));
+                n.Add(Loc.T("管底每道接缝有一个连接圆点：用桥墩工具在下面立桥墩，或接柱子 / 梁 / 钢索；支撑越密接缝弯矩越小，软土上浅基础承载低、要用桩基础"));
             }
             return n;
         }
@@ -605,9 +696,10 @@ namespace BridgeArchitect3D.Data
             if (t == null) return "";
             var sb = new System.Text.StringBuilder();
             foreach (var g in t.Grades.Values)
-                sb.Append(Loc.F("{0}：${1:0}/m · 水压 {2:0} kPa · 接缝 {3:0.###} rad · 支点 {4:0} kN\n", (g.Name), (g.CostPerMeter), (g.PressureCapacity / 1000), (g.JointRotation), (g.SupportLoad / 1000)));
+                sb.Append(t.IsShield ? Loc.F("{0}：${1:0}/m · 外压 {2:0} kPa\n", (g.Name), (g.CostPerMeter), (g.PressureCapacity / 1000))
+                    : Loc.F("{0}：${1:0}/m · 水压 {2:0} kPa · 接缝抗弯 {3:0.#} MN·m · {4:0} 吨/m\n", (g.Name), (g.CostPerMeter), (g.PressureCapacity / 1000), (t.JointStiffness * g.JointRotation / 1e6), (g.MassPerMeter / 1000)));
             if (t.IsShield) sb.Append(Loc.F("注浆加固 ${0:0}/m（土压 ×{1:0.##}）", (t.ReinforceCostPerMeter), (t.GroutEarthFactor)));
-            else sb.Append(Loc.T("不受土质影响，只看管节强度"));
+            else sb.Append(Loc.T("管身靠你建的支撑 / 锚索承担：支撑越密接缝弯矩越小，河床基础的土质决定承载"));
             return sb.ToString();
         }
 
@@ -663,12 +755,17 @@ namespace BridgeArchitect3D.Data
         }
 
         public static LiftConfig LiftCfg => _db?.TunnelConfig?.Lift ?? new LiftConfig();
+        /// <summary>Shaft end walls stand this far outside the platform ends (wall centre, m); see BridgeRenderer.AddEnclosure.</summary>
+        public const double LiftEndWallOffset = 0.45, LiftEndWallThickness = 0.25;
+        /// <summary>A vehicle waiting for an absent platform stops with its body front this far before the platform:
+        /// clear of the landing door and the shaft end wall (wall face at 0.575 m), so it never pokes into the shaft.</summary>
+        public const double LiftWaitClearance = 1.2;
 
         /// <summary>Price of one lift: shaft per metre of height, platform per metre of length.</summary>
         public static double LiftCost(double height, double length) =>
             Math.Max(0, height) * LiftCfg.ShaftCostPerMeter + length * LiftCfg.PlatformCostPerMeter;
 
-        /// <summary>Load one platform carries (N): longer platforms have a stronger deck.</summary>
+        /// <summary>Old (pre-structural) platform capacity, N: used only to migrate older saves into a lift structure.</summary>
         public static double LiftCapacity(double length) => LiftCfg.CapacityBase + LiftCfg.CapacityPerMeter * length;
 
         /// <summary>Longest vehicle body that fits a platform of this length.</summary>

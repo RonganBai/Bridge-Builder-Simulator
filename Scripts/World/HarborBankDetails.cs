@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using Godot;
 using BridgeArchitect3D.Data;
@@ -62,9 +62,9 @@ namespace BridgeArchitect3D.World
                 {
                     float portal=(float)(bank==0?HarborTimeline.LeftPortal:HarborTimeline.RightPortal);
                     float end=bank==0?-1:25,center=(portal+end)/2,length=Math.Abs(portal-end);
-                    Box(new(center,0.5f,side*3.6f),new(length,0.75f,0.38f),_stone);
-                    Box(new(center,0.9f,side*3.6f),new(length,0.08f,0.5f),_cream);
-                    foreach(float t in new[]{0.15f,0.65f})Lamp(new(Mathf.Lerp(portal,end,t),0.1f,side*4.2f));
+                    Box(new(center,0.5f,side*(RoadLayout.Width/2+.6f)),new(length,0.75f,0.38f),_stone);
+                    Box(new(center,0.9f,side*(RoadLayout.Width/2+.6f)),new(length,0.08f,0.5f),_cream);
+                    foreach(float t in new[]{0.15f,0.65f})Lamp(new(Mathf.Lerp(portal,end,t),0.1f,side*(RoadLayout.Width/2+1.2f)));
                 }
                 // Road markings belong to the approach, not the moving bridge leaf.
                 float crossing=bank==0?-11:32;

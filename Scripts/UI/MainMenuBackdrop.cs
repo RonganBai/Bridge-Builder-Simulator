@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -75,7 +75,7 @@ namespace BridgeArchitect3D.UI
                 _harbor=new HarborScenery();AddChild(_harbor);_harbor.Build(db);
                 var details=new HarborBankDetails();AddChild(details);details.Build();
                 _focus=new Vector3(12,0.4f,0);_camera=new Camera3D {Current=true,Fov=48,Near=0.3f,Far=450,HOffset=-6};AddChild(_camera);
-                _simulation=new HarborTraffic(db.Vehicles.Values,level.Terrain.WaterLevel);
+                _simulation=new HarborTraffic(db.Vehicles.Values,level.Terrain.WaterLevel,bidirectional:true);
                 // Vehicle and ship models are built one per frame after the scene is shown (they take ~0.7 s together);
                 // a car or ship whose model is not built yet is simply not drawn for those few frames
                 foreach(var definition in _simulation.Fleet)
@@ -104,7 +104,7 @@ namespace BridgeArchitect3D.UI
         {
             foreach(var child in Descendants(root))
             {
-                if(child is Label3D label)label.Hide();
+                if(child is Label3D label && !label.HasMeta("vehicle_advertisement"))label.Hide();
                 if(child is MeshInstance3D mesh && (mesh.Mesh is ImmediateMesh ||
                     mesh.MaterialOverride is StandardMaterial3D {ShadingMode:BaseMaterial3D.ShadingModeEnum.Unshaded,Transparency:BaseMaterial3D.TransparencyEnum.Alpha}))mesh.Hide();
             }
@@ -120,7 +120,8 @@ namespace BridgeArchitect3D.UI
             foreach(var car in _simulation.Cars)
             {
                 var visual=_traffic.FirstOrDefault(v=>v.Model.Def.Id==car.Definition.Id);if(visual==null)continue;
-                visual.Model.Visible=true;visual.Model.PlaceAlongPath(x=>new Vector3((float)x,0.24f,0),car.AxleX);
+                visual.Model.SelectTractorVariant(car.Id);
+                visual.Model.Visible=true;visual.Model.PlaceAlongPath(x=>new Vector3((float)RoadLayout.HarborX(x,car.Direction),0.24f,RoadLayout.Z(car.Direction)),car.AxleX);
                 visual.Model.SetEmergencyLights(car.EmergencyLightsOn,_simulation.Time);
                 float alpha=(float)HarborTimeline.VehicleOpacity(car.Front,car.Definition.Length);
                 if(Math.Abs(alpha-visual.Alpha)>0.001)

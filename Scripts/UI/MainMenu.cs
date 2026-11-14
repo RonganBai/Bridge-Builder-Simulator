@@ -1,4 +1,4 @@
-using BridgeArchitect3D.Data;
+﻿using BridgeArchitect3D.Data;
 using BridgeArchitect3D.Core;
 using Godot;
 
@@ -11,6 +11,7 @@ namespace BridgeArchitect3D.UI
 		private Control _levelOverlay,_settingsOverlay;
 		private VBoxContainer _levelBox;
 		private LevelDesigner _designer;
+        private VehicleEncyclopedia _catalog;
 		private PanelContainer _navigation;
 
 		public override void _Ready()
@@ -52,6 +53,7 @@ namespace BridgeArchitect3D.UI
 			resume.TooltipText=resume.Disabled?Loc.T("还没有可继续的存档"):Loc.T("继续：")+_gm.ResolveLevel(last).Name;content.AddChild(resume);
 			content.AddChild(Action(Loc.T("选择关卡"),ShowLevels));
 			content.AddChild(Action(Loc.T("关卡设计"),()=>{_designer??=LevelDesigner.Create(this,_gm);_designer.Open();}));
+			content.AddChild(Action("载具图鉴",()=>{_catalog??=VehicleEncyclopedia.Create(this,_gm.Db);_catalog.Open();}));
 			content.AddChild(new HSeparator());
 			var secondary=new HBoxContainer();content.AddChild(secondary);
 			var settings=Action(Loc.T("设置"),()=>_settingsOverlay.Show());settings.SizeFlagsHorizontal=SizeFlags.ExpandFill;secondary.AddChild(settings);
@@ -61,9 +63,26 @@ namespace BridgeArchitect3D.UI
 			(_levelOverlay,_levelBox)=UiTheme.MakeDialog(this,Loc.T("选择关卡"),760);BuildSettings();
 			Resized+=LayoutNavigation;LayoutNavigation();
 			content.MinimumSizeChanged+=LayoutNavigation;
+            if(System.Array.IndexOf(OS.GetCmdlineUserArgs(),"--catalog-smoke")>=0)
+            {
+                _catalog=VehicleEncyclopedia.Create(this,_gm.Db);
+                string[] args=OS.GetCmdlineUserArgs();int at=System.Array.IndexOf(args,"--catalog-shots");
+                _catalog.RunSmoke(at>=0 && at+1<args.Length?args[at+1]:null);
+            }
+            var customArgs=OS.GetCmdlineUserArgs();int customAt=System.Array.IndexOf(customArgs,"--custom-lift-preview");
+            if(customAt>=0 && customAt+1<customArgs.Length){SaveManager.WritesSuspended=true;_designer=LevelDesigner.Create(this,_gm);_designer.PreviewLift();CaptureRoadPreview(customArgs[customAt+1]);}
+            var roadArgs=OS.GetCmdlineUserArgs();int roadAt=System.Array.IndexOf(roadArgs,"--roads-preview");
+            if(roadAt>=0 && roadAt+1<roadArgs.Length){SaveManager.WritesSuspended=true;CaptureRoadPreview(roadArgs[roadAt+1]);}
+            if(System.Array.IndexOf(OS.GetCmdlineUserArgs(),"--lift-challenge-preview")>=0)
+            {SaveManager.WritesSuspended=true;Callable.From(()=>_gm.StartLevel("level13",false)).CallDeferred();}
 			if(_gm.ShowLevelSelectOnMenu){_gm.ShowLevelSelectOnMenu=false;ShowLevels();}
 		}
-		private void LayoutNavigation()
+		private async void CaptureRoadPreview(string output)
+        {
+            await ToSignal(GetTree().CreateTimer(14),SceneTreeTimer.SignalName.Timeout);
+            GetViewport().GetTexture().GetImage().SavePng(output);GetTree().Quit();
+        }
+        private void LayoutNavigation()
 		{
 			float width=Mathf.Min(360,Mathf.Max(280,Size.X-40));float height=_navigation.GetCombinedMinimumSize().Y;
 			_navigation.Size=new Vector2(width,height);

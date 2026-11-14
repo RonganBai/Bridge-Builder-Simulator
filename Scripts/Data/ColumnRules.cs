@@ -27,7 +27,7 @@ namespace BridgeArchitect3D.Data
             reason = null;
             if (mat.BaseRule == BaseRule.Anchor)
             {
-                bool aa = a.IsAnchor || a.IsTunnelSupport, ba = b.IsAnchor || b.IsTunnelSupport;
+                bool aa = a.IsAnchor, ba = b.IsAnchor;
                 if (aa && (!ba || a.Position.Y <= b.Position.Y)) return true;
                 if (ba) return false;
                 reason = Loc.F("{0}只能建在地图锚点上", (mat.Name));
@@ -37,8 +37,8 @@ namespace BridgeArchitect3D.Data
             var low = aLow ? a : b;
             if (mat.BaseRule == BaseRule.Pier && !(low.PierBase || low.PierPart))
                 reason = Loc.F("{0}只能用桥墩工具从河床立起", (mat.Name));
-            if (mat.BaseRule == BaseRule.Land && !low.IsTunnelSupport && !level.IsOnLand(low.Position.X, low.Position.Y))
-                reason = Loc.F("{0}的底端必须落在陆地上（两岸或岩墩）", (mat.Name));
+            if (mat.BaseRule == BaseRule.Land && !low.PierBase && low.LiftRole != "pit" && !level.IsOnLand(low.Position.X, low.Position.Y))
+                reason = Loc.F("{0}的底端必须落在陆地上（两岸、岩墩或有隧道时的河床基础）", (mat.Name));
             return aLow;
         }
 

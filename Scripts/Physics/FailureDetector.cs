@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using BridgeArchitect3D.Data;
 
 namespace BridgeArchitect3D.Physics
@@ -57,6 +57,20 @@ namespace BridgeArchitect3D.Physics
                 // 老化的旧构件：承载力按状况折减（利用率相应放大）
                 if (m.Condition != null && m.Condition[k] < 1) s.Utilization /= m.Condition[k];
                 s.Cracked = mat.CrackRatio > 0 && s.Utilization >= mat.CrackRatio;
+            }
+            foreach(var bearing in m.PulleyBearings)
+            {
+                double x=0,y=0;
+                for(int k=0;k<m.MemberCount;k++)
+                {
+                    if(m.Broken[k]||m.Slack[k]||!m.Mat[k].IsCable)continue;
+                    int sign=m.A[k]==bearing.Key?1:m.B[k]==bearing.Key?-1:0;
+                    double tension=Math.Max(0,o.AxialForce[k]);x+=sign*tension*m.Cos[k];y+=sign*tension*m.Sin[k];
+                }
+                double u=Math.Sqrt(x*x+y*y)/bearing.Value;
+                for(int k=0;k<m.MemberCount;k++)
+                    if(!m.Broken[k]&&m.Mat[k].IsCable&&(m.A[k]==bearing.Key||m.B[k]==bearing.Key)&&u>status[k].Utilization)
+                    {status[k].Utilization=u;status[k].Governing=FailureReason.AnchorOverload;}
             }
         }
 

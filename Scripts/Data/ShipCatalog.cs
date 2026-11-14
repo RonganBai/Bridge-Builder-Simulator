@@ -21,6 +21,7 @@ namespace BridgeArchitect3D.Data
             return new TrafficEvent {Type=TrafficEventType.Ship,ShipKind=type.Id,Name=type.Name,Width=type.Width,Height=type.Height,Length=type.Length,Speed=type.Speed,LaneX=laneX,Time=time};
         }
         public static double HullHeight(TrafficEvent e)=>e.Height*(Kind(e)=="cargo"?0.4:Kind(e)=="sailboat"?0.075:Kind(e)=="speedboat"?0.28:0.25);
-        public static double Draft(TrafficEvent e)=>Kind(e)=="cargo"?0.6:Kind(e)=="speedboat"?0.22:0.38;
+        public static double Draft(TrafficEvent e)=>e.Draft??DefaultDraft(e);
+        public static double DefaultDraft(TrafficEvent e)=>Kind(e)=="cargo"?0.6:Kind(e)=="speedboat"?0.22:0.38;
     }
 }

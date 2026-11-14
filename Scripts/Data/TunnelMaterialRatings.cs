@@ -20,7 +20,8 @@ namespace BridgeArchitect3D.Data
                 (Loc.T("外压承载"),"kPa",g=>g.PressureCapacity/1000),
                 (Loc.T("接缝容差"),"°",g=>g.JointRotation*180/Math.PI)
             };
-            if(type.HasSupports)metrics.Add((Loc.T("支点承载"),Loc.T("吨"),g=>MaterialRatings.Tonnes(g.SupportLoad)));
+            // Structural tubes (immersed / floating): the joint moment the grade carries before it opens
+            if(type.HasSupports)metrics.Add((Loc.T("接缝抗弯"),"MN·m",g=>type.JointStiffness*g.JointRotation/1e6));
             var all=config.Types.Values.SelectMany(t=>t.Grades.Values).ToList();
             foreach(var entry in type.Grades)
             {

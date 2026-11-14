@@ -185,39 +185,39 @@
       "Objectives": { "ReferenceCost": 51011, "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
     },
     { "Id": "level13", "Name": "第十三关：水下隧道", "Difficulty": "困难 · 深水、软土与洪水",
-      "Description": "60 m 宽、10 m 深的河，洪水会把水位抬高 5 m。隧道两端贴合岸壁，两岸各有一部垂直电梯把车辆送下去、再升上来。在河底铺一条沉管隧道，让车队（含超长重型半挂车）从河底穿过去。",
-      "ReferenceHint": "思路：选沉管隧道，在河底点一下就建成整条隧道（10 m 一节，两岸电梯自动配好）。沉管是整节预制的直管，不能弯曲，只能上下拖动两端；它的基础价最便宜，但升级等级比其他隧道贵得多。隧道不受土质影响，只会因为管节强度不够而损坏：洪水抬高水位 5 m 后普通管节的管壁承受不住水压，升级为加强管节。电梯平台要装得下超长重型半挂车（自动配就行）。管节接缝上的支点可以用混凝土类建材继续建桥（承载比桥墩低）。",
-      "Budget": 105000,
-      "Terrain": { "RiverWidth": 60, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -4, "RiverBedDepth": -14, "BuildMinY": -30, "BuildMaxY": 12, "BuildMarginX": 10,
+      "Description": "60 m 宽、12 m 深的河，洪水会把水位抬高 5 m；河床有岩石也有软土。隧道两端贴合岸壁，两岸各有一部垂直电梯（电梯也是结构：平台、吊索、井柱、驱动和配重都要承住超长重型半挂车）。沉管悬在河床上方，要由你建的桥墩托住，让车队（含超长重型半挂车）从水下穿过去。",
+      "ReferenceHint": "思路：选沉管隧道，在河底点一下就建成整条隧道（10 m 一节，两岸电梯自动配好）。管身只有两端搭在电梯井上，中间要你在管底接缝圆点下用桥墩工具立桥墩：只靠两端，60 m 的管身接缝弯矩会超限；每隔 20 m 一座就够。软土上的浅基础承载只有 40 吨级，要改桩基础。洪水抬高水位 5 m 后普通管节水压超限，升级为加强管节（也更重，接缝更强）。",
+      "Budget": 223000,
+      "Terrain": { "RiverWidth": 60, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -4, "RiverBedDepth": -16, "BuildMinY": -30, "BuildMaxY": 12, "BuildMarginX": 10,
         "FoundationZones": [ { "X0": 0, "X1": 20, "Soil": "rock" }, { "X0": 20, "X1": 40, "Soil": "soft" }, { "X0": 40, "X1": 60, "Soil": "rock", "Scour": true } ] },
       "Anchors": [
         { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 0, "SupportType": "Pinned", "IsRoadStart": true },
         { "Id": "R1", "Position": { "X": 60, "Y": 0, "Z": 0 }, "MaxLoad": 0, "SupportType": "Pinned", "IsRoadEnd": true }
       ],
-      "AllowedMaterials": [ "tunnel_immersed", "tunnel_floating", "tunnel_shield", "lift", "road", "deck_steel", "steel", "concrete", "rc_column", "cable" ],
+      "AllowedMaterials": [ "tunnel_immersed", "tunnel_floating", "tunnel_shield", "lift", "road", "deck_steel", "steel", "concrete", "rc_column", "cable" , "pier_concrete", "cable_composite"],
       "TrafficEvents": [ { "Time": 2, "Type": "Environment", "Name": "洪水", "Height": 5, "Duration": 6 },
         { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 1, "Type": "Vehicle", "VehicleId": "truck" }, { "Time": 2, "Type": "Vehicle", "VehicleId": "semi_long" } ],
-      "Objectives": { "ReferenceCost": 89920, "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+      "Objectives": { "ReferenceCost": 178996, "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
     },
     { "Id": "level14", "Name": "第十四关：悬浮隧道", "Difficulty": "困难 · 深水、软土与急流",
-      "Description": "80 m 宽、30 m 深的河，河床全是软土，中段会被洪水冲刷；洪水抬高水位 3 m，流速从 0.5 m/s 涨到 1.1 m/s。沉管在这么深的水里承受不住水压，试试把隧道悬在水中、用锚索拉住。",
-      "ReferenceHint": "思路：选悬浮隧道，点一下就建成整条隧道，两端贴合岸壁、两岸电梯自动配好。隧道只会因为材料强度不够而损坏：管壁要扛住水压（洪水抬高水位后普通管节不够），锚索要扛住浮力和水流横推（流速平方增大）——浮力越高、锚索越少，每根锚索拉力越大，可以加锚索或换高强复合锚索。",
-      "Budget": 205000,
+      "Description": "80 m 宽、30 m 深的河，河床全是软土；洪水抬高水位 3 m。沉管在这么深的水里承受不住水压，试试把隧道悬在水中，再用自己建的锚索把它拉住。",
+      "ReferenceHint": "思路：选悬浮隧道，点一下就建成整条隧道。管身是正浮力：浮力 / 自重比越高，每道接缝的上浮力越大，锚索就要越多越强；浮力越低锚索越省，但车辆更容易把管身压沉。用钢索或复合钢索从管底接缝圆点拉到河床（自动生成锚块）：软土上浅基础锚块会被拔出，要改桩基础。参考方案：加强管节 + 低浮力 + 每隔一道接缝一根钢索拉到桩基锚块。水流横推只是简化估算，不参与判定。",
+      "Budget": 282000,
       "Terrain": { "RiverWidth": 80, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -2, "RiverBedDepth": -32, "BuildMinY": -48, "BuildMaxY": 12, "BuildMarginX": 10,
         "FoundationZones": [ { "X0": 0, "X1": 30, "Soil": "soft" }, { "X0": 30, "X1": 50, "Soil": "soft", "Scour": true }, { "X0": 50, "X1": 80, "Soil": "soft" } ] },
       "Anchors": [
         { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 0, "SupportType": "Pinned", "IsRoadStart": true },
         { "Id": "R1", "Position": { "X": 80, "Y": 0, "Z": 0 }, "MaxLoad": 0, "SupportType": "Pinned", "IsRoadEnd": true }
       ],
-      "AllowedMaterials": [ "tunnel_floating", "tunnel_immersed", "tunnel_shield", "lift", "road", "deck_steel", "steel", "cable" ],
+      "AllowedMaterials": [ "tunnel_floating", "tunnel_immersed", "tunnel_shield", "lift", "road", "deck_steel", "steel", "concrete", "cable" , "pier_concrete", "cable_composite"],
       "TrafficEvents": [ { "Time": 2, "Type": "Environment", "Name": "洪水", "Height": 3, "Duration": 6 },
         { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 1, "Type": "Vehicle", "VehicleId": "bus" }, { "Time": 2, "Type": "Vehicle", "VehicleId": "semi_long" } ],
-      "Objectives": { "ReferenceCost": 161695, "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+      "Objectives": { "ReferenceCost": 219416, "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
     },
     { "Id": "level15", "Name": "第十五关：盾构隧道", "Difficulty": "困难 · 生态保护区与多层地质",
       "Description": "60 m 宽、8 m 深的河，整条河床是生态保护区，不能挖槽也不能下锚。河床下依次是 4 m 软弱淤泥、5 m 砂土、6 m 坚实黏土，再往下是岩石。洪水抬高河水 5 m，透水的砂层地下水很快跟着上涨。用盾构隧道从河床下穿过去。",
       "ReferenceHint": "思路：选盾构隧道，点一下就建成整条隧道，两端连着两岸电梯；拖动两端圆点（只能上下）和中间控制点调整埋深（侧视里能看到地层）。隧道只会因为管片强度不够而损坏：埋得越深，地下水压和土压越大，电梯井也越深越贵；洪水时砂层地下水上涨最快。注浆加固能降低土压，岩石掘进最贵。洪水时普通 / 加强管片余量不大，重型管片更稳。",
-      "Budget": 170000,
+      "Budget": 315000,
       "Terrain": { "RiverWidth": 60, "LeftBankHeight": 0, "RightBankHeight": 0, "WaterLevel": -4, "RiverBedDepth": -12, "BuildMinY": -30, "BuildMaxY": 12, "BuildMarginX": 10,
         "FoundationZones": [ { "X0": 0, "X1": 60, "Soil": "soft" } ],
         "NoBuildZones": [ { "X0": 0, "X1": 60, "BelowY": 0, "Name": "生态保护区" } ],
@@ -226,11 +226,11 @@
         { "Id": "L1", "Position": { "X": 0, "Y": 0, "Z": 0 }, "MaxLoad": 0, "SupportType": "Pinned", "IsRoadStart": true },
         { "Id": "R1", "Position": { "X": 60, "Y": 0, "Z": 0 }, "MaxLoad": 0, "SupportType": "Pinned", "IsRoadEnd": true }
       ],
-      "AllowedMaterials": [ "tunnel_shield", "tunnel_immersed", "tunnel_floating", "lift", "road", "deck_steel", "steel", "cable" ],
+      "AllowedMaterials": [ "tunnel_shield", "tunnel_immersed", "tunnel_floating", "lift", "road", "deck_steel", "steel", "concrete", "cable" , "pier_concrete", "cable_composite"],
       "TrafficEvents": [ { "Time": 0, "Type": "Environment", "Weather": "rainstorm", "Name": "暴雨", "Duration": 3 },
         { "Time": 2, "Type": "Environment", "Name": "洪水", "Height": 5, "Duration": 6 },
         { "Time": 0, "Type": "Vehicle", "VehicleId": "car" }, { "Time": 1, "Type": "Vehicle", "VehicleId": "bus" }, { "Time": 2, "Type": "Vehicle", "VehicleId": "truck" } ],
-      "Objectives": { "ReferenceCost": 158620, "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
+      "Objectives": { "ReferenceCost": 263416, "MaxDeckDeflection": 0.3, "MaxDeckSlope": 0.15, "MaxBrokenMembers": 2 }
     }
   ]
 }

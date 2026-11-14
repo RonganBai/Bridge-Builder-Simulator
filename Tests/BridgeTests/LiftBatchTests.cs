@@ -30,7 +30,7 @@ internal static class LiftBatchTests
                 foreach(var lift in simulation.Lifts)
                 {
                     max=Math.Max(max,lift.Riders.Count);
-                    safe&=lift.OccupiedLength<=lift.Length-2*TunnelRules.LiftCfg.Margin+1e-6&&lift.LoadForce<=lift.Capacity+1e-6;
+                    safe&=lift.OccupiedLength<=lift.Length-2*TunnelRules.LiftCfg.Margin+1e-6&&(lift.Check==null||lift.Check.Util<=1+1e-9);
                     if(lift.Riding)
                     {
                         mixed|=lift.Riders.Select(v=>v.Def.Length).Distinct().Count()>1;
@@ -54,7 +54,7 @@ internal static class LiftBatchTests
         check("Lift pooling: different vehicle lengths can share a trip",varied.mixed&&varied.max>=2,"");
         check("Lift pooling: mixed-size traffic preserves all load and clearance limits",varied.safe&&varied.simulation.Result.IsSuccess,varied.simulation.Result.FailureMessage??"");
 
-        var testLevel=Level(1);var testEditor=new DesignEditor(Reference(),testLevel,db);testEditor.SetLiftLength(16);
+        var testLevel=Level(1);var testEditor=new DesignEditor(Reference(),testLevel,db);testEditor.SetLiftLength(16);testEditor.RebuildLifts("standard");
         var gate=typeof(BridgeSimulation).GetMethod("LiftGate",BindingFlags.NonPublic|BindingFlags.Instance);
         VehicleState Car(double mass,double length=4)
         {
@@ -64,7 +64,7 @@ internal static class LiftBatchTests
         BridgeSimulation Fresh(){var s=new BridgeSimulation(testEditor.Design,testLevel,db);s.Initialize();return s;}
         bool Admit(BridgeSimulation simulation,VehicleState car)
         {
-            var lift=simulation.Lifts[0];car.FrontS=lift.EntryS-0.5-car.FrontOverhang-0.05;
+            var lift=simulation.Lifts[0];car.FrontS=lift.EntryS-TunnelRules.LiftWaitClearance-car.FrontOverhang-0.05;
             var args=new object[]{car,car.FrontS+0.1};return (bool)gate.Invoke(simulation,args);
         }
         var capacity=Fresh();var heavy1=Car(40000);var heavy2=Car(40000);
@@ -72,7 +72,7 @@ internal static class LiftBatchTests
         check("Lift pooling: combined overload waits for another trip",capacity.Lifts[0].Riders.Count==1&&heavy2.WaitingAtPortal&&capacity.State==SimState.Running,"");
         var oversized=Fresh();Admit(oversized,Car(1000,18));
         check("Lift pooling: an individually oversized vehicle is rejected",oversized.Result.FailureReason==FailureReason.VehicleBlocked,oversized.Result.FailureMessage);
-        var overweight=Fresh();Admit(overweight,Car(70000));
+        var overweight=Fresh();Admit(overweight,Car(95000));
         check("Lift pooling: an individually overweight vehicle is rejected",overweight.Result.FailureReason==FailureReason.LiftOverload,overweight.Result.FailureMessage);
 
         var idle=Fresh();typeof(BridgeSimulation).GetProperty("Time").SetValue(idle,2.0);

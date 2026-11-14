@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using BridgeArchitect3D.Building;
 using BridgeArchitect3D.CameraControl;
 using BridgeArchitect3D.Data;
@@ -77,6 +77,7 @@ namespace BridgeArchitect3D.Core
             }
             // 关卡可以提供一座“半成品”起始桥（例如第一关缺一根斜撑），没有存档时载入
             if (design == null && !string.IsNullOrEmpty(_level.StartDesign)) design = SaveManager.LoadStartDesign(_level.StartDesign);
+            BackupLegacyLiftDesign(design);
             _editor = new DesignEditor(design, _level, _db);
 
             var canvas = new CanvasLayer();
@@ -85,7 +86,7 @@ namespace BridgeArchitect3D.Core
             canvas.AddChild(_hud);
             var levelVehicles = _level.TrafficEvents.Where(e => e.VehicleId != null).Select(e => e.VehicleId).Distinct()
                 .Select(id => _db.Vehicles.TryGetValue(id, out var v) ? v : null).Where(v => v != null).ToList();
-            _hud.Init(this, _level.Name, GoalText(), _level.AllowedMaterials.Select(id => _db.GetMaterial(id)).Where(x => x != null).ToList(),
+            _hud.Init(this, _level.Name, GoalText(), _level.AllowedMaterials.Select(id => _db.GetMaterial(id)).Where(x => x != null && (_level.ProvidedInfrastructure==null || !x.IsTunnel && !x.IsLift && !x.IsPier)).ToList(),
                 _db.Materials.Values.ToList(), levelVehicles);
 
             _building = new BuildingManager { Name = "Building" };
@@ -119,6 +120,8 @@ namespace BridgeArchitect3D.Core
             RefreshProperties();
             _hud.SetStructureStatus(StaticStatusText(out var c), c);
             ShowFirstStep();
+            if(_level.ProvidedInfrastructure!=null){_building.SelectedTunnelElement=0;RefreshProperties();SetCutaway(true);_building.FocusTunnel("entry",true);}
+            BeginChallengePreview();
         }
 
         private MeshInstance3D _water;
@@ -194,6 +197,7 @@ namespace BridgeArchitect3D.Core
 
         public override void _Process(double delta)
         {
+            TickChallengePreview();
             // 建造时的正交侧视隐藏远景装饰，减少干扰；3D 视角与测试时恢复
             if (_decorations != null && _camera != null) _decorations.Visible = _testing || !_camera.IsOrtho;
             _overlays ??= FindChild(TerrainBuilder.OverlayName, true, false) as Node3D;
@@ -208,14 +212,17 @@ namespace BridgeArchitect3D.Core
             if (_hudTimer <= 0) { _hudTimer = 0.05; UpdateTestHud(sim); }
 
             _propTimer -= delta;
-            if (_propTimer <= 0 && _traffic.SelectedMember >= 0)
+            if (_propTimer <= 0 && (_traffic.SelectedMember >= 0 || _selectedTestTunnel>=0))
             {
                 _propTimer = 0.1;
                 var m = _traffic.Sim.Design.FindMember(_traffic.SelectedMember);
-                if (m != null) _hud.ShowProperties(GameHUD.MemberProperties(m, _db, sim.Model, sim.Status, sim.Output.Stable || sim.State != SimState.Failed, Loc.F("测试工况 t={0:0.0}s", (sim.Time))));
+                if (m != null) _hud.ShowMemberProperties(m, _db, sim.Model, sim.Status, sim.Output.Stable || sim.State != SimState.Failed, Loc.F("测试工况 t={0:0.0}s", (sim.Time)));
+                else if(_selectedTestTunnel>=0 && sim.TunnelGeo is {} tube && _selectedTestTunnel<tube.Count)
+                    _hud.ShowTunnelProperties(tube,_selectedTestTunnel,sim.TunnelStatus,_level,_db.TunnelConfig,Loc.F("测试工况 t={0:0.0}s",sim.Time));
             }
         }
 
+        private int _selectedTestTunnel=-1;
         private double _hudTimer;
 
         private void UpdateTestHud(BridgeSimulation sim)
@@ -299,7 +306,8 @@ namespace BridgeArchitect3D.Core
                 {
                     var m = _editor.MemberAt(hit.Value.X, hit.Value.Y, 0.4);
                     _traffic.SelectedMember = m?.Id ?? -1;
-                    if (m == null) _hud.ShowProperties(null);
+                    _selectedTestTunnel=m==null?_editor.TunnelElementAt(hit.Value.X,hit.Value.Y):-1;
+                    if (m == null && _selectedTestTunnel<0) _hud.ShowProperties(null);
                     _propTimer = 0;
                     _traffic.UpdateVisuals();
                 }
@@ -320,7 +328,7 @@ namespace BridgeArchitect3D.Core
             var s = _building?.StaticSim;
             if(_editor.TunnelGeo is {} tube&&(s?.Model==null||s.Model.MemberCount==0))
             {
-                var state=Physics.TunnelAnalysis.Evaluate(tube,_level,_db.TunnelConfig,Physics.TunnelAnalysis.StaticEnvironment(_level,_db.TunnelConfig));
+                var state=s?.TunnelGeo!=null?s.TunnelStatus:Physics.BridgeSimulation.StaticTunnel(_editor.Design,_level,_db);
                 _hud.SetLoad(state.MaxUtil);c=state.MaxUtil>=1?UiTheme.Bad:UiTheme.Good;
                 if(!TunnelRules.Complete(tube,_level.Terrain)){c=UiTheme.Warn;return Loc.T("隧道端点尚未接岸");}
                 return state.MaxUtil>=1?Loc.T("隧道静态校核未通过"):Loc.T("隧道就绪 · 两岸电梯已连接");
@@ -341,11 +349,13 @@ namespace BridgeArchitect3D.Core
             if (_building.SelectedNodeId >= 0 && d.FindNode(_building.SelectedNodeId) is { } n)
                 _hud.ShowProperties(GameHUD.NodeProperties(n, _level, d, stat));
             else if (_building.SelectedMemberId >= 0 && d.FindMember(_building.SelectedMemberId) is { } m)
-                _hud.ShowProperties(GameHUD.MemberProperties(m, _db, stat?.Model, stat?.Status, stat?.Output.Stable ?? false, Loc.T("自重工况（无车辆）")));
+                _hud.ShowMemberProperties(m, _db, stat?.Model, stat?.Status, stat?.Output.Stable ?? false, Loc.T("自重工况（无车辆）"));
             else if (_building.SelectedTunnelElement >= 0 && _editor.TunnelGeo is { } tg && _building.SelectedTunnelElement < tg.Count)
             {
-                var st = Physics.TunnelAnalysis.Evaluate(tg, _level, _db.TunnelConfig, Physics.TunnelAnalysis.StaticEnvironment(_level, _db.TunnelConfig));
-                _hud.ShowProperties(GameHUD.TunnelElementProperties(tg, _building.SelectedTunnelElement, st, _level, _db.TunnelConfig, Loc.T("静态工况（常水位，无车辆）")));
+                var st = stat?.TunnelGeo != null && stat.TunnelStatus.Count == tg.Count ? stat.TunnelStatus : Physics.BridgeSimulation.StaticTunnel(d, _level, _db);
+                _editor.LiftWorstUtil(out var liftWorst);
+                var liftRows = LivePropertyMetrics.Lift(d.Tunnel?.Lift, _editor.Lifts(), liftWorst, _editor.LiftLoadForLevel(), _db);
+                _hud.ShowTunnelProperties(tg, _building.SelectedTunnelElement, st, _level, _db.TunnelConfig, Loc.T("静态工况（常水位，无车辆）"), liftRows);
             }
             else _hud.ShowProperties(null);
             {
@@ -353,8 +363,9 @@ namespace BridgeArchitect3D.Core
                 bool show = !_testing && tg2 != null && te >= 0 && te < tg2.Count && _building.SelectedNodeId < 0 && _building.SelectedMemberId < 0;
                 if (show) _hud.SetTunnelRow(true, tg2.Type, tg2.GradeId[te], tg2.Reinforced[te],
                     tg2.Type.IsFloating ? tg2.CableCount[te] : 0, tg2.Type.IsFloating ? tg2.CableId[te] : null, tg2.Type.IsFloating ? tg2.BuoyancyId[te] : null);
-                if (show) _hud.SetLiftRow(tg2.LiftLength);
+                if (show) _hud.SetLiftRow(tg2.LiftLength, _editor.LiftSummary(),_editor.Design.Tunnel.Lift.BoardingPolicy);
                 else _hud.SetTunnelRow(false);
+                _hud.SetProvidedTunnel(_level.ProvidedInfrastructure!=null);
             }
             var selMat = _building.SelectedMemberId >= 0 ? _db.GetMaterial(d.FindMember(_building.SelectedMemberId)?.MaterialId) : null;
             var selMem = _building.SelectedMemberId >= 0 ? d.FindMember(_building.SelectedMemberId) : null;
@@ -366,6 +377,9 @@ namespace BridgeArchitect3D.Core
                 : selMem != null && selMat?.IsPier == true ? (_editor.PierBaseOf(selMem.StartNodeId) ?? _editor.PierBaseOf(selMem.EndNodeId)) : null;
             _pierBaseId = pierBase?.Id ?? -1;
             _hud.SetFoundationRow(!_testing && pierBase != null, pierBase?.Foundation ?? FoundationType.None);
+            bool sheave = false;
+            if (!_testing && selNode != null) _editor.LiftOfNode(selNode.Id, out sheave);
+            _hud.SetSheaveRow(sheave&&!_level.MechanicalLift, d.Tunnel?.Lift, _db);
             var mech = d.EnsureMechanisms();
             bool isLock = selNode != null && mech.LockOf(selNode.Id) != null;
             bool lockable = !_testing && selNode != null && !selNode.IsAnchor && !selNode.PierBase && !selNode.PierPart && !selNode.IsTunnelNode;
@@ -411,6 +425,7 @@ namespace BridgeArchitect3D.Core
             if (_testing) return;
             var d = SaveManager.LoadNamedDesign(_level.Id, name, out var err);
             if (d == null) { _hud.ShowToast(err, true); return; }
+            BackupLegacyLiftDesign(d);
             _editor.ReplaceDesign(d);
             _hud.ShowToast(SaveManager.VersionWarning(d) ?? Loc.F("已加载方案“{0}”：{1} 根构件，已用 ${2:N0}（可撤销）", (name), (d.Members.Count), (_editor.UsedCost)), SaveManager.VersionWarning(d) != null);
         }
@@ -420,6 +435,7 @@ namespace BridgeArchitect3D.Core
             if (_testing) return;
             var d = SaveManager.LoadDesign(_level.Id, out var err);
             if (d == null) { _hud.ShowToast(err, true); return; }
+            BackupLegacyLiftDesign(d);
             _editor.ReplaceDesign(d);
             _hud.ShowToast(SaveManager.VersionWarning(d) ?? Loc.F("已加载存档：{0} 个节点，{1} 根构件，已用 ${2:N0}", (d.Nodes.Count), (d.Members.Count), (_editor.UsedCost)), SaveManager.VersionWarning(d) != null);
         }
@@ -433,6 +449,7 @@ namespace BridgeArchitect3D.Core
         {
             if (_testing) return;
             var d = SaveManager.LoadReference(_level.Id);
+            if(d!=null&&_level.MechanicalLift)d=LiftMechanics.Reference(d,_level,_db);
             if (_referenceStep == 0)
             {
                 _referenceStep = 1;
@@ -443,6 +460,14 @@ namespace BridgeArchitect3D.Core
             if (_referenceStep == 1)
             {
                 _referenceStep = 2;
+                if(_level.ProvidedInfrastructure!=null)
+                {
+                    var sample=new DesignEditor(d.Clone(),_level,_db).Design;
+                    var right=LiftStructure.Analyze(sample,_level,_db).First(l=>!l.Left);
+                    var remove=right.Members.Select(m=>m.Id).ToHashSet();sample.Members.RemoveAll(m=>remove.Contains(m.Id));
+                    sample.Nodes.RemoveAll(n=>!n.Provided&&!n.IsLiftFixed&&!sample.Members.Any(m=>m.StartNodeId==n.Id||m.EndNodeId==n.Id));
+                    _editor.ReplaceDesign(sample);_hud.ShowToast("已载入左岸电梯示意；右岸电梯由你完成，固定通道保持不变。再次点击可载入完整电梯参考方案。",false,9);return;
+                }
                 // 局部示意：只保留左半座桥（构件两端都在河宽一半以内），其余留给玩家完成
                 double half = _level.Terrain.RiverWidth / 2 + 0.01;
                 var part = d.Clone();
@@ -452,6 +477,7 @@ namespace BridgeArchitect3D.Core
                 _hud.ShowToast(Loc.T("已载入左半座桥的示意（可撤销）。照着它完成右半边，或再次点击载入完整方案。"), false, 8);
                 return;
             }
+            BackupLegacyLiftDesign(d);
             _editor.ReplaceDesign(d);
             _hud.ShowToast(Loc.T("已载入完整参考方案（可撤销）"), false);
         }
@@ -465,13 +491,8 @@ namespace BridgeArchitect3D.Core
         public void OpenLevelSettings()
         {
             if (_testing) { _hud.ShowToast(Loc.T("测试中不能改关卡设置，先返回建造"), true); return; }
-            LevelSettingsUI.Open(_hud, _db, _level, _gm.LevelOverridden(_level.Id),
-                lv =>
-                {
-                    SaveManager.SaveDesign(_editor.Design, out _);   // keep the current design across the restart
-                    if (!_gm.SaveLevelSettings(lv, out var err)) _hud.ShowToast(Loc.T("关卡设置没有保存：") + err, true);
-                },
-                () => { SaveManager.SaveDesign(_editor.Design, out _); _gm.RestoreLevelDefaults(_level.Id); });
+            // Keep the current design across the restart that saving / restoring triggers
+            LevelSettingsUI.Open(_hud, _gm, _level, () => SaveManager.SaveDesign(_editor.Design, out _));
         }
 
         public void OpenLevelSelect()
@@ -494,6 +515,19 @@ namespace BridgeArchitect3D.Core
         {
             var g = _editor.TunnelGeo; int te = _building.SelectedTunnelElement;
             if (_testing || g == null) return;
+            if(action=="strategy"){ShowEngineeringStrategy();return;}
+            if(action.StartsWith("lifttemplate:"))
+            {
+                var result=_editor.RebuildLifts(action.Substring(13));_hud.ShowToast(result.Message,!result.Ok);return;
+            }
+            if (action.StartsWith("liftset:"))
+            {
+                // From a selected lift sheave node: "liftset:drive:id" or "liftset:cw:±n"
+                var parts = action.Split(':');
+                var lr = parts[1]=="operation"?_editor.SetLiftOperation(parts[2]):parts[1] == "drive" ? _editor.SetLiftMachine(parts[2]) : _editor.SetLiftMachine(null, int.Parse(parts[2]));
+                _hud.ShowToast(lr.Message ?? "", !lr.Ok);
+                return;
+            }
             if (action.StartsWith("focus:"))
             {
                 _building.FocusTunnel(action.Substring(6));
@@ -507,10 +541,36 @@ namespace BridgeArchitect3D.Core
             else if (action.StartsWith("cable:")) r = _editor.SetTunnelCables(target, g.CableCount[te], action.Substring(6));
             else if (action.StartsWith("cables:")) r = _editor.SetTunnelCables(target, g.CableCount[te] + int.Parse(action.Substring(7)));
             else if (action.StartsWith("lift:")) r = _editor.SetLiftLength(g.LiftLength + int.Parse(action.Substring(5)) * TunnelRules.LiftCfg.LengthStep);
-            else if (action == "liftauto") r = _editor.SetLiftLength(_editor.LiftLengthForLevel());
+            else if(action=="liftauto"&&_level.MechanicalLift)r=Building.BuildResult.Fail("机构电梯需要自行搭建；请铺路并安装液压缸或滑轮绳路");
+            else if (action == "liftauto") { if(_level.ProvidedInfrastructure!=null)r=_editor.RebuildLifts("light");else{r = _editor.SetLiftLength(_editor.LiftLengthForLevel()); if (r.Ok) r = _editor.RebuildLifts();} }
             else r = _editor.SetTunnelReinforced(target, !g.Reinforced[te]);
             if(r.Ok&&action.StartsWith("lift"))_building.FocusTunnel("route",true);
             _hud.ShowToast(r.Message ?? "", !r.Ok);
+        }
+
+        private bool _strategyBusy;
+        private async void ShowEngineeringStrategy()
+        {
+            if(_strategyBusy)return;_strategyBusy=true;_hud.ShowStrategyLoading();
+            if(_level.MechanicalLift)
+            {
+                try
+                {
+                    var copy=_editor.Design.Clone();var result=await System.Threading.Tasks.Task.Run(()=>LiftMechanics.Report(copy,_level,_db));
+                    if(IsInsideTree())_hud.ShowStrategyResult(result,false);
+                }
+                catch(System.Exception ex){if(IsInsideTree())_hud.ShowStrategyResult("机构检查未完成："+ex.Message,false);}
+                finally{_strategyBusy=false;}
+                return;
+            }
+            var design=_editor.Design.Clone();var level=_level;var db=_db;int element=_building.SelectedTunnelElement;
+            try
+            {
+                var report=await System.Threading.Tasks.Task.Run(()=>EngineeringStrategy.Analyze(new DesignEditor(design,level,db,migrate:false),element));
+                if(IsInsideTree() && GodotObject.IsInstanceValid(_hud))_hud.ShowStrategyResult(report.Text);
+            }
+            catch(System.Exception ex){if(IsInsideTree() && GodotObject.IsInstanceValid(_hud))_hud.ShowStrategyResult("评估未完成："+ex.Message);}
+            finally{_strategyBusy=false;}
         }
 
         public void SetFoundationSelected(FoundationType type)
@@ -532,6 +592,7 @@ namespace BridgeArchitect3D.Core
         public void MechanismAction(string action)
         {
             if (_testing) return;
+            if(_level.ProvidedInfrastructure!=null && (_editor.Design.FindNode(_building.SelectedNodeId)?.Provided==true || _editor.Design.FindMember(_building.SelectedMemberId)?.Provided==true)){_hud.ShowToast(LiftChallengeRules.Locked,true);return;}
             if (action.StartsWith("preview:"))
             {
                 // Slider drag: update the design (and the yellow sleeve) live; one undo step for the whole drag
@@ -598,6 +659,7 @@ namespace BridgeArchitect3D.Core
         public void BenchmarkStart()
         {
             var d = SaveManager.LoadReference(_level.Id);
+            if(d!=null&&_level.MechanicalLift)d=LiftMechanics.Reference(d,_level,_db);
             if (d != null) _editor.ReplaceDesign(d);
             SetView(false);
             StartTest();
@@ -612,6 +674,7 @@ namespace BridgeArchitect3D.Core
             _hud.SetMode(true);
             _hud.ShowProperties(null);
             _traffic.SelectedMember = -1;
+            _selectedTestTunnel=-1;
             _traffic.ShowStress = true;
             _hud.SetStressChecked(true);
             _traffic.SpeedMultiplier = _traffic.SpeedMultiplier <= 0 ? 1 : _traffic.SpeedMultiplier;

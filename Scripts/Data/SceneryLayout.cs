@@ -8,7 +8,7 @@ namespace BridgeArchitect3D.Data
     /// <summary>Shared footprints keep independently generated buildings, trees, hills and roads apart.</summary>
     public sealed class SceneryLayout
     {
-        public const double BankLength=100,DecorationLength=45,HalfDepth=56,RoadClearance=4.5;
+        public const double BankLength=100,DecorationLength=45,HalfDepth=56,RoadClearance=5.5;
         public List<SceneryPlot> Reservations { get; }=new();
         public List<SceneryPlot> Buildings { get; }=new();
         public List<SceneryPlot> Hills { get; }=new();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using BridgeArchitect3D.Data;
@@ -32,10 +32,12 @@ namespace BridgeArchitect3D.Physics
         /// <summary>Riding a bank lift: vertical offset from the path (display only, the path position does not change while riding).</summary>
         public double LiftDy;
         public bool OnLift;
-        public double RearOffset => Def.Axles.Count == 0 ? 0 : Def.Axles.Min(a => a.Offset);
+        /// <summary>Current speed along the path, m/s (NaN until the first step: starts at cruising speed).</summary>
+        public double Speed = double.NaN;
+        public double RearOffset => VehicleBody.RearAxle(Def);
         /// <summary>Train offsets use the locomotive nose; other vehicles use the leading axle.</summary>
-        public double FrontOverhang => Def.Kind == "train" ? 0.2 : Math.Max(0, (Def.Length + RearOffset) / 2);
-        public double RearOverhang => Def.Kind == "train" ? Math.Max(0, Def.Length + RearOffset) : FrontOverhang;
+        public double FrontOverhang => VehicleBody.FrontOverhang(Def);
+        public double RearOverhang => VehicleBody.RearOverhang(Def);
         /// <summary>Arc length of the front / rear bumper.</summary>
         public double BodyFrontS => FrontS + FrontOverhang;
         public double BodyRearS => FrontS + RearOffset - RearOverhang;
@@ -109,6 +111,8 @@ namespace BridgeArchitect3D.Physics
     {
         public const double FixedDt = 1.0 / 60.0;
         public const double StuckLimit = 3.0;     // 车辆被卡住多久判定失败 s
+        /// <summary>Braking and pulling-away rates of vehicles (m/s²): they slow down to a stop instead of halting instantly.</summary>
+        public const double VehicleBrake = 3.0, VehicleAccel = 2.0;
         private const double HistoryInterval = 0.1;
         private const int HistoryFrames = 60;      // 约 6 秒回放
         private const double MaxTestTime = 240;
@@ -157,12 +161,6 @@ namespace BridgeArchitect3D.Physics
             if (TunnelFlooded) return;
             TunnelFlooded = true;
             RecordIssue(FailureReason.TunnelFlooded, text, null);
-            // The tube no longer carries its support points
-            for (int i = 0; i < Model.NodeCount; i++)
-            {
-                if (Model.TunnelOf[i] == 0) continue;
-                Model.FixX[i] = false; Model.FixY[i] = false; Model.FixRot[i] = false; Model.AnchorMaxLoad[i] = 0; Model.IsAnchor[i] = false;
-            }
             var ev = new StructureEvent { Time = Time, MemberId = -1, Mode = FailureReason.TunnelFlooded, Text = text };
             Events.Add(ev); MemberBroken?.Invoke(ev);
             var trapped = Vehicles.FirstOrDefault(v => v.Lane == TunnelRules.Lane && !v.Finished && !v.Fallen);
@@ -225,6 +223,15 @@ namespace BridgeArchitect3D.Physics
         }
 
         public SolveOutput Output { get; } = new();
+
+        /// <summary>Copies the solved tube beam (joint moments, deflection) into TunnelStatus.</summary>
+        private void MergeTube()
+        {
+            if (TunnelGeo == null || Model.TubeMember.Length == 0 || TunnelStatus.Count != TunnelGeo.Count) return;
+            TunnelStructure.Merge(Model, Output, Status, TunnelGeo, TunnelStatus, Db.TunnelConfig, Level, Output.Stable);
+            if (!TunnelFlooded) TunnelPeakUtil = Math.Max(TunnelPeakUtil, Math.Min(1, TunnelStatus.MaxUtil));
+            for (int i = 0; i < TunnelStatus.Count; i++) Result.MaxTunnelMove = Math.Max(Result.MaxTunnelMove, Math.Abs(TunnelStatus.Settle[i]));
+        }
 
         /// <summary>
         /// Idle intervals only. Approaching, waiting and lifted vehicles remain visible at the selected playback rate.
@@ -341,6 +348,8 @@ namespace BridgeArchitect3D.Physics
             Design = design.Clone();
             foreach (var m in Design.Members) m.DamageState = DamageState.Intact;
             Level = level; Db = db;
+            // Older tunnel saves: their built-in tube capacity becomes visible members first (idempotent)
+            if (Design.Tunnel != null && (Design.Tunnel.Structure == null || Design.Tunnel.Lift == null)) Design = new Building.DesignEditor(Design, level, db).Design;
             _solver = solver ?? new StructureSolver();
             // Phase 1 (static) comes first: every vehicle, ship and weather event starts StaticPhaseTime later
             TestEvents = level.TrafficEvents.Select(e => e.Shifted(StaticPhaseTime)).ToList();
@@ -531,6 +540,7 @@ namespace BridgeArchitect3D.Physics
                 {
                     TunnelPath = RoadPath.FromGround(TunnelRules.Route(Level, TunnelGeo), TunnelRules.Lane);
                     BuildLifts();
+                    if(State!=SimState.Running)return;
                 }
             }
             // Only trains still need the main-road bridge when road vehicles can take the tunnel
@@ -581,6 +591,7 @@ namespace BridgeArchitect3D.Physics
             if (Ships.Count > 0 && !Bascule.Active && Bascule.Linkage == null && Bascule.Plan.Hint() is { } hint)
                 Events.Add(new StructureEvent { Time = 0, MemberId = -1, Mode = FailureReason.None, Text = Loc.T("提示：") + hint });
             SolveAndCheck();   // t=0：仅自重（不稳定的部分会在这里垮塌）
+            if(State==SimState.Running)EnsureLiftIntegrity();
             RecordFrame(true);
         }
         /// <summary>首个致命问题（用于失败分析）。测试不会因记录问题而立即结束。</summary>
@@ -690,7 +701,8 @@ namespace BridgeArchitect3D.Physics
             {
                 var mat = Model.Mat[k];
                 double stroke = _stroke != null && k < _stroke.Length ? _stroke[k] : -mat.RetractRatio;
-                Model.Prestrain[k] = mat.Extendable ? stroke * Model.Length[k] * HydraulicFactor : 0;
+                bool liftActuator=Level.MechanicalLift && Lifts.Any(l=>l.Layout?.Members.Any(x=>x.Id==Model.MemberIds[k])==true);
+                Model.Prestrain[k] = mat.Extendable && !liftActuator ? stroke * Model.Length[k] * HydraulicFactor : 0;
             }
 
             // 2. 车辆前进（同一层道路上的后车与前车保持跟车距离，形成车队）
@@ -706,7 +718,12 @@ namespace BridgeArchitect3D.Physics
                     double up = Path.SegmentSlope(segNow), lim = Level.Objectives.MaxDeckSlope;
                     if (up > lim + RoadPath.SlopeTolerance) speed *= Math.Clamp(1 - 0.65 * (up - lim) / lim, 0.35, 1);
                 }
-                double next = v.FrontS + speed * FixedDt;
+                // Speed control: vehicles brake smoothly to every stop line (movable bridge, lift, vehicle ahead)
+                // and pull away gently again, instead of stopping or starting instantly. The stop lines are found by
+                // probing one braking distance ahead; the actual step then never passes any of them.
+                if (double.IsNaN(v.Speed)) v.Speed = speed;
+                double probe = v.FrontS + v.Speed * v.Speed / (2 * VehicleBrake) + Math.Max(v.Speed, speed) * FixedDt + 0.5;
+                double next = probe;
                 // 液压装置动作期间：还没驶入活动段的车辆在活动段前停车等候，动作结束后继续通行
                 // Movable bridge in operation: vehicles whose body has not reached the movable span stop
                 // in front of it (front overhang included). Waiting is not a failure.
@@ -721,17 +738,26 @@ namespace BridgeArchitect3D.Physics
                 v.WaitingAtPortal = false;
                 if (v.Lane == TunnelRules.Lane && Lifts.Count > 0)
                 {
-                    if (v.OnLift) continue;
+                    if (v.OnLift) { v.Speed = 0; continue; }
                     if (!LiftGate(v, ref next)) return;
                 }
+                double stopLine = next < probe - 1e-9 ? next : double.PositiveInfinity;
+                double allowed = Math.Min(speed, v.Speed + VehicleAccel * FixedDt);
+                if (!double.IsInfinity(stopLine)) allowed = Math.Min(allowed, Math.Sqrt(2 * VehicleBrake * Math.Max(0, stopLine - v.FrontS)));
+                double followLine = double.PositiveInfinity;
                 for (int j = vi - 1; j >= 0; j--)
                 {
                     var ahead = Vehicles[j];
                     if (ahead.Finished || ahead.Fallen || ahead.Lane != v.Lane) continue;
-                    double limit = ahead.BodyRearS - LiftFollowingGap(v,ahead) - v.FrontOverhang;
-                    if (next > limit) next = Math.Max(v.FrontS, limit);
+                    followLine = ahead.BodyRearS - LiftFollowingGap(v,ahead) - v.FrontOverhang;
+                    double aheadSpeed = ahead.OnLift || double.IsNaN(ahead.Speed) ? 0 : ahead.Speed;
+                    // Follow the vehicle ahead: brake so the gap is kept even if it stops now
+                    allowed = Math.Min(allowed, Math.Sqrt(aheadSpeed * aheadSpeed + 2 * VehicleBrake * Math.Max(0, followLine - v.FrontS)));
                     break;
                 }
+                allowed = Math.Max(0, allowed);
+                next = Math.Max(v.FrontS, Math.Min(v.FrontS + allowed * FixedDt, Math.Min(stopLine, followLine)));
+                v.Speed = (next - v.FrontS) / FixedDt;
                 {
                     // Trains only on rails, road vehicles only on road surface
                     int segAt = Path.Locate(next, out _);
@@ -778,6 +804,7 @@ namespace BridgeArchitect3D.Physics
 
             // 3. 求解 + 失效检测
             SolveAndCheck();
+            if(State==SimState.Running && !EnsureLiftIntegrity())return;
             if (State != SimState.Running) return;
 
             // 3a. Rail sway: a train derails when the track drops or bounces too much under its wheels
@@ -824,6 +851,14 @@ namespace BridgeArchitect3D.Physics
                     _axles[_axleCount++] = new AxleLoad { MemberIndex = k, T = tm, Force = v.Def.Mass * axle.LoadFraction * StructuralModel.Gravity };
                 }
             }
+            // Vehicles inside an immersed / floating tube load the tube elements (collected by CheckTunnel)
+            if (!TunnelFlooded)
+                foreach (var (x, f) in _tunnelLoads)
+                    if (TunnelStructure.AxleOnTube(Model, TunnelGeo, x, f, out var ta) && !Model.Broken[ta.MemberIndex])
+                    {
+                        if (_axleCount >= _axles.Length) Array.Resize(ref _axles, _axles.Length * 2);
+                        _axles[_axleCount++] = ta;
+                    }
             return true;
         }
 
@@ -883,7 +918,8 @@ namespace BridgeArchitect3D.Physics
                     var wm = Design.FindMember(Model.MemberIds[worst]);
                     var wa = wm != null ? Design.FindNode(wm.StartNodeId) : null; var wb = wm != null ? Design.FindNode(wm.EndNodeId) : null;
                     Result.WeakestX = wa != null && wb != null ? (wa.Position.X + wb.Position.X) / 2 : double.NaN;
-                    Result.WeakestText = Loc.F("构件 #{0}（{1}）", (Model.MemberIds[worst]), (wm != null && Db.Materials.TryGetValue(wm.MaterialId, out var wmat) ? wmat.Name : "?"));
+                    Result.WeakestText = Model.Mat[worst].IsTunnel ? Model.Mat[worst].Name : Loc.F("构件 #{0}（{1}）", (Model.MemberIds[worst]), (wm != null && Db.Materials.TryGetValue(wm.MaterialId, out var wmat) ? wmat.Name : "?"));
+                    if (Model.Mat[worst].IsTunnel && TunnelGeo != null) { int el = TunnelStructure.ElementOfMemberId(Model.MemberIds[worst]); if (el >= 0) Result.WeakestX = TunnelGeo.MidX(el); }
                 }
                 Result.MaxUtilization = Math.Max(Result.MaxUtilization, util);
                 NotePhaseUtil(util);
@@ -907,6 +943,7 @@ namespace BridgeArchitect3D.Physics
                 }
                 break;
             }
+            MergeTube();
 
             // 桥面下沉（记录为致命问题，但继续模拟）
             if (!_deflectionRecorded && Output.Stable)
@@ -1074,6 +1111,12 @@ namespace BridgeArchitect3D.Physics
             Events.Add(e);
             _firstBreak ??= e;
             MemberBroken?.Invoke(e);
+            // A tube element that breaks (its joints open) floods the tunnel
+            if (Model.Mat[k].IsTunnel && TunnelGeo != null)
+            {
+                int el = TunnelStructure.ElementOfMemberId(Model.MemberIds[k]);
+                if (el >= 0 && el < TunnelGeo.Count) FloodTunnel(TunnelStructure.BendingFailure(TunnelGeo, el, Status.Length > k ? Status[k].Moment : 0));
+            }
             if (!_collapseRecorded && _overstressBreaks > Level.Objectives.MaxBrokenMembers)
             {
                 _collapseRecorded = true;
@@ -1092,6 +1135,8 @@ namespace BridgeArchitect3D.Physics
                 _ => Loc.T("破坏"),
             };
             string text = Loc.F("构件 #{0}（{1}）{2}，利用率 {3:0}%", (Model.MemberIds[k]), (Model.Mat[k].Name), (modeText), (st.Utilization * 100));
+            // A tube element: the flood message (where, why, what to build) is the report, not a member number
+            if (Model.Mat[k].IsTunnel) { RemoveMember(k, st.Governing, Model.Mat[k].Name + " " + modeText); return; }
             // 断裂本身不立即判负：车辆能否通过由实际行驶决定（驶上断裂桥面会坠落）；
             // 首次断裂作为候选根因，若随后出现致命后果，失败报告会追溯到它。桥面断裂会降低完整度评分。
             if (_issueReason == FailureReason.None && _pendingBreakText == null)
@@ -1175,15 +1220,17 @@ namespace BridgeArchitect3D.Physics
                 case FailureReason.ShipCollision:
                     r.Headline = Loc.F("船撞上了{0}的{1}", (where), (what)); r.TopSuggestion = Loc.T("把航道（橙色框）里的构件移走或抬高到船高以上，或改用液压杆让路"); break;
                 case FailureReason.AnchorOverload:
-                    if (r.FailureMessage.Contains(Loc.T("隧道支点")))
-                    { r.Headline = Loc.T("隧道支点承受不住，失效了"); r.TopSuggestion = Loc.T("隧道支点承载力比桥墩低：把荷载分给更多支点，或换用支点承载更高的隧道建材"); }
+                    if (TunnelGeo != null && !TunnelGeo.Type.IsShield && r.FailureMessage.Contains(Loc.T("桥墩")))
+                    { r.Headline = Loc.T("托住 / 拉住隧道的河床基础承受不住"); r.TopSuggestion = Loc.T("选中失效的基础改用桩基础，或在旁边多加一根支撑 / 锚索分担"); }
                     else if (r.FailureMessage.Contains(Loc.T("桥墩")))
                     { r.Headline = Loc.T("桥墩下的地基承受不住，基础失效了"); r.TopSuggestion = Loc.T("软土上的桥墩改用桩基础，或把桥墩建在岩石区"); }
                     else { r.Headline = Loc.T("一个锚点承受不住，被拉脱了"); r.TopSuggestion = Loc.T("把载荷分给更多锚点，或减轻桥的自重"); }
                     break;
                 case FailureReason.TunnelFlooded:
                     r.Headline = Loc.T("隧道管节强度不够，被压坏了");
-                    r.TopSuggestion = Loc.T("选中变红的管节升级为加强 / 重型（强度更高）；悬浮隧道加锚索或换高强锚索；也可以把隧道抬浅一些减小水压");
+                    r.TopSuggestion = r.FailureMessage.Contains(Loc.T("接缝弯矩"))
+                        ? (TunnelGeo?.Type.IsFloating == true ? Loc.T("在出问题的接缝圆点加锚索（或换复合钢索），或换低一档浮力；升级管节等级可以提高接缝抗弯") : Loc.T("在出问题的接缝下面加桥墩 / 柱子，缩短支撑间距；升级管节等级可以提高接缝抗弯"))
+                        : Loc.T("选中变红的管节升级为加强 / 重型（强度更高）；也可以把隧道抬浅一些减小水压");
                     break;
                 case FailureReason.LiftOverload:
                     r.Headline = Loc.T("电梯平台承受不住，被压坏了"); r.TopSuggestion = Loc.T("选中隧道，在属性栏把电梯平台加长：平台越长越结实"); break;
@@ -1265,7 +1312,7 @@ namespace BridgeArchitect3D.Physics
             if (TunnelGeo != null)
             {
                 double len = 0; for (int i = 0; i < TunnelGeo.Count; i++) len += TunnelGeo.Len[i];
-                if (TunnelGeo.Type.IsFloating) { for (int i = 0; i < TunnelGeo.Count; i++) d += TunnelGeo.CableCount[i] * c.CableDisturbance; }
+                if (TunnelGeo.Type.IsFloating) { }   // its bed anchor blocks are foundations, counted above
                 else if (TunnelGeo.Type.IsShield) d += len * c.ShieldDisturbance;
                 else d += len * c.ImmersedDisturbance;
             }
@@ -1354,8 +1401,19 @@ namespace BridgeArchitect3D.Physics
                 FailureDetector.WorstMember(sim.Model, sim.Status, out double u);
                 sim.CurrentMaxUtilization = u;
             }
+            // Build-mode tunnel state: shell pressure (static water) merged with the tube beam on its supports
+            sim.TunnelGeo = TunnelGeometry.Build(sim.Design, db);
+            if (sim.TunnelGeo != null && db.TunnelConfig != null)
+            {
+                TunnelAnalysis.Evaluate(sim.TunnelGeo, level, db.TunnelConfig, TunnelAnalysis.StaticEnvironment(level, db.TunnelConfig), null, sim.TunnelStatus);
+                if (sim.Model.TubeMember.Length > 0) TunnelStructure.Merge(sim.Model, sim.Output, sim.Status, sim.TunnelGeo, sim.TunnelStatus, db.TunnelConfig, level, sim.Output.Stable);
+            }
             return sim;
         }
+
+        /// <summary>Build-mode tunnel state of a design: shell pressure + the tube beam on the player's supports.</summary>
+        public static TunnelState StaticTunnel(BridgeDesign design, LevelDefinition level, GameDatabase db) =>
+            StaticAnalysis(design, level, db).TunnelStatus;
 
         /// <summary>无界面快速运行整个测试（用于自动化测试与参考方案校验）。</summary>
         public SimulationResult RunToEnd()

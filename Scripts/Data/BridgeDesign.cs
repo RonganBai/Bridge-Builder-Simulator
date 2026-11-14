@@ -8,6 +8,10 @@ namespace BridgeArchitect3D.Data
     /// <summary>桥梁节点。锚点节点由关卡生成，玩家不可移动或删除。</summary>
     public class BridgeNode
     {
+        public bool Pulley { get; set; }
+        public double CounterweightTonnes { get; set; }
+        public double DeviceCost => (Pulley?1800:0)+CounterweightTonnes*260;
+        public bool Provided { get; set; }
         public int Id { get; set; }
         public Vec3d Position { get; set; }
         public bool IsAnchor { get; set; }
@@ -34,7 +38,15 @@ namespace BridgeArchitect3D.Data
         public int TunnelLegacyId { get; set; }
         [System.Text.Json.Serialization.JsonIgnore] public bool IsTunnelSupport => TunnelJoint > 0;
         /// <summary>Any node owned by the tunnel (control point or support): not an ordinary member end.</summary>
-        [System.Text.Json.Serialization.JsonIgnore] public bool IsTunnelNode => TunnelPoint || TunnelJoint > 0;
+        /// <summary>Fixed node of a bank lift (1 = left, 2 = right; 0 = none) and its role: "deck0" / "deck1" (platform
+        /// ends at the lower landing) or "pit" (shaft floor base). Created with the tunnel; cannot be moved or deleted.</summary>
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+        public int LiftBank { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+        public string LiftRole { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore] public bool IsLiftFixed => LiftBank > 0 && LiftRole != null;
+        /// <summary>Any node owned by the tunnel (control point, support, fixed lift node): not an ordinary member end.</summary>
+        [System.Text.Json.Serialization.JsonIgnore] public bool IsTunnelNode => TunnelPoint || TunnelJoint > 0 || IsLiftFixed;
 
         public BridgeNode Clone() => (BridgeNode)MemberwiseClone();
     }
@@ -45,6 +57,7 @@ namespace BridgeArchitect3D.Data
     /// </summary>
     public class BridgeMember
     {
+        public bool Provided { get; set; }
         public int Id { get; set; }
         public int StartNodeId { get; set; }
         public int EndNodeId { get; set; }
@@ -68,7 +81,7 @@ namespace BridgeArchitect3D.Data
         public const double StrokeCostRate = 0.8;
 
         /// <summary>Price including the hydraulic stroke surcharge (Cost is the length price).</summary>
-        public double EffectiveCost() => Cost * (1 + StrokeCostRate * System.Math.Abs(CostStroke ?? 0));
+        public double EffectiveCost() => Provided?0:Cost * (1 + StrokeCostRate * System.Math.Abs(CostStroke ?? 0));
 
         public BridgeMember Clone() => (BridgeMember)MemberwiseClone();
         public bool Connects(int a, int b) => (StartNodeId == a && EndNodeId == b) || (StartNodeId == b && EndNodeId == a);
@@ -139,6 +152,7 @@ namespace BridgeArchitect3D.Data
     /// <summary>玩家建造方案。建造与测试状态独立：测试只读取方案的副本，不会修改原始方案。</summary>
     public class BridgeDesign : IVersionStamped
     {
+        public string InfrastructureId { get; set; }
         /// <summary>Game version that last saved this design (null = saved before versioning, i.e. 1.0.0).
         /// Separate from Version, which is the save format.</summary>
         public string GameVersion { get; set; }
@@ -176,7 +190,8 @@ namespace BridgeArchitect3D.Data
         public BridgeMember FindMember(int id) => Members.FirstOrDefault(m => m.Id == id);
         /// <summary>总花费 = 新建构件费用 + 拆除费 + 修复费（旧桥原有构件不计费）。</summary>
         public double TotalCost() => Members.Sum(m => m.EffectiveCost()) + DemolitionCost + RepairCost
-                                     + Nodes.Sum(n => n.PierBase ? FoundationRules.Cost(n.Foundation) : 0)
+                                     + Nodes.Sum(n=>n.DeviceCost)
+                                     + Nodes.Sum(n => n.PierBase && !n.Provided ? FoundationRules.Cost(n.Foundation) : 0)
                                      + (Tunnel?.Cost ?? 0);
 
         public BridgeDesign Clone()
@@ -184,7 +199,7 @@ namespace BridgeArchitect3D.Data
             return new BridgeDesign
             {
                 Version = Version, LevelId = LevelId, NextNodeId = NextNodeId, NextMemberId = NextMemberId,
-                SavedTotalCost = SavedTotalCost, DemolishedCount = DemolishedCount, DemolitionCost = DemolitionCost, RepairCost = RepairCost,
+                InfrastructureId=InfrastructureId, SavedTotalCost = SavedTotalCost, DemolishedCount = DemolishedCount, DemolitionCost = DemolitionCost, RepairCost = RepairCost,
                 Nodes = Nodes.Select(n => n.Clone()).ToList(),
                 Members = Members.Select(m => m.Clone()).ToList(),
                 Mechanisms = (Mechanisms ?? new MechanismData()).Clone(),

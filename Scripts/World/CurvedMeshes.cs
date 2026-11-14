@@ -56,19 +56,49 @@ namespace BridgeArchitect3D.World
             for(int i=0;i<8;i++){float a=-Mathf.Pi/2+i*Mathf.Pi/7;points[i]=new(halfStraight+Mathf.Cos(a)*radius,Mathf.Sin(a)*radius);points[i+8]=new(-halfStraight-Mathf.Cos(a)*radius,-Mathf.Sin(a)*radius);}
             return points;
         }
+        /// <summary>Link spacing of animated tank tracks, m.</summary>
+        public const float TrackLinkSpacing = 0.28f;
+
+        /// <summary>
+        /// Tank track: a rubber belt (stadium ring) plus evenly spaced tread links in a "Track" holder node. The
+        /// outer loop is stored as meta "loop" so VehicleController can run the links around it
+        /// while the tank drives (links named "TrackLink", in loop order).
+        /// </summary>
         public static void Track(Node3D parent,float length,float z,float depth,Material rubber,Material tread)
         {
+            var holder=new Node3D{Name="Track",Position=new Vector3(-0.6f,0.5f,z)};holder.SetMeta("animated",true);parent.AddChild(holder);
             var outer=Stadium(length/2-0.48f,0.48f);var inner=Stadium(length/2-0.48f,0.32f);var st=new SurfaceTool();st.Begin(Mesh.PrimitiveType.Triangles);
-            Vector3 P(Vector2 p,float side)=>new(p.X-0.6f,p.Y+0.5f,z+side*depth/2);
+            Vector3 P(Vector2 p,float side)=>new(p.X,p.Y,side*depth/2);
             for(int i=0;i<outer.Length;i++)
             {
                 int j=(i+1)%outer.Length;
                 foreach(float side in new[]{-1f,1f}){var a=P(outer[i],side);var b=P(outer[j],side);var c=P(inner[j],side);var d=P(inner[i],side);Triangle(st,a,b,c);Triangle(st,a,c,d);Triangle(st,c,b,a);Triangle(st,d,c,a);}
                 foreach(var ring in new[]{outer,inner}){Triangle(st,P(ring[i],-1),P(ring[j],-1),P(ring[j],1));Triangle(st,P(ring[i],-1),P(ring[j],1),P(ring[i],1));}
-                var mid=(outer[i]+outer[j])/2;var delta=outer[j]-outer[i];
-                parent.AddChild(new MeshInstance3D{Mesh=new BoxMesh{Size=new Vector3(delta.Length()*0.7f,0.055f,depth+0.04f)},Position=new(mid.X-0.6f,mid.Y+0.5f,z),RotationDegrees=new(0,0,Mathf.RadToDeg(Mathf.Atan2(delta.Y,delta.X))),MaterialOverride=tread});
             }
-            st.Index();parent.AddChild(new MeshInstance3D{Mesh=Commit(st),MaterialOverride=rubber});
+            st.Index();holder.AddChild(new MeshInstance3D{Mesh=Commit(st),MaterialOverride=rubber});
+            holder.SetMeta("loop",outer);
+            float perimeter=0;for(int i=0;i<outer.Length;i++)perimeter+=(outer[(i+1)%outer.Length]-outer[i]).Length();
+            int count=Mathf.Max(8,Mathf.RoundToInt(perimeter/TrackLinkSpacing));
+            var link=new BoxMesh{Size=new Vector3(TrackLinkSpacing*0.62f,0.055f,depth+0.04f)};
+            for(int k=0;k<count;k++)holder.AddChild(new MeshInstance3D{Name="TrackLink",Mesh=link,MaterialOverride=tread});
+            PlaceLinks(holder,0);
+        }
+
+        /// <summary>Moves the links of a track holder <paramref name="offset"/> metres along its loop.</summary>
+        public static void PlaceLinks(Node3D holder,float offset)
+        {
+            var loop=holder.GetMeta("loop").AsVector2Array();int n=loop.Length;if(n<2)return;
+            var cum=new float[n+1];for(int i=0;i<n;i++)cum[i+1]=cum[i]+(loop[(i+1)%n]-loop[i]).Length();
+            float total=cum[n];int k=0,count=holder.GetChildCount()-1;   // child 0 is the belt, the rest are links (Godot renames duplicate names, so go by order)
+
+            float step=total/Mathf.Max(1,count);
+            foreach(var c in holder.GetChildren())
+            {
+                if(c is not MeshInstance3D m||c.GetIndex()==0)continue;
+                float s=Mathf.PosMod(k*step+offset,total);int seg=0;while(seg<n-1&&cum[seg+1]<s)seg++;
+                var a=loop[seg];var b=loop[(seg+1)%n];var d=b-a;float t=d.Length()<1e-6f?0:(s-cum[seg])/d.Length();
+                var p=a+d*t;m.Transform=new Transform3D(new Basis(Vector3.Back,Mathf.Atan2(d.Y,d.X)),new Vector3(p.X,p.Y,0));k++;
+            }
         }
         public static Mesh Solid(ShipSolid solid)
         {

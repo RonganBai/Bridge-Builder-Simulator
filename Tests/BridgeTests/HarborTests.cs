@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Collections.Generic;
 using BridgeArchitect3D.Data;
@@ -7,6 +7,47 @@ internal static class HarborTests
 {
     public static void Run(GameDatabase db,Action<string,bool,string> check)
     {
+        foreach(var d in db.Vehicles.Values)
+        {
+            check($"Catalogue: {d.Id} has category, purpose and functions",!string.IsNullOrWhiteSpace(d.Category) && !string.IsNullOrWhiteSpace(d.Purpose) && !string.IsNullOrWhiteSpace(d.Features),"");
+            check($"Catalogue: {d.Id} has valid mass, dimensions, speed and axle loads",d.Mass>0 && d.Length>0 && d.Width>0 && d.Height>0 && d.Speed>0 && d.Axles.Count>0 && d.Axles.All(a=>a.LoadFraction>0) && Math.Abs(d.Axles.Sum(a=>a.LoadFraction)-1)<0.001,"");
+        }
+        check("Fleet: empty dump truck is lighter than loaded dump truck with identical dimensions",db.Vehicles["dump_empty"].Mass<db.Vehicles["dump_loaded"].Mass && db.Vehicles["dump_empty"].Length==db.Vehicles["dump_loaded"].Length,"");
+        check("Fleet: modular transport distributes load across twelve axles",db.Vehicles["modular_transport"].Axles.Count==12 && db.Vehicles["modular_transport"].Axles.All(a=>Math.Abs(a.LoadFraction*120000-10000)<0.001),"");
+        foreach(string id in new[]{"mixer","fire_engine","machinery_flatbed","police","police_suv","jeep","utility","coupe","car_carrier","crane"})
+        {
+            var d=db.Vehicles[id];
+            check($"New fleet: {id} axle loads sum to one and align with wheelbase",Math.Abs(d.Axles.Sum(a=>a.LoadFraction)-1)<1e-9 && Math.Abs(d.Axles.Min(a=>a.Offset)+d.Wheelbase)<1e-9 && d.Axles.All(a=>a.LoadFraction>0),"");
+        }
+        foreach(string color in new[]{"Red","White","Blue","Amber"})
+        {
+            string name="EmergencyBeacon"+color;double period=color=="Amber"?2:1.2;
+            bool repeats=true,hasOn=false,hasOff=false;
+            for(int i=0;i<1000;i++)
+            {
+                double t=(i+0.371)*period/1000;bool on=EmergencyBeaconPattern.IsLit(name,t);
+                repeats&=on==EmergencyBeaconPattern.IsLit(name,t+period*17);
+                repeats&=on==EmergencyBeaconPattern.IsLit(name+"Light",t);
+                hasOn|=on;hasOff|=!on;
+            }
+            check($"Beacon: {color} repeats across cycle boundaries and lenses match lights",repeats && hasOn && hasOff,"");
+        }
+        check("Beacon: amber remains on longer than emergency strobes",EmergencyBeaconPattern.IsLit("Amber",0.6) && !EmergencyBeaconPattern.IsLit("Red",0.6),"");
+        foreach(string id in new[]{"fire_engine","police","police_suv","utility","crane"})
+        {
+            var emergency=new HarborTraffic(new[]{db.Vehicles[id]});bool lit=false,persists=true;
+            var trips=new HashSet<long>();
+            for(int i=0;i<1800;i++)
+            {
+                emergency.Advance(0.1);
+                foreach(var car in emergency.Cars)
+                {
+                    if(trips.Contains(car.Id))persists&=car.EmergencyLightsOn;
+                    if(car.EmergencyLightsOn){lit=true;trips.Add(car.Id);}
+                }
+            }
+            check($"New fleet: {id} activates and latches its emergency lights",lit && persists,"");
+        }
         var fleet=db.Vehicles.Values.Where(v=>v.Kind!="tank" && v.Kind!="train" && v.Kind!="pedestrians").ToArray();
         var traffic=new HarborTraffic(fleet);var seen=new HashSet<string>();var waited=new HashSet<long>();var resumed=new HashSet<long>();
         var speeds=new Dictionary<string,double>();var previousCars=new Dictionary<long,(double front,double speed)>();

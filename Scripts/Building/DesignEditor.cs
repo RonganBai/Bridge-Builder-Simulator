@@ -34,7 +34,7 @@ namespace BridgeArchitect3D.Building
     /// 负责：位置约束、重复检测、长度限制、预算同步、撤销/重做。
     /// 所有修改都通过本类完成，保证预算始终与构件数据一致。
     /// </summary>
-    public class DesignEditor
+    public partial class DesignEditor
     {
         public const double GridSize = 0.25;
         /// <summary>Node snap / pick radius in metres; node models are drawn with the same radius.</summary>
@@ -53,12 +53,317 @@ namespace BridgeArchitect3D.Building
         /// <summary>方案发生任何变化时触发（UI 与渲染据此刷新）。</summary>
         public event Action Changed;
 
-        public DesignEditor(BridgeDesign design, LevelDefinition level, GameDatabase db)
+        private bool _previewing;
+
+        public DesignEditor(BridgeDesign design, LevelDefinition level, GameDatabase db, bool migrate = true)
         {
             Level = level; Db = db;
             Design = design ?? BridgeDesign.CreateForLevel(level);
+            LiftChallengeRules.Ensure(Design,Level,Db);
+            if(Level.MechanicalLift)LiftMechanics.AddMounts(Design,Level,Db);
             CrossBeams.SplitExistingBlocking(Design, Level, Db);
             RecalculateAll();
+            if (!migrate) return;
+            MigrateStructuralTunnel();
+            MigrateLiftStructure();
+        }
+
+        // ---------------- Bank lifts: ordinary members in the shafts ----------------
+
+        /// <summary>
+        /// Older saves have no lift members (Lift == null or Lift.Built == null). Once, the fixed lift nodes are created
+        /// and the cheapest template that carries every road vehicle of the level is generated as ordinary members.
+        /// Afterwards Built = 1 and this changes nothing.
+        /// </summary>
+        public void MigrateLiftStructure()
+        {
+            var r = Design.Tunnel;
+            if (r == null || r.Lift?.Built != null || TunnelGeo == null) return;
+            if(Level.MechanicalLift){SyncLifts(TunnelGeo);LiftMechanics.AddMounts(Design,Level,Db);r.Lift.Built=1;return;}
+            RegenerateTunnel();
+            var t = Level.ProvidedInfrastructure!=null?LiftCfgOf.Templates["light"].Clone():LiftTemplateForLevel();
+            GenerateLifts(t);
+            RegenerateTunnel();
+        }
+
+        public LiftConfig LiftCfgOf => LiftStructure.Cfg(Db);
+
+        /// <summary>The two lifts as found in the design (empty without a tunnel).</summary>
+        public LiftLayout[] Lifts() => TunnelGeo == null ? Array.Empty<LiftLayout>() : LiftStructure.Analyze(Design, Level, Db);
+
+        /// <summary>Travel heights of both bank lifts, m.</summary>
+        public double[] LiftTravels() => TunnelGeo == null ? Array.Empty<double>() : TunnelRules.Shafts(Level, TunnelGeo).Select(s => s.Height).ToArray();
+
+        /// <summary>Heaviest road vehicle of the level, N.</summary>
+        public double LiftLoadForLevel() => LevelRoadVehicles().Select(v => v.Mass * StructuralModel.Gravity).DefaultIfEmpty(0).Max();
+
+        /// <summary>Road vehicles of the level (distinct).</summary>
+        public IEnumerable<VehicleDefinition> LevelRoadVehicles() => Level.TrafficEvents
+            .Where(e => e.Type == TrafficEventType.Vehicle && Db.Vehicles.TryGetValue(e.VehicleId ?? "", out var v) && !RailTrack.IsTrain(v))
+            .Select(e => e.VehicleId).Distinct().Select(id => Db.Vehicles[id]);
+
+        /// <summary>Worst utilization of the current lifts over every road vehicle of the level standing alone on the platform.</summary>
+        public double LiftWorstUtil(out LiftCheck worst)
+        {
+            worst = null; double u = 0; var c = LiftCfgOf;
+            foreach (var L in Lifts())
+                foreach (var axles in LevelRoadVehicles().Select(v => LiftStructure.VehicleAxles(v, L.Shaft, TunnelRules.LiftCfg.Margin,Design.Tunnel?.Lift?.BoardingPolicy??LiftOperation.Shared)).Append(Array.Empty<(double, double)>()))
+                {
+                    var k = LiftStructure.Check(Design, Level, Db, L, axles);
+                    if (worst == null || k.Util > u) { u = k.Util; worst = k; }
+                }
+            return u;
+        }
+
+        /// <summary>Cheapest template whose generated members carry every road vehicle of the level (heaviest template if none does).</summary>
+        public LiftDesign LiftTemplateForLevel()
+        {
+            var c = LiftCfgOf; LiftDesign best = null; double bestCost = double.MaxValue, bestUtil = double.MaxValue; LiftDesign safest = null;
+            foreach (var t in c.Templates.Values)
+            {
+                var trial = new DesignEditor(Design.Clone(), Level, Db, migrate: false);
+                trial.GenerateLifts(t); trial.RegenerateTunnel();
+                double u = trial.LiftWorstUtil(out _), cost = trial.UsedCost;
+                if (u <= 1 && cost < bestCost) { best = t; bestCost = cost; }
+                if (u < bestUtil) { bestUtil = u; safest = t; }
+            }
+            return (best ?? safest ?? c.Templates.Values.First()).Clone();
+        }
+
+        private string AllowedOr(string id, params string[] fallback)
+        {
+            if (id != null && Level.AllowedMaterials.Contains(id)) return id;
+            var mat = Db.GetMaterial(id);
+            foreach (var f in fallback) if (Level.AllowedMaterials.Contains(f)) return f;
+            // Same component type, any allowed one
+            var same = Level.AllowedMaterials.Select(Db.GetMaterial).FirstOrDefault(m => m != null && mat != null && m.ComponentType == mat.ComponentType && !m.IsTunnel && !m.IsLift && !m.IsPier);
+            return same?.MaterialId ?? id;
+        }
+
+        /// <summary>Removes the members / free nodes of every lift and generates template t in both shafts (no undo step).</summary>
+        private void GenerateLifts(LiftDesign t)
+        {
+            var r = Design.Tunnel; var g = TunnelGeo;
+            if (r == null || g == null) return;
+            SyncLifts(g);
+            foreach (var L in Lifts())
+            {
+                var free = L.Nodes.Where(id => !Design.FindNode(id).IsTunnelNode).ToHashSet();
+                Design.Members.RemoveAll(m => L.Members.Contains(m));
+                Design.Nodes.RemoveAll(n => free.Contains(n.Id) && !Design.Members.Any(m => m.StartNodeId == n.Id || m.EndNodeId == n.Id));
+                var pits = L.Pits.OrderBy(p => p.Position.X).ToList();
+                string Allowed(string id) => Db.GetMaterial(id)?.ComponentType switch
+                {
+                    ComponentType.Deck => AllowedOr(id, "deck_steel", "road"),
+                    ComponentType.Cable => AllowedOr(id, "cable_composite", "cable"),
+                    ComponentType.Column => AllowedOr(id, "concrete", "steel"),
+                    _ => AllowedOr(id, "steel")
+                };
+                var (nodes, members) = LiftStructure.Template(t, L.Shaft, L.Deck0, L.Deck1, pits[0], pits[^1], Db, () => Design.NextNodeId++, Allowed);
+                Design.Nodes.AddRange(nodes);
+                foreach (var (a, b, mid) in members)
+                {
+                    var na = Design.FindNode(a); var nb = Design.FindNode(b); var mat = Db.GetMaterial(mid);
+                    double len = Vec3d.Distance(na.Position, nb.Position);
+                    Design.Members.Add(new BridgeMember { Id = Design.NextMemberId++, StartNodeId = a, EndNodeId = b, MaterialId = mid, Length = len, Cost = len * mat.CostPerMeter, CostStroke = DefaultCostStroke(mat) });
+                }
+            }
+            string policy=r.Lift?.BoardingPolicy;
+            r.Lift = t.Clone(); r.Lift.Built = 1;
+            if(LiftOperation.Valid(policy))r.Lift.BoardingPolicy=policy;
+        }
+
+        /// <summary>"Rebuild the lift structure": regenerate both lifts from a template (null = cheapest that carries the level's vehicles).</summary>
+        public BuildResult RebuildLifts(string templateId = null)
+        {
+            var r = Design.Tunnel;
+            if (r == null || TunnelGeo == null) return BuildResult.Fail(Loc.T("没有隧道"));
+            var c = LiftCfgOf;
+            LiftDesign t = templateId != null && c.Templates.TryGetValue(templateId, out var tt) ? tt.Clone() : LiftTemplateForLevel();
+            PushUndo();
+            GenerateLifts(t);
+            RegenerateTunnel();
+            Changed?.Invoke();
+            return BuildResult.Success(0, Loc.F("已按{0}重建两岸电梯结构：平台、吊索和井道柱子都是普通构件，可以像建桥一样修改。", (LiftConfig.TemplateName(t.Template))) + LiftSummary());
+        }
+
+        /// <summary>Drive and counterweight of both lifts (set on a sheave node: the top of a hoist rope).</summary>
+        public BuildResult SetLiftOperation(string policy)
+        {
+            if(Design.Tunnel?.Lift==null || !LiftOperation.Valid(policy))return BuildResult.Fail(Loc.T("无效的电梯运营方式"));
+            if(Design.Tunnel.Lift.BoardingPolicy==policy)return BuildResult.Success();
+            PushUndo();Design.Tunnel.Lift.BoardingPolicy=policy;RegenerateTunnel();Changed?.Invoke();
+            return BuildResult.Success(0,Loc.T("已切换：")+LiftOperation.Name(policy));
+        }
+
+        public BuildResult SetLiftMachine(string drive = null, int counterweightSteps = 0)
+        {
+            var r = Design.Tunnel;
+            if (r?.Lift == null) return BuildResult.Fail(Loc.T("没有隧道"));
+            var c = LiftCfgOf;
+            if(Level.MechanicalLift)return BuildResult.Fail("请安装真实液压缸和配重块；本关没有内置驱动机。");
+            if (drive != null && !c.Drives.ContainsKey(drive)) return BuildResult.Fail(Loc.T("没有这种驱动"));
+            PushUndo();
+            if (drive != null) r.Lift.Drive = drive;
+            r.Lift.Counterweight = Math.Clamp(r.Lift.Counterweight + counterweightSteps * c.CounterweightStep, 0, c.MaxCounterweight);
+            RegenerateTunnel();
+            Changed?.Invoke();
+            return BuildResult.Success(0, LiftSummary());
+        }
+
+        /// <summary>The lift and sheave a node belongs to (sheave = top node of a hoist rope).</summary>
+        public LiftLayout LiftOfNode(int nodeId, out bool sheave)
+        {
+            sheave = false;
+            foreach (var L in Lifts()) if (L.Nodes.Contains(nodeId)) { sheave = L.Sheaves.ContainsKey(nodeId); return L; }
+            return null;
+        }
+
+        /// <summary>One line on the current lifts: problems, drive, counterweight and the worst vehicle case.</summary>
+        public string LiftSummary()
+        {
+            var r = Design.Tunnel; if (r?.Lift == null) return "";
+            var c = LiftCfgOf; var lifts = Lifts();
+            if(Level.MechanicalLift)return LiftMechanics.Summary(Design,Level,Db);
+            var bad = lifts.FirstOrDefault(L => L.Problem != null);
+            if (bad != null) return Loc.F("{0}：{1}", (LiftStructure.Name(bad)), (bad.Problem));
+            double u = LiftWorstUtil(out var w);
+            var drive = c.Drives.GetValueOrDefault(r.Lift.Drive ?? "") ?? c.Drives.Values.First();
+            return Loc.F("电梯：{0} · 配重 {1:0} 吨 · 本关车辆单独上平台时最大利用率 {2:0}%", (drive.Name), (r.Lift.Counterweight), (u * 100))
+                + (w != null && u > 1 ? Loc.F("（{0}：{1}）", (w.Where), (w.Why)) : "");
+        }
+
+        /// <summary>
+        /// Keeps the fixed lift nodes where the shafts are now (platform ends at the lower landing, pit bases under the
+        /// end walls) and carries the player's lift members along: when a shaft gets deeper / its platform longer, nodes in
+        /// the lower half follow the landing, nodes on the outer half follow the outer end.
+        /// </summary>
+        private void SyncLifts(TunnelGeometry g)
+        {
+            if (Design.Tunnel == null || g == null) return;
+            var c = LiftCfgOf; var shafts = TunnelRules.Shafts(Level, g);
+            for (int bank = 1; bank <= 2; bank++)
+            {
+                var s = shafts[bank - 1];
+                BridgeNode Fixed(string role, int index = 0) => Design.Nodes.Where(n => n.LiftBank == bank && n.LiftRole == role).OrderBy(n => n.Position.X).ElementAtOrDefault(index);
+                var d0 = Fixed("deck0"); var d1 = Fixed("deck1");
+                if (d0 != null && d1 != null)
+                {
+                    double ox0 = d0.Position.X, ox1 = d1.Position.X, ob = d0.Position.Y;
+                    double dx0 = s.X0 - ox0, dx1 = s.X1 - ox1, db = s.Bottom - ob;
+                    if (Math.Abs(dx0) + Math.Abs(dx1) + Math.Abs(db) > 1e-9)
+                    {
+                        var old = new TunnelRules.LiftShaft(s.Left, ox0, ox1, s.Top, ob);
+                        double midY = (s.Top + ob) / 2;
+                        foreach (var n in Design.Nodes)
+                        {
+                            if (n.Provided || n.LiftBank != 0 || n.IsAnchor || n.TunnelPoint || n.TunnelJoint > 0 || n.PierBase || !LiftStructure.InZone(c, old, n.Position.X, n.Position.Y)) continue;
+                            // Between the platform ends: stretch proportionally (keeps the order of the nodes);
+                            // beside them (shaft columns): follow the nearer end
+                            double x = n.Position.X, nx = x < ox0 ? x + dx0 : x > ox1 ? x + dx1
+                                : s.X0 + (x - ox0) * (s.X1 - s.X0) / Math.Max(1e-9, ox1 - ox0);
+                            n.Position = new Vec3d(nx, n.Position.Y + (n.Position.Y < midY ? db : 0));
+                        }
+                    }
+                }
+                void Place(string role, int index, double x, double y)
+                {
+                    var n = Fixed(role, index);
+                    if (n == null) { n = new BridgeNode { Id = Design.NextNodeId++, LiftBank = bank, LiftRole = role }; Design.Nodes.Add(n); }
+                    n.Position = new Vec3d(x, y);
+                }
+                Place("deck0", 0, s.X0, s.Bottom); Place("deck1", 0, s.X1, s.Bottom);
+                double pit = LiftStructure.PitY(c, s);
+                Place("pit", 0, s.X0 - c.ColumnOffset, pit); Place("pit", 1, s.X1 + c.ColumnOffset, pit);
+            }
+        }
+
+        private bool InLiftZone(double x, double y)
+        {
+            var g = TunnelGeo; if (g == null) return false;
+            var c = LiftCfgOf;
+            return TunnelRules.Shafts(Level, g).Any(s => LiftStructure.InZone(c, s, x, y));
+        }
+
+        /// <summary>
+        /// Older saves (TunnelRoute.Structure == null): the tube had built-in supports (immersed) or a cable count per
+        /// element (floating). That capacity becomes visible, costed members once: a concrete pier under every immersed
+        /// joint (cheapest foundation that carries the old support load), and for floating tubes per joint
+        /// ceil((cables left + cables right) / 2) cables of the same strength class down to bed anchor blocks (foundation
+        /// sized for the cable's strength). Marked with Structure = 1, so running it again changes nothing.
+        /// </summary>
+        public void MigrateStructuralTunnel()
+        {
+            var r = Design.Tunnel;
+            if (r == null || r.Structure != null) return;
+            r.Structure = 1;
+            var g = TunnelGeometry.Build(Design, Db);
+            if (g == null || g.Type.IsShield) return;
+            // Old per-joint capacity, read before the joints are rebuilt
+            var oldSupport = new double[g.Count]; var oldCables = new int[g.Count]; var strong = new bool[g.Count];
+            for (int j = 1; j < g.Count; j++)
+            {
+                oldSupport[j] = Math.Min(g.Grade[j - 1].SupportLoad, g.Grade[j].SupportLoad);
+                if (g.Type.IsFloating)
+                {
+                    oldCables[j] = (int)Math.Ceiling((g.CableCount[j - 1] + g.CableCount[j]) / 2.0);
+                    strong[j] = g.CableId[j - 1] == "strong" || g.CableId[j] == "strong";
+                }
+            }
+            // Old joint nodes (on the roof) without members are rebuilt at the tube bottom
+            var bare = Design.Nodes.Where(n => n.IsTunnelSupport && !n.TunnelPoint && !Design.Members.Any(m => m.StartNodeId == n.Id || m.EndNodeId == n.Id)).Select(n => n.Id).ToHashSet();
+            Design.Nodes.RemoveAll(n => bare.Contains(n.Id));
+            foreach (var e in r.Elements) e.Reinforced = false;
+            RegenerateTunnel();
+            g = TunnelGeometry.Build(Design, Db);
+            for (int j = 1; j < g.Count; j++)
+            {
+                var joint = Design.Nodes.FirstOrDefault(n => n.TunnelJoint == j);
+                if (joint == null || Design.Members.Any(m => m.StartNodeId == joint.Id || m.EndNodeId == joint.Id)) continue;
+                double x = joint.Position.X, bed = PierBedY(x);
+                var zone = Level.Terrain.ZoneAt(x);
+                if (!g.Type.IsFloating)
+                {
+                    var pier = Db.GetMaterial("pier_concrete");
+                    if (pier == null || joint.Position.Y - bed < 0.5) continue;
+                    var f = FoundationRules.Capacity(zone, FoundationType.Shallow) >= oldSupport[j] ? FoundationType.Shallow : FoundationType.Pile;
+                    var baseN = new BridgeNode { Id = Design.NextNodeId++, Position = new Vec3d(x, bed), PierBase = true, Foundation = f };
+                    Design.Nodes.Add(baseN);
+                    var nodes = new List<BridgeNode> { baseN };
+                    if (joint.Position.Y - bed > pier.MaximumLength)
+                    {
+                        var mid = new BridgeNode { Id = Design.NextNodeId++, Position = new Vec3d(x, Snap((bed + joint.Position.Y) / 2)), PierPart = true };
+                        Design.Nodes.Add(mid); nodes.Add(mid);
+                    }
+                    joint.PierPart = true;
+                    nodes.Add(joint);
+                    for (int k = 0; k + 1 < nodes.Count; k++) AddRaw(nodes[k], nodes[k + 1], pier);
+                }
+                else
+                {
+                    var cable = Db.GetMaterial(strong[j] ? "cable_composite" : "cable") ?? Db.GetMaterial("cable");
+                    if (cable == null) continue;
+                    double cap = cable.TensileStrength * cable.CrossSectionArea;
+                    var f = FoundationRules.Capacity(zone, FoundationType.Shallow) >= cap ? FoundationType.Shallow : FoundationType.Pile;
+                    int n = oldCables[j];
+                    for (int k = 0; k < n; k++)
+                    {
+                        // Anchors spread along the bed (two members cannot join the same two nodes)
+                        double ax = x + (k - (n - 1) / 2.0) * 1.5;
+                        var anchor = new BridgeNode { Id = Design.NextNodeId++, Position = new Vec3d(ax, PierBedY(ax)), PierBase = true, Foundation = f };
+                        Design.Nodes.Add(anchor);
+                        AddRaw(joint, anchor, cable);
+                    }
+                }
+            }
+            RegenerateTunnel();
+            _undo.Clear(); _redo.Clear();
+        }
+
+        private void AddRaw(BridgeNode a, BridgeNode b, MaterialDefinition mat)
+        {
+            double len = Vec3d.Distance(a.Position, b.Position);
+            Design.Members.Add(new BridgeMember { Id = Design.NextMemberId++, StartNodeId = a.Id, EndNodeId = b.Id, MaterialId = mat.MaterialId, Length = len, Cost = len * mat.CostPerMeter, CostStroke = DefaultCostStroke(mat) });
         }
 
         public double Budget => Level.Budget;
@@ -100,11 +405,48 @@ namespace BridgeArchitect3D.Building
         {
             if (undoable) PushUndo();
             Design = d;
+            LiftChallengeRules.Ensure(Design,Level,Db);
+            if(Level.MechanicalLift)LiftMechanics.AddMounts(Design,Level,Db);
             RecalculateAll();
+            if(Level.ProvidedInfrastructure!=null)MigrateLiftStructure();
             Changed?.Invoke();
         }
 
         // ---------------- 查询 ----------------
+        public string DeviceProblem(int id,string material,bool remove=false)
+        {
+            var n=Design.FindNode(id);var mat=Db.GetMaterial(material);
+            if(n==null)return "请点击已有连接节点安装；可先从支点拉一段钢索生成端点";
+            if(mat?.DeviceKind==null||!Level.AllowedMaterials.Contains(material))return "本关不允许该设备";
+            if(n.Provided||n.TunnelPoint||n.IsTunnelSupport)return "请选择电梯内可编辑的支点或钢索端点";
+            if(remove)return null;
+            if(mat.DeviceKind=="pulley")
+            {
+                if(n.CounterweightTonnes>0)return "配重端点不能同时安装定滑轮";
+                if(!LiftMechanics.StableMount(Design,Db,id))return "安装失败：定滑轮需要稳定支点，先用梁或柱连接固定基础";
+                if(Design.Members.Count(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==id||m.EndNodeId==id))>2)return "定滑轮最多通过一根连续绳索（两段钢索）";
+            }
+            else
+            {
+                if(n.Pulley||LiftMechanics.StableMount(Design,Db,id))return "配重必须挂在可移动钢索端点上，不能挂在固定支点或滑轮轴上";
+                if(!Design.Members.Any(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==id||m.EndNodeId==id)))return "配重需要钢索连接，请先铺设钢索";
+                if(Design.Members.Any(m=>(m.StartNodeId==id||m.EndNodeId==id)&&Db.GetMaterial(m.MaterialId)?.IsCable==false&&Db.GetMaterial(m.MaterialId)?.Extendable==false))return "配重需要独立悬挂端点，不能与平台或井架刚接";
+                if(n.CounterweightTonnes>=100)return "该端点配重上限为 100 吨";
+            }
+            return null;
+        }
+        public BuildResult InstallDevice(int id,string material,bool remove=false)
+        {
+            string why=DeviceProblem(id,material,remove);if(why!=null)return BuildResult.Fail(why);
+            var n=Design.FindNode(id);var kind=Db.GetMaterial(material).DeviceKind;
+            if(remove && (kind=="pulley"?!n.Pulley:n.CounterweightTonnes==0))return BuildResult.Fail("该节点没有可拆除的设备");
+            if(!remove&&kind=="pulley"&&n.Pulley)return BuildResult.Fail("这里已有定滑轮；连接两段钢索，Shift 点击可拆除");
+            PushUndo();
+            if(kind=="pulley")n.Pulley=!remove;
+            else n.CounterweightTonnes=Math.Max(0,n.CounterweightTonnes+(remove?-5:5));
+            Changed?.Invoke();
+            return BuildResult.Success(id,kind=="pulley"?(remove?"已拆除定滑轮并退还费用":"已安装定滑轮：连接两段钢索形成连续绳路，额定轴载 600 kN，不能分支。Shift 点击可拆除"):$"节点 #{id} 配重 {n.CounterweightTonnes:0} 吨，重量与费用已更新；Shift 点击减 5 吨");
+        }
         public BridgeNode NodeAt(double x, double y, double radius, int ignoreNodeId = -1)
         {
             BridgeNode best = null; double bestD = radius;
@@ -143,6 +485,7 @@ namespace BridgeArchitect3D.Building
         public string CheckNodePosition(double x, double y, int ignoreNodeId = -1, bool pierPart = false, int ignoreNodeId2 = -1)
         {
             var t = Level.Terrain;
+            if(Level.ProvidedInfrastructure!=null && !InLiftZone(x,y))return Loc.T(LiftChallengeRules.Locked);
             if (pierPart)
             {
                 // 桥墩上的支点：可以在水面以下，但必须在河道内、河床以上
@@ -160,10 +503,14 @@ namespace BridgeArchitect3D.Building
             if (y < t.BuildMinY || y > t.BuildMaxY) return Loc.T("超出可建造区域（竖直方向）");
             // 河道内不能在水面以下建造；两岸土体内允许放置节点——普通节点永远不是支座，
             // 只有关卡锚点提供支撑，因此不会获得“免费地面支撑”
-            // Underwater nodes are allowed only straight above a tunnel support point (columns standing on the tube)
-            if (x > 0 && x < t.RiverWidth && y < t.WaterLevel + 0.01 &&
-                !Design.Nodes.Any(n => n.IsTunnelSupport && Math.Abs(n.Position.X - x) < 0.3 && y > n.Position.Y + 0.1))
-                return Loc.T("不能在水面以下建造（隧道支点正上方除外）");
+            // Underwater nodes are allowed only to carry an immersed / floating tube: above the bed, outside the tube
+            if (x > 0 && x < t.RiverWidth && y < t.WaterLevel + 0.01 && !InLiftZone(x, y))
+            {
+                var tg = TunnelGeo;
+                if (tg == null || tg.Type.IsShield) return Loc.T("不能在水面以下建造（有沉管 / 悬浮隧道时可以在水下建支撑和锚索）");
+                if (y < PierBedY(x) - 0.01) return Loc.T("节点在河床以下");
+                if (InsideTube(tg, x, y)) return Loc.T("节点在隧道管身里面（请接在管底的接缝圆点上）");
+            }
             foreach (var z in t.NoBuildZones)
                 if (x > z.X0 + 0.01 && x < z.X1 - 0.01 && y < z.BelowY - 0.01) return Loc.F("{0}：只能利用两岸，不能在这里建桥墩或下部支撑", (z.Name));
             foreach (var n in Design.Nodes)
@@ -173,6 +520,20 @@ namespace BridgeArchitect3D.Building
                 if (dx * dx + dy * dy < MinNodeSpacing * MinNodeSpacing) return Loc.T("该位置已有节点");
             }
             return null;
+        }
+
+        /// <summary>True when (x, y) lies inside the tube cross-section (with a small margin).</summary>
+        private static bool InsideTube(TunnelGeometry g, double x, double y)
+        {
+            double b = g.BottomAt(x);
+            return !double.IsNaN(b) && y > b + 0.1 && y < b + g.Type.TubeHeight + 0.1;
+        }
+
+        /// <summary>A free node at the river bed (immersed / floating tunnel only) becomes a bed foundation / anchor block.</summary>
+        public bool IsBedPoint(double x, double y)
+        {
+            var t = Level.Terrain; var tg = TunnelGeo;
+            return tg != null && !tg.Type.IsShield && x > 0.3 && x < t.RiverWidth - 0.3 && Math.Abs(y - PierBedY(x)) <= Physics.TunnelStructure.BedSnap;
         }
 
         public MemberPreview PreviewMember(int startId, int endId, string materialId)
@@ -221,8 +582,8 @@ namespace BridgeArchitect3D.Building
             if (reason == null && p.Length > mat.MaximumLength) reason = Loc.F("超长 {0:0.0} m（{1}最长 {2:0.#} m）", (p.Length - mat.MaximumLength), (mat.Name), (mat.MaximumLength));
             if (reason == null && mat.IsDeck && Math.Abs(x - a.Position.X) < 0.3) reason = Loc.T("桥面不能竖直铺设");
             if (reason == null && LimitReached(mat)) reason = Loc.F("本关{0}限量 {1} 根，已用完", (mat.Name), (Level.MaterialLimits[mat.MaterialId]));
-            if (reason == null && a.TunnelPoint) reason = Loc.T("隧道控制点只用来调整路线，构件请接在管节接缝上的支点");
-            if (reason == null && a.IsTunnelSupport && !mat.Concrete) reason = Loc.F("隧道支点只能连接混凝土类建材（{0}不行）", (mat.Name));
+            if (reason == null && a.TunnelPoint && !a.IsTunnelSupport) reason = Loc.T("隧道控制点只用来调整路线，构件请接在管节接缝上的支点");
+            if (reason == null && a.IsTunnelSupport && mat.IsDeck) reason = Loc.T("隧道接缝圆点不能接桥面（用桥墩、柱子、梁或钢索托住 / 拉住管身）");
             if (reason == null && mat.IsColumn)
                 ColumnRules.FindBase(mat, a, new BridgeNode { Id = -1, Position = new Vec3d(x, y) }, Level, out reason);
             // 预算允许超支（超支会降低最终评分），因此不阻止建造
@@ -233,16 +594,21 @@ namespace BridgeArchitect3D.Building
 
         private string CheckMember(BridgeNode a, BridgeNode b, MaterialDefinition mat, double cost)
         {
+            if(Level.ProvidedInfrastructure!=null && (!LiftChallengeRules.Editable(a)||!LiftChallengeRules.Editable(b)))return Loc.T(LiftChallengeRules.Locked);
+            if(Level.ProvidedInfrastructure!=null && !TunnelRules.Shafts(Level,TunnelGeo).Any(shaft=>LiftStructure.InZone(LiftCfgOf,shaft,a.Position.X,a.Position.Y)&&LiftStructure.InZone(LiftCfgOf,shaft,b.Position.X,b.Position.Y)))return Loc.T("构件必须位于同一岸的电梯井内。");
             if (!Level.AllowedMaterials.Contains(mat.MaterialId)) return Loc.T("本关不允许使用该材料");
             if (LimitReached(mat)) return Loc.F("本关{0}限量 {1} 根，已用完", (mat.Name), (Level.MaterialLimits[mat.MaterialId]));
+            if(!mat.IsCable&&!mat.Extendable&&(a.CounterweightTonnes>0||b.CounterweightTonnes>0))return "配重块只能连接钢索或液压缸，不能与平台刚接";
+            if(mat.IsCable && new[]{a,b}.Any(n=>n.Pulley && Design.Members.Count(m=>Db.GetMaterial(m.MaterialId)?.IsCable==true&&(m.StartNodeId==n.Id||m.EndNodeId==n.Id))>=2))return "定滑轮只接受两段钢索，不能分支";
             if (a.Id == b.Id) return Loc.T("不能连接同一个节点");
             double len = Vec3d.Distance(a.Position, b.Position);
             if (len < MinMemberLength) return Loc.T("构件长度过短");
             if (len > mat.MaximumLength + 1e-9) return Loc.F("超长 {0:0.0} m（{1}最长 {2:0.#} m）", (len - mat.MaximumLength), (mat.Name), (mat.MaximumLength));
             if (Design.Members.Any(m => m.Connects(a.Id, b.Id))) return Loc.T("两节点之间已有构件");
             if (mat.IsDeck && Math.Abs(b.Position.X - a.Position.X) < 0.3) return Loc.T("桥面不能竖直铺设");
-            if (a.TunnelPoint || b.TunnelPoint) return Loc.T("隧道控制点只用来调整路线，构件请接在管节接缝上的支点");
-            if ((a.IsTunnelSupport || b.IsTunnelSupport) && !mat.Concrete) return Loc.F("隧道支点只能连接混凝土类建材（{0}不行）", (mat.Name));
+            if (a.TunnelPoint && !a.IsTunnelSupport || b.TunnelPoint && !b.IsTunnelSupport) return Loc.T("隧道控制点只用来调整路线，构件请接在管节接缝上的支点");
+            if ((a.IsTunnelSupport || b.IsTunnelSupport) && mat.IsDeck) return Loc.T("隧道接缝圆点不能接桥面（用桥墩、柱子、梁或钢索托住 / 拉住管身）");
+            if (a.IsTunnelSupport && b.IsTunnelSupport) return Loc.T("两个接缝圆点之间不用加构件（管身本身就是梁）");
             if (mat.IsColumn)
             {
                 ColumnRules.FindBase(mat, a, b, Level, out var why);
@@ -258,6 +624,7 @@ namespace BridgeArchitect3D.Building
         {
             var m = Design.FindMember(memberId);
             if (m == null) return BuildResult.Fail(Loc.T("构件不存在"));
+            if(m.Provided)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             var mat = Db.GetMaterial(m.MaterialId);
             if (mat == null || !mat.Extendable) return BuildResult.Fail(Loc.T("该构件不能伸缩"));
             var a = Design.FindNode(m.StartNodeId); var b = Design.FindNode(m.EndNodeId);
@@ -314,6 +681,7 @@ namespace BridgeArchitect3D.Building
             if (mat.IsDeck && Math.Abs(x - a.Position.X) < 0.3) return BuildResult.Fail(Loc.T("桥面不能竖直铺设"));
             PushUndo();
             var n = new BridgeNode { Id = Design.NextNodeId++, Position = new Vec3d(x, y, 0) };
+            if (IsBedPoint(x, y)) { n.Position = new Vec3d(x, PierBedY(x), 0); n.PierBase = true; n.Foundation = FoundationType.Shallow; }
             Design.Nodes.Add(n);
             var m = new BridgeMember { Id = Design.NextMemberId++, StartNodeId = startId, EndNodeId = n.Id, MaterialId = materialId, Length = p.Length, Cost = p.Length * mat.CostPerMeter, CostStroke = DefaultCostStroke(mat) };
             Design.Members.Add(m);
@@ -326,10 +694,21 @@ namespace BridgeArchitect3D.Building
         {
             var n = Design.FindNode(nodeId);
             if (n == null) return BuildResult.Fail(Loc.T("节点不存在"));
+            if(n.Provided)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             if (n.IsAnchor) return BuildResult.Fail(Loc.T("固定锚点不能移动"));
             if (n.IsRigidSplit) return BuildResult.Fail(Loc.T("刚性拆分点不可独立移动或折叠；请移动原构件端点"));
             if (n.PierBase) return BuildResult.Fail(Loc.T("桥墩基础不能移动（可以删除桥墩后重建）"));
-            if (n.IsTunnelSupport) return BuildResult.Fail(Loc.T("隧道支点随管节接缝自动生成，不能移动（拖动隧道控制点可以改变路线）"));
+            if (n.IsTunnelSupport && !n.TunnelPoint) return BuildResult.Fail(Loc.T("沉管接缝圆点随管节自动生成，不能单独移动（上下拖动隧道两端可以改变埋深）"));
+            if (n.IsLiftFixed)
+            {
+                // Only the outer platform end moves, and only sideways: it sets the platform length of both lifts
+                if(n.LiftRole?.StartsWith("mount")==true)return BuildResult.Fail("井道固定支点不可移动");
+                bool outer = n.LiftRole == (n.LiftBank == 1 ? "deck0" : "deck1");
+                var other = Design.Nodes.FirstOrDefault(q => q.LiftBank == n.LiftBank && q.LiftRole == (n.LiftBank == 1 ? "deck1" : "deck0"));
+                if (!outer || other == null) return BuildResult.Fail(Loc.T("电梯井底基础和平台内端随隧道固定，不能移动（平台外端可以左右拖动改长度）"));
+                var lr = SetLiftLength(Math.Abs(other.Position.X - x), recordUndo);
+                return lr.Ok ? BuildResult.Success(nodeId, lr.Message) : lr;
+            }
             if (n.TunnelPoint)
             {
                 double tx = x, ty = Snap(y);
@@ -383,8 +762,10 @@ namespace BridgeArchitect3D.Building
         {
             var n = Design.FindNode(nodeId);
             if (n == null) return BuildResult.Fail(Loc.T("节点不存在"));
+            if(n.Provided)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             if (n.IsAnchor) return BuildResult.Fail(Loc.T("固定锚点不能删除"));
-            if (n.IsTunnelSupport) return BuildResult.Fail(Loc.T("隧道支点不能单独删除（删除隧道请点击管节）"));
+            if (n.IsTunnelSupport && !n.TunnelPoint) return BuildResult.Fail(Loc.T("接缝圆点不能单独删除（删除隧道请点击管节）"));
+            if (n.IsLiftFixed) return BuildResult.Fail(Loc.T("电梯平台两端和井底基础随隧道固定，不能删除（可以删除与它相连的构件）"));
             if (n.TunnelPoint)
             {
                 if (Design.Tunnel == null || Design.Tunnel.PointNodeIds.Count <= 2) return DeleteTunnel();
@@ -430,7 +811,7 @@ namespace BridgeArchitect3D.Building
         /// <summary>批量删除（框选）：一次撤销即可恢复。锚点会被跳过；删除节点时连同相连构件一起删除。</summary>
         public BuildResult DeleteMany(IEnumerable<int> nodeIds, IEnumerable<int> memberIds)
         {
-            var nodes = new HashSet<int>(nodeIds.Where(id => Design.FindNode(id) is { IsAnchor: false, IsTunnelNode: false }));
+            var nodes = new HashSet<int>(nodeIds.Where(id => Design.FindNode(id) is { IsAnchor: false, IsTunnelNode: false, Provided:false }));
             var mems = new HashSet<int>(memberIds.Where(id => Design.FindMember(id) != null));
             foreach (var m in Design.Members) if (nodes.Contains(m.StartNodeId) || nodes.Contains(m.EndNodeId)) mems.Add(m.Id);
             if (nodes.Count == 0 && mems.Count == 0) return BuildResult.Fail(Loc.T("没有可删除的对象（锚点不能删除）"));
@@ -453,6 +834,7 @@ namespace BridgeArchitect3D.Building
         {
             var m = Design.FindMember(memberId);
             if (m == null) return BuildResult.Fail(Loc.T("构件不存在"));
+            if(m.Provided)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             var why = CheckDemolition(new[] { m });
             if (why != null) return BuildResult.Fail(why);
             PushUndo();
@@ -591,6 +973,13 @@ namespace BridgeArchitect3D.Building
 
         public string DescribeActuator(int actuatorMemberId)
         {
+            if(Level.MechanicalLift)
+            {
+                var rod=Design.FindMember(actuatorMemberId);if(rod==null)return "液压缸不存在";
+                var mat=Db.GetMaterial(rod.MaterialId);var lift=Lifts().FirstOrDefault(l=>l.Members.Any(m=>m.Id==actuatorMemberId));
+                string state=lift==null?"请连接电梯平台或滑轮绳路":LiftMechanics.Plan(Design,Level,Db,lift).Problem??"机构连接与行程检查通过，开始测试后校核拉压力";
+                return $"液压缸 #{rod.Id}：初始 {rod.Length:0.00} m，目标 {rod.Length*(1+(rod.Stroke??-mat.RetractRatio)):0.00} m，拉压力上限 {mat.ActuatorForce/1000:0} kN。\n{state}";
+            }
             var driver=Design.Mechanisms?.Linkage?.Drivers.FirstOrDefault(d=>d.MemberId==actuatorMemberId);
             if(driver!=null)
             {
@@ -772,7 +1161,7 @@ namespace BridgeArchitect3D.Building
             out BasculeSystem sys, out LeafRuntime lr, out ActuatorRuntime ar, out LeafGroupPlan g)
         {
             sys = null; lr = null; ar = null;
-            g = plan.GroupOf(memberId);
+            g = level.MechanicalLift?null:plan.GroupOf(memberId);
             if (g == null) return false;
             var m = StructuralModel.Build(design, level, db);
             sys = new BasculeSystem();
@@ -831,6 +1220,7 @@ namespace BridgeArchitect3D.Building
         {
             var m = Design.FindMember(memberId);
             if (m == null) return BuildResult.Fail(Loc.T("构件不存在"));
+            if(m.Provided)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             var mat = Db.GetMaterial(m.MaterialId);
             if (mat == null) return BuildResult.Fail(Loc.T("材料不存在"));
             if (mat.Extendable) return BuildResult.Fail(Loc.T("液压杆不能拆分"));
@@ -926,13 +1316,24 @@ namespace BridgeArchitect3D.Building
                 if (flo > fhi + 1e-6) return Loc.T("水太浅，放不下悬浮隧道（管顶覆盖水深 + 管高 + 锚索长度）");
             }
             if (x1 - x0 < TunnelRules.MinLength) return Loc.F("隧道太短（至少 {0:0} m）", (TunnelRules.MinLength));
-            if (Design.Nodes.Any(n => n.PierBase && n.Position.X > x0 - 1 && n.Position.X < x1 + 1)) return Loc.T("与桥墩基础冲突");
+            if (!type.IsShield)
+            {
+                double ob = TunnelRules.DefaultBottom(t, type);
+                if (Design.Nodes.Any(n => !n.IsTunnelNode && n.Position.X > x0 && n.Position.X < x1 && n.Position.Y > ob + 0.1 && n.Position.Y < ob + type.TubeHeight + 0.1))
+                    return Loc.T("已有节点在管身位置（先删掉那里的构件）");
+            }
             var preview = new BridgeDesign { Tunnel = new TunnelRoute { MaterialId = materialId, LiftLength = LiftLengthForLevel() } };
             double bottom = TunnelRules.DefaultBottom(t,type);
             preview.Nodes.Add(new BridgeNode {Id=1,Position=new Vec3d(x0,bottom),TunnelPoint=true});
             preview.Nodes.Add(new BridgeNode {Id=2,Position=new Vec3d(x1,bottom),TunnelPoint=true});
             preview.Tunnel.PointNodeIds.AddRange(new[]{1,2});
             cost = TunnelRules.Cost(TunnelGeometry.Build(preview,Db),Level);
+            if (!_previewing)
+            {
+                // Full price: build it on a copy, with the lift members the build will generate
+                var trial = new DesignEditor(Design.Clone(), Level, Db, migrate: false) { _previewing = true };
+                if (trial.AddTunnel(x0, x1, materialId).Ok) cost = trial.UsedCost - UsedCost;
+            }
             if (x0 > b0 + TunnelRules.JoinTolerance || x1 < b1 - TunnelRules.JoinTolerance)
                 warning = Loc.T("没有连到两岸墙脚：隧道要铺满整个河底才能通车");
             return null;
@@ -941,13 +1342,14 @@ namespace BridgeArchitect3D.Building
         /// <summary>Build the tunnel: two control points on the bed, standard elements and joint supports.</summary>
         public BuildResult AddTunnel(double x0, double x1, string materialId)
         {
+            if(Level.ProvidedInfrastructure!=null)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             // The tube always runs wall to wall: both ends sit against the bank walls, where the lifts are
             TunnelRules.FlatBed(Level.Terrain, out x0, out x1);
             var why = PreviewTunnel(x0, x1, materialId, out _, out _);
             if (why != null) return BuildResult.Fail(why);
             PushUndo();
             double bed = TunnelRules.DefaultBottom(Level.Terrain, TunnelCfg.Type(Db.GetMaterial(materialId)));
-            var route = new TunnelRoute { MaterialId = materialId };
+            var route = new TunnelRoute { MaterialId = materialId, Structure = 1 };
             foreach (double x in new[] { x0, x1 })
             {
                 var n = new BridgeNode { Id = Design.NextNodeId++, Position = new Vec3d(x, bed), TunnelPoint = true };
@@ -956,9 +1358,11 @@ namespace BridgeArchitect3D.Building
             route.LiftLength = LiftLengthForLevel();
             Design.Tunnel = route;
             RegenerateTunnel();
+            GenerateLifts(LiftTemplateForLevel());
+            RegenerateTunnel();
             Changed?.Invoke();
             var g = TunnelGeo;
-            return BuildResult.Success(0, Loc.F("已建造{0}（{1:0.0} m，{2} 节管节），两端贴合岸壁，两岸垂直电梯平台 {3:0} m 已自动配好。拖动两端圆点只能上下移动；{4}", (Db.GetMaterial(materialId).Name), (x1 - x0), (g?.Count ?? 0), (route.LiftLength), (g?.Type.Straight == true ? Loc.T("沉管是直管，不能加控制点") : Loc.T("每个管节接缝上的圆点都能上下拖动调整埋深"))));
+            return BuildResult.Success(0, Loc.F("已建造{0}（{1:0.0} m，{2} 节管节），两端贴合岸壁，两岸垂直电梯平台 {3:0} m 已用普通构件搭好（平台、吊索、井道柱子都能像桥一样修改）。拖动两端圆点只能上下移动；{4}", (Db.GetMaterial(materialId).Name), (x1 - x0), (g?.Count ?? 0), (route.LiftLength), (g?.Type.Straight == true ? Loc.T("沉管是直管，不能加控制点") : Loc.T("每个管节接缝上的圆点都能上下拖动调整埋深"))));
         }
 
         /// <summary>Add a control point on the route at x (then drag it to change the depth).</summary>
@@ -1020,6 +1424,7 @@ namespace BridgeArchitect3D.Building
 
         public BuildResult SetTunnelGrade(int element, string grade)
         {
+            if(Level.ProvidedInfrastructure!=null)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             var g = TunnelGeo;
             if (g == null) return BuildResult.Fail(Loc.T("没有隧道"));
             if (!g.Type.Grades.TryGetValue(grade, out var gc)) return BuildResult.Fail(Loc.T("未知管节等级"));
@@ -1032,7 +1437,9 @@ namespace BridgeArchitect3D.Building
 
         public BuildResult SetTunnelReinforced(int element, bool on)
         {
+            if(Level.ProvidedInfrastructure!=null)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             if (Design.Tunnel == null) return BuildResult.Fail(Loc.T("没有隧道"));
+            if (TunnelGeo?.Type.IsShield != true) return BuildResult.Fail(Loc.T("沉管 / 悬浮隧道没有地基加固：管身由你建的桥墩、柱子和锚索承担，河床基础可选浅基础 / 桩基础"));
             bool floating = TunnelGeo?.Type.IsFloating == true;
             PushUndo();
             for (int i = 0; i < Design.Tunnel.Elements.Count; i++) if (element < 0 || i == element) Design.Tunnel.Elements[i].Reinforced = on;
@@ -1044,10 +1451,15 @@ namespace BridgeArchitect3D.Building
         }
 
         /// <summary>Floating tunnel: anchor cables of an element (or all, element -1).</summary>
+        /// <summary>Old per-element cable counts (kept only so legacy data can still be edited by tools; off in the game).</summary>
+        public static bool LegacyCableButtons = false;
+
         public BuildResult SetTunnelCables(int element, int count, string cable = null)
         {
+            if(Level.ProvidedInfrastructure!=null)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             var g = TunnelGeo;
             if (g == null || !g.Type.IsFloating) return BuildResult.Fail(Loc.T("只有悬浮隧道有锚索"));
+            if (!LegacyCableButtons) return BuildResult.Fail(Loc.T("锚索现在要自己建：选钢索或复合钢索，从管底接缝圆点拉到河床（自动生成锚块）、岸上锚点或其他结构"));
             if (cable != null && !g.Type.Cables.ContainsKey(cable)) return BuildResult.Fail(Loc.T("未知锚索类型"));
             count = Math.Clamp(count, 0, g.Type.MaxCableCount);
             PushUndo();
@@ -1062,6 +1474,7 @@ namespace BridgeArchitect3D.Building
         /// <summary>Floating tunnel: buoyancy level (buoyancy / weight ratio, ballast adjusted to match).</summary>
         public BuildResult SetTunnelBuoyancy(int element, string level)
         {
+            if(Level.ProvidedInfrastructure!=null)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             var g = TunnelGeo;
             if (g == null || !g.Type.IsFloating) return BuildResult.Fail(Loc.T("只有悬浮隧道有浮力等级"));
             if (!g.Type.Buoyancy.TryGetValue(level ?? "", out var b)) return BuildResult.Fail(Loc.T("未知浮力等级"));
@@ -1075,6 +1488,7 @@ namespace BridgeArchitect3D.Building
         /// <summary>Portal flood protection (both portals): entrance raise (m, stepped and clamped), flood gates, pumps. Null = unchanged.</summary>
         public BuildResult SetPortalProtection(double? raise = null, bool? gate = null, bool? pump = null)
         {
+            if(Level.ProvidedInfrastructure!=null)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             var r = Design.Tunnel;
             if (r == null) return BuildResult.Fail(Loc.T("没有隧道"));
             var pc = TunnelRules.Weather.Portal;
@@ -1088,20 +1502,21 @@ namespace BridgeArchitect3D.Building
         }
 
         /// <summary>Bank lift platform length (both lifts), stepped and clamped; longer platforms carry more.</summary>
-        public BuildResult SetLiftLength(double length)
+        public BuildResult SetLiftLength(double length, bool recordUndo = true)
         {
             var r = Design.Tunnel;
             if (r == null) return BuildResult.Fail(Loc.T("没有隧道"));
             var lc = TunnelRules.LiftCfg;
             double l = Math.Clamp(Math.Round(length / lc.LengthStep) * lc.LengthStep, lc.MinLength, lc.MaxLength);
-            PushUndo();
+            if (r.LiftLength is double cur && Math.Abs(l - cur) < 1e-9 && r.Lift?.Built != null) return BuildResult.Success(0, LiftSummary());
+            if (recordUndo) PushUndo();
             r.LiftLength = l;
             RegenerateTunnel();
             Changed?.Invoke();
-            return BuildResult.Success(0, Loc.F("电梯平台 {0:0} m：能装下车身 ≤ {1:0.#} m 的车辆，载重 {2:0} 吨", (l), (TunnelRules.LiftFits(l)), (TunnelRules.LiftCapacity(l) / 9810)));
+            return BuildResult.Success(0, Loc.F("电梯平台 {0:0} m：能装下车身 ≤ {1:0.#} m 的车辆。", (l), (TunnelRules.LiftFits(l))) + LiftSummary());
         }
 
-        /// <summary>Shortest platform that fits and carries every road vehicle of the level (simplest choice).</summary>
+        /// <summary>Shortest platform that fits every road vehicle of the level (the load is the lift structure's job).</summary>
         public double LiftLengthForLevel()
         {
             var lc = TunnelRules.LiftCfg;
@@ -1111,7 +1526,6 @@ namespace BridgeArchitect3D.Building
                 if (e.Type != TrafficEventType.Vehicle || !Db.Vehicles.TryGetValue(e.VehicleId ?? "", out var v) || RailTrack.IsTrain(v)) continue;
                 double rear = v.Axles.Count == 0 ? 0 : v.Axles.Min(a => a.Offset), over = Math.Max(0, (v.Length + rear) / 2);
                 need = Math.Max(need, over * 2 - rear + 2 * lc.Margin);
-                need = Math.Max(need, (v.Mass * Math.Max(1, v.Units) * 9.81 - lc.CapacityBase) / lc.CapacityPerMeter);
             }
             return Math.Clamp(Math.Ceiling(need / lc.LengthStep - 1e-9) * lc.LengthStep, lc.MinLength, lc.MaxLength);
         }
@@ -1119,9 +1533,11 @@ namespace BridgeArchitect3D.Building
         /// <summary>Delete the tunnel with its control points, supports and every member attached to the supports.</summary>
         public BuildResult DeleteTunnel()
         {
+            if(Level.ProvidedInfrastructure!=null)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             if (Design.Tunnel == null) return BuildResult.Fail(Loc.T("没有隧道"));
             var owned = new HashSet<int>(Design.Nodes.Where(n => n.IsTunnelNode).Select(n => n.Id));
-            var removing = Design.Members.Where(m => owned.Contains(m.StartNodeId) || owned.Contains(m.EndNodeId)).ToList();
+            var liftMembers = Lifts().SelectMany(L => L.Members).ToHashSet();
+            var removing = Design.Members.Where(m => owned.Contains(m.StartNodeId) || owned.Contains(m.EndNodeId) || liftMembers.Contains(m)).ToList();
             var why = CheckDemolition(removing);
             if (why != null) return BuildResult.Fail(why);
             double refund = Design.Tunnel.Cost;
@@ -1200,21 +1616,38 @@ namespace BridgeArchitect3D.Building
             if (r.Elements.Count > g.Count) r.Elements.RemoveRange(g.Count, r.Elements.Count - g.Count);
             g = TunnelGeometry.Build(Design, Db);
             double L = TunnelCfg.ElementLength;
+            // Connection points at the element joints, on the tube bottom. Bendable tubes (floating) use their joint
+            // control points themselves; straight tubes (immersed) get a joint node per element joint.
             for (int j = 1; j < g.Count && g.Type.HasSupports; j++)
             {
-                var p = g.At(j * L);
-                var pos = new Vec3d(p.X, p.Y + g.Type.TubeHeight);
+                var p = new Vec3d(g.X0[j], g.Y0[j]);
+                if (!g.Type.Straight)
+                {
+                    var pt = Design.Nodes.FirstOrDefault(q => q.TunnelPoint && Math.Abs(q.Position.X - p.X) < 1e-4);
+                    if (pt != null)
+                    {
+                        // A separate (older) joint node is merged into the control point
+                        var old = Design.Nodes.FirstOrDefault(q => q.TunnelJoint == j && !q.TunnelPoint);
+                        if (old != null) { foreach (var m in Design.Members) { if (m.StartNodeId == old.Id) m.StartNodeId = pt.Id; if (m.EndNodeId == old.Id) m.EndNodeId = pt.Id; } Design.Nodes.Remove(old); }
+                        foreach (var q in Design.Nodes) if (q.TunnelJoint == j && q != pt) q.TunnelJoint = 0;
+                        pt.TunnelJoint = j;
+                        continue;
+                    }
+                }
                 var n = Design.Nodes.FirstOrDefault(q => q.TunnelJoint == j);
-                if (n == null) Design.Nodes.Add(new BridgeNode { Id = Design.NextNodeId++, Position = pos, TunnelJoint = j });
-                else n.Position = pos;
+                if (n == null) Design.Nodes.Add(new BridgeNode { Id = Design.NextNodeId++, Position = p, TunnelJoint = j });
+                else n.Position = p;
             }
-            var surplus = new HashSet<int>(Design.Nodes.Where(q => q.TunnelJoint >= g.Count || q.TunnelJoint > 0 && !g.Type.HasSupports).Select(q => q.Id));
+            foreach (var q in Design.Nodes) if (q.TunnelPoint && q.TunnelJoint > 0 && (q.TunnelJoint >= g.Count || Math.Abs(q.Position.X - g.X0[q.TunnelJoint]) > 1e-4)) q.TunnelJoint = 0;
+            var surplus = new HashSet<int>(Design.Nodes.Where(q => !q.TunnelPoint && (q.TunnelJoint >= g.Count || q.TunnelJoint > 0 && !g.Type.HasSupports)).Select(q => q.Id));
             if (surplus.Count > 0)
             {
                 Design.Members.RemoveAll(m => surplus.Contains(m.StartNodeId) || surplus.Contains(m.EndNodeId));
                 Design.Nodes.RemoveAll(q => surplus.Contains(q.Id));
                 Design.Nodes.RemoveAll(q => !q.IsAnchor && !q.IsTunnelNode && !Design.Members.Any(m => m.StartNodeId == q.Id || m.EndNodeId == q.Id));
             }
+            // Bank lifts: fixed nodes follow the shafts, the player's lift members follow along
+            SyncLifts(g);
             foreach (var m in Design.Members)
             {
                 var a = Design.FindNode(m.StartNodeId); var b = Design.FindNode(m.EndNodeId);
@@ -1223,6 +1656,8 @@ namespace BridgeArchitect3D.Building
                 if (!m.Existing) m.Cost = m.Length * (Db.GetMaterial(m.MaterialId)?.CostPerMeter ?? 0);
             }
             r.Cost = TunnelRules.Cost(g, Level);
+            // Lining ties (nodes held by the shaft end walls) are bought per tie
+            if(!Level.MechanicalLift)r.Cost += Lifts().Sum(L => L.Ties.Count) * LiftCfgOf.BraceCost;
         }
 
         // ---------------- 桥墩与基础 ----------------
@@ -1260,6 +1695,7 @@ namespace BridgeArchitect3D.Building
         /// </summary>
         public BuildResult AddPier(double x, double topY, string materialId)
         {
+            if(Level.ProvidedInfrastructure!=null)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             var why = PreviewPier(x, topY, materialId, out double h, out _);
             if (why != null) return BuildResult.Fail(why);
             var mat = Db.GetMaterial(materialId);
@@ -1288,6 +1724,7 @@ namespace BridgeArchitect3D.Building
         public BuildResult SetFoundation(int baseNodeId, FoundationType type)
         {
             var n = Design.FindNode(baseNodeId);
+            if(n?.Provided==true)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             if (n == null || !n.PierBase) return BuildResult.Fail(Loc.T("不是桥墩基础"));
             if (n.Foundation == type) return BuildResult.Success(n.Id);
             PushUndo();
@@ -1315,6 +1752,7 @@ namespace BridgeArchitect3D.Building
 
         private string CheckDemolition(IEnumerable<BridgeMember> removing)
         {
+            if(removing.Any(m=>m.Provided))return Loc.T(LiftChallengeRules.Locked);
             int c = removing.Count(m => m.Existing);
             if (c == 0 || Level.MaxDemolitions < 0) return null;
             if (c > DemolitionsLeft) return Loc.F("旧构件最多只能拆除 {0} 根（剩余 {1} 根，这次要拆 {2} 根）", (Level.MaxDemolitions), (DemolitionsLeft), (c));
@@ -1342,6 +1780,7 @@ namespace BridgeArchitect3D.Building
         {
             var m = Design.FindMember(memberId);
             if (m == null) return BuildResult.Fail(Loc.T("构件不存在"));
+            if(m.Provided)return BuildResult.Fail(Loc.T(LiftChallengeRules.Locked));
             if (!m.Existing || m.Condition >= 1 - 1e-9) return BuildResult.Fail(Loc.T("这根构件不需要修复"));
             double cost = RepairCostOf(m);
             PushUndo();

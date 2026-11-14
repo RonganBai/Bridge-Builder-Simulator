@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Godot;
 using BridgeArchitect3D.Data;
@@ -24,15 +24,15 @@ namespace BridgeArchitect3D.World
             {
                 float x=side==0?4:20;
                 CapsulePier(x,db);
-                Box(this,new Vector3(side==0?2:22,0.1f,0),new Vector3(4,0.24f,4.4f),_deck);
+                Box(this,new Vector3(side==0?2:22,0.1f,0),new Vector3(4,0.24f,RoadLayout.Width),_deck);
                 var leaf=new Node3D {Position=new Vector3(x,0,0)};AddChild(leaf);
                 if(side==0)_left=leaf;else _right=leaf;
                 float direction=side==0?1:-1;
-                Box(leaf,new Vector3(direction*4,0.1f,0),new Vector3(8,0.24f,4.4f),_deck);
+                Box(leaf,new Vector3(direction*4,0.1f,0),new Vector3(8,0.24f,RoadLayout.Width),_deck);
                 Box(leaf,new Vector3(direction*4,0.233f,0),new Vector3(7.6f,0.02f,0.1f),Mat("ded8b4"));
                 for(int truss=-1;truss<=1;truss+=2)
                 {
-                    float z=truss*2.4f;
+                    float z=truss*RoadLayout.TrussOffset;
                     for(int i=0;i<4;i++)
                     {
                         var a=new Vector3(direction*i*2,0,z);var b=new Vector3(direction*(i*2+1),-(float)HarborTimeline.TrussDepth,z);var c=new Vector3(direction*(i*2+2),0,z);
@@ -78,21 +78,22 @@ namespace BridgeArchitect3D.World
                 var middle=actuator.fixedEnd+delta.Normalized()*Mathf.Min(3.7f,delta.Length()*0.98f);
                 SetBeam(actuator.barrel,actuator.fixedEnd,middle,0.18f);SetBeam(actuator.rod,middle,end,0.09f);
             }
-            foreach(var gate in _gates)gate.Rotation=new Vector3((float)gateRaised*Mathf.Pi/2,0,0);
+            foreach(var gate in _gates)gate.Rotation=new Vector3((float)gateRaised*Mathf.Pi/2*(float)gate.GetMeta("side"),0,0);
             foreach(var signal in _signals)signal.MaterialOverride=roadGreen?_green:amber?_amber:_red;
         }
         private void Gate(float x)
         {
-            Box(this,new Vector3(x,0.7f,2.65f),new Vector3(0.35f,1.1f,0.35f),_dark);
-            var arm=new Node3D {Position=new Vector3(x,0.85f,2.3f)};AddChild(arm);_gates.Add(arm);
-            for(int i=0;i<12;i++)Box(arm,new Vector3(0,0,-i*0.38f),new Vector3(0.1f,0.13f,0.38f),i%2==0?_rail:_red);
-            Beam(this,new Vector3(x,0,2.9f),new Vector3(x,2.9f,2.9f),0.11f,_dark);
-            Box(this,new Vector3(x,2.8f,2.9f),new Vector3(0.22f,0.55f,0.3f),_dark);
-            _signals.Add(Box(this,new Vector3(x-0.13f,2.8f,2.9f),new Vector3(0.035f,0.23f,0.22f),_green));
+            float side=x<12?1:-1;
+            Box(this,new Vector3(x,0.95f,side*4.65f),new Vector3(0.35f,1.6f,0.35f),_dark);
+            var arm=new Node3D {Position=new Vector3(x,1.4f,side*4.3f)};AddChild(arm);arm.SetMeta("side",side);_gates.Add(arm);
+            for(int i=0;i<23;i++)Box(arm,new Vector3(0,0,-side*i*0.38f),new Vector3(0.1f,0.13f,0.38f),i%2==0?_rail:_red);
+            Beam(this,new Vector3(x,0,side*4.9f),new Vector3(x,2.9f,side*4.9f),0.11f,_dark);
+            Box(this,new Vector3(x,2.8f,side*4.9f),new Vector3(0.22f,0.55f,0.3f),_dark);
+            _signals.Add(Box(this,new Vector3(x-side*0.13f,2.8f,side*4.9f),new Vector3(0.035f,0.23f,0.22f),_green));
         }
         private void Tunnel(float portal,int direction)
         {
-            const int arc=12;const float shoulder=3.1f,innerRadius=3.5f;
+            const int arc=12;const float shoulder=3.1f,innerRadius=RoadLayout.Width/2+.8f;
             float length=HarborMountains.Length(direction);
             var inner=new List<Vector2>{new(-innerRadius,0.15f)};
             for(int i=0;i<=arc;i++){float a=Mathf.Pi-i*Mathf.Pi/arc;inner.Add(new Vector2(innerRadius*Mathf.Cos(a),shoulder+innerRadius*Mathf.Sin(a)));}
@@ -123,8 +124,8 @@ namespace BridgeArchitect3D.World
             }
             for(int side=-1;side<=1;side+=2)
             {
-                Box(this,new Vector3(portal,1.55f,side*3.5f),new Vector3(0.65f,3.1f,0.5f),_stone);
-                for(int i=0;i<3;i++)Box(this,new Vector3(portal-direction*0.35f,0.6f+i*0.4f,side*3.24f),new Vector3(0.16f,0.12f,0.05f),i%2==0?_rail:_red);
+                Box(this,new Vector3(portal,1.55f,side*innerRadius),new Vector3(0.65f,3.1f,0.5f),_stone);
+                for(int i=0;i<3;i++)Box(this,new Vector3(portal-direction*0.35f,0.6f+i*0.4f,side*(innerRadius-.26f)),new Vector3(0.16f,0.12f,0.05f),i%2==0?_rail:_red);
             }
             // The existing approach road runs through the bore; duplicating it would z-fight.
             for(int i=0;i<9;i++)

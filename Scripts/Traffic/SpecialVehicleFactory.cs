@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using BridgeArchitect3D.Data;
 using BridgeArchitect3D.World;
@@ -7,9 +7,9 @@ using Godot;
 
 namespace BridgeArchitect3D.Traffic
 {
-    public static class SpecialVehicleFactory
+    public static partial class SpecialVehicleFactory
     {
-        public static bool Supports(string kind)=>kind is "suv" or "motorcycle" or "pickup" or "semi" or "ambulance";
+        public static bool Supports(string kind)=>kind is "suv" or "motorcycle" or "pickup" or "semi" or "ambulance" or "mixer" or "fire_engine" or "flatbed" or "police" or "police_suv" or "jeep" or "utility" or "coupe" or "car_carrier" or "crane" or "dump" or "articulated_bus" or "tanker" or "tractor" or "garbage" or "pump" or "modular" or "school_bus";
         private static readonly StandardMaterial3D Dark=new(){AlbedoColor=new Color("25333a"),Roughness=0.8f};
         private static readonly StandardMaterial3D Glass=new(){AlbedoColor=new Color("709cae"),Roughness=0.2f,Metallic=0.2f};
         private static readonly StandardMaterial3D White=new(){AlbedoColor=new Color("dddeda"),Roughness=0.6f};
@@ -45,6 +45,10 @@ namespace BridgeArchitect3D.Traffic
                 foreach(int side in new[]{-1,1}){Bar(bike,new(-0.77f,1.24f,side*0.22f),new(-0.16f,1.04f,side*0.3f),0.055f,Dark);Bar(bike,new(-1,0.86f,side*0.2f),new(-0.55f,0.5f,side*0.28f),0.07f,Dark);}
                 return;
             }
+            if(def.Kind=="coupe"){var coupe=unit(0,rear);BuildCoupe(coupe,paint,l,w,rear);return;}
+            if(def.Kind=="car_carrier"){BuildCarCarrier(def,unit,paint);return;}
+            if(BuildExpandedFleet(def,unit,paint))return;
+            if(BuildAdditional(def,unit,paint))return;
             if(def.Kind=="suv"){SuvVehicleFactory.Build(def,unit,paint);return;}
             if(def.Kind=="semi"){BuildSemi(def,unit,paint);return;}
             if(def.Kind=="ambulance"){BuildAmbulance(def,unit,paint);return;}
@@ -86,6 +90,8 @@ namespace BridgeArchitect3D.Traffic
             const float trailerFront=-4.8f;float cargoLength=l-front+trailerFront,cargoCenter=-cargoLength/2;
             var cab=unit(0,-4.9f);var trailer=unit(trailerFront,rear-front);
             var subtle=new StandardMaterial3D{AlbedoColor=new Color("c6cecd"),Roughness=0.7f};
+            var originalCab= new Node3D {Name="CabOver"};originalCab.SetMeta("vehicle_variant",true);cab.AddChild(originalCab);
+            var cabRoot=cab;cab=originalCab;
             Box(cab,new(-1.6f,0.84f,0),new(7,0.28f,w*0.65f),Dark);
             var profile=new[]{new Vector2(front-3.7f,0.8f),new Vector2(front,0.8f),new Vector2(front+0.05f,1.9f),new Vector2(front-0.01f,2.8f),new Vector2(front-0.17f,3.52f),new Vector2(front-0.55f,3.82f),new Vector2(front-3.7f,3.82f)};
             cab.AddChild(new MeshInstance3D{Mesh=CurvedMeshes.Extrude(profile,w*0.94f),MaterialOverride=paint});
@@ -107,6 +113,9 @@ namespace BridgeArchitect3D.Traffic
                 Box(cab,new(front-1.1f,1.14f,side*w*0.47f),new(1.2f,0.12f,0.18f),Alloy);
                 Box(cab,new(-3.3f,0.92f,side*w*0.32f),new(1.5f,0.48f,0.45f),Alloy);
             }
+            var american=new Node3D {Name="AmericanCab",Visible=false};american.SetMeta("vehicle_variant",true);cabRoot.AddChild(american);
+            BuildAmericanCab(american,front,w,paint);
+            cab=cabRoot;
             cab.AddChild(new MeshInstance3D{Mesh=new CylinderMesh{TopRadius=0.58f,BottomRadius=0.58f,Height=0.12f,RadialSegments=10,Rings=1},Position=new(-4.25f,1.02f,0),MaterialOverride=Dark});
             Round(trailer,new(cargoCenter,2.65f,0),new(cargoLength,2.8f,w),0.08f,White);
             Box(trailer,new(cargoCenter,1.12f,0),new(cargoLength,0.24f,w*0.68f),Dark);
@@ -123,6 +132,7 @@ namespace BridgeArchitect3D.Traffic
                 Box(trailer,new(-cargoLength-0.035f,2.6f,side*w*0.13f),new(0.025f,2.3f,0.04f),Alloy);
                 Box(trailer,new(-cargoLength-0.04f,1.12f,side*w*0.34f),new(0.04f,0.2f,0.3f),Red);
             }
+            BuildTrailerAdvertisements(trailer,cargoCenter,cargoLength,w);
             Box(trailer,new(-cargoLength-0.045f,2.65f,0),new(0.02f,2.58f,0.025f),Dark);
             Box(trailer,new(-cargoLength,0.68f,0),new(0.12f,0.14f,w*0.86f),Alloy);
             foreach(var axle in def.Axles)foreach(int side in new[]{-1,1})

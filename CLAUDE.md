@@ -1,4 +1,4 @@
-# Bridge Architect 3D — 项目上下文（供 Claude Code 在任何设备上接续开发）
+﻿# Bridge Architect 3D — 项目上下文（供 Claude Code 在任何设备上接续开发）
 
 Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交流，界面文字用中文；新写 / 修改的代码与注释用英文（用户 2026-11 要求）。
 
@@ -49,6 +49,8 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 
 ## 性能
 - 帧时间基准：Godot_v4.7.2-stable_mono_win64_console.exe --path . -- --bench level8,level7（Scripts/Core/Benchmark.cs）。逐关载入参考方案、切 3D 视角跑通车测试，关 vsync 采样 10 s，打印平均 FPS、p99、最差帧、draw call，超过 30 ms 的帧单独打印；运行期间 SaveManager.WritesSuspended=true，不写任何存档 / 进度 / 设置。
+- 车辆模型与碰撞体积（2026-11 用户要求“模型一定和碰撞体积同大，避免穿模；碰撞体积不需要与模型完美重合”）：碰撞体积 = Scripts/Data/Definitions.cs 的 VehicleBody（沿路径 Rear~Front、宽 Width、高 Height 的盒子，BridgeSimulation.VehicleState 用同一套公式）。VehicleController.FitToBody 在建模板时测量每个部件的网格包围盒，超出部分按轴缩放进盒子（容差 2 cm），已在盒内的部件不动；坦克模型原点改到前轴（原来整体前移 2.9 m、炮管伸出车身 3.6 m），炮管缩到车身前沿。
+- 坦克履带动画：CurvedMeshes.Track 生成 Track 节点（meta "loop" = 外轮廓，子节点 0 是履带带体，其余是均匀分布的履带板），VehicleController.AnimateRunningGear 按行驶距离让履带板绕轮廓转动（底部相对路面静止），负重轮（RoadWheel）同步滚动。带 meta "animated" 的节点不参与 LowPolyDetails.Batch 合并（否则会被合成一个静态网格）；Godot 会重命名重名节点，所以按 meta / 顺序查找，不按名字。
 - 车辆模型：TrafficManager 每种车只建一次模板（关卡载入时 Prewarm），之后 VehicleController.SetupFrom 复制（共享网格与材质）；原来每辆车驶入时现场建模 40~75 ms，造成卡顿。
 - 低画质（GameSettings.LowQuality，主菜单与关卡内设置都可勾选）：GameManager.ApplyQuality 关闭太阳阴影、关闭 MSAA、3D 按 75% 分辨率渲染（UI 不受影响）；TerrainBuilder 建灯时读 GameManager.ShadowsOn。基准加 --low 测低画质（只改内存设置），--shot <目录> 每关存一张截图。1080p 实测 GPU 1.64 → 0.66 ms，draw call 约减半。
 - 显示模式与分辨率（GameSettings.WindowMode / Resolution，旧设置的 Fullscreen 自动迁移；UI 在 Scripts/UI/DisplaySettingsUI.cs，主菜单与关卡内共用）：窗口化 = 窗口大小（不超过屏幕可用区并居中）；全屏 = ExclusiveFullscreen；无边框 = Godot 的 Fullscreen（覆盖屏幕的无边框窗口）。全屏 / 无边框时分辨率低于屏幕则降低 3D 渲染比例（与低画质 75% 相乘），界面保持原生分辨率。Resolution 为空时不改窗口大小。在编辑器“游戏”标签内嵌运行（Engine.IsEmbeddedInEditor）时窗口归编辑器管，只应用 3D 画质，设置里显示提示。基准可加 --mode / --res（只改内存设置）。
@@ -68,7 +70,9 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 
 ## 关卡设计模式（自定义关卡）
 - 主菜单“关卡设计”（Scripts/UI/LevelDesigner.cs + LevelPreview.cs）：名称、河宽、两岸高度、水面 / 河床深度、预算、禁止建墩、船只与船高、可用建材、通行车辆、自定义固定节点（快捷按钮把节点吸附到左 / 右岸平地或岸壁坡面；河道中央的节点自动生成岩墩，坡面上的不生成）、岸壁角度（30°~90°，TerrainConfig.BankSlopeDeg / WallRun / GroundYInRiver：岸顶边缘仍在 x=0 / 河宽，坡面伸入河道，IsOnLand / IsInsideTerrain / PierBedY 都按坡面算；TerrainBuilder.AddWedge 画带碰撞的楔形土体）、河床材质（岩石 / 软土 → DefaultSoil + 覆盖整条河的 FoundationZone）、是否有水（HasWater=false 时 WaterLevel=河床，不生成水面，不能有船），实时侧视预览与检查。旧自定义关卡缺字段时读作 90° / 岩石 / 有水。
-- 数据：CustomLevelSpec / CustomLevelBuilder（Scripts/Data/CustomLevel.cs，纯 C#，有测试）；保存在 user://custom_levels/{custom_名称}.json，删除只移到 deleted 子目录。GameManager.ResolveLevel 先找内置关卡再找自定义关卡；自定义关卡没有“下一关”。
+- 编辑器界面（2026-11 用户要求）：地图上的东西全部在侧视图里拖动圆点编辑（LevelPreview：左 / 右岸高度、河宽 = 右坡脚、岸坡 = 左坡脚、河床、水面、可建深度 / 高度虚线、固定节点（0.25 m 网格，靠近地面吸附）、船的航道与吃水）；双击空白加节点、右键删除节点 / 船；地图上方工具栏 = 有水 / 禁止建桥墩 / 河床岩石·软土 / ＋节点 / ＋船，下方检查器输入选中节点或船的精确值。非地图设置在下方分页 基本 / 建材 / 交通 / 高级（滑块、开关、切换胶囊）。地形按相对深度：河道深度 = 较低岸顶 − 河床，水深 = 常水位 − 河床。船：TrafficEvent.Draft（可空 = 船型默认，ShipCatalog.Draft），编辑器限制在船高 10%~50%；船可放在水面任意位置（LevelEditing.ShipLaneRange：按吃水处岸坡宽度，离岸壁 0.2 m），检查吃水范围、水深与碰岸。
+- 关卡设计与关卡设置共用一个编辑器（2026-11 用户要求“两个功能完全一致、互补”）：Scripts/UI/LevelEditorPanel.cs（表单 + 预览 + 检查），宿主 LevelDesigner（新建 / 以内置关卡为模板 / 保存 / 保存并试玩 / 已保存列表）与 LevelSettingsUI（保存并重新开始 / 另存为自定义关卡 / 恢复默认）只加按钮。编辑操作与检查在 Scripts/Data/LevelEditing.cs（纯 C#，LevelEditTests）：改河宽 / 岸高时锚点跟随，河道中的固定节点自动配岩墩，禁止建墩区与河床土质覆盖整条河；Validate = LevelError + 设计器检查，所有内置关卡必须通过。
+- 数据：自定义关卡文件现在存完整 LevelDefinition（user://custom_levels/{custom_名称}.json，删除只移到 deleted 子目录）；旧 CustomLevelSpec 文件由 LevelEditing.ReadCustomLevel 载入时转换（CustomLevelBuilder 仍用于新建默认关卡）。关卡内对自定义关卡“保存”直接写回该文件并删除旧版留下的 level_overrides 覆盖；内置关卡仍用覆盖。GameManager.ResolveLevel 先找内置关卡再找自定义关卡；自定义关卡没有“下一关”。
 - 命名方案：关卡菜单“方案另存为（命名）… / 读取命名方案…”，保存在 user://saves/{关卡}_named/，不影响原有自动存档 {关卡}.json；BridgeDesign.Name 记录名称。
 
 ## 关卡（12 关，按难度递增）
@@ -122,7 +126,7 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 - 显示：BridgeRenderer 每节一个半透明管身，按风险着色（绿 / 黄 / 橙 / 红），建造时为静态工况，测试时 LevelManager.UpdateTestHud 实时刷新并把沉降放大 10 倍显示。
 - 贯通两岸且管身坡度不超过 TunnelRules.RampGrade（最弱车辆或关卡特许）时，主路公路车辆走隧道（TunnelRules.Lane），火车仍走桥。
 - 地面道路：TunnelRules.GroundStartX / GroundEndX 是主路固定起终点（有隧道建材的关卡按最深可能管底的坡道长度外推），桥面路线（RoadPath.Build，lane 0）和隧道路线都从这里出发，没有隧道的关卡仍是锚点外 25 m（不变）。坡道长度 = 高差 / 坡度，转折处用抛物线竖曲线（TunnelRules.SmoothGrades）。TerrainBuilder 按 TunnelRules.BankExtent 加长两岸。坡道费用 = 坡道水平长度 × RampCostPerMeter，计入隧道费用。
-- 沉管承压（新规格）：普通 / 加强 / 重型 0.14 / 0.22 / 0.32 MPa。
+- 沉管承压（新规格）：普通 / 加强 / 重型 0.14 / 0.22 / 0.30 MPa。
 - 悬浮隧道 tunnel_floating（tunnels.json Types.floating，Placement "water"，HasSupports false：没有接缝支点、不能建桥）：控制点 = 管底，范围 [河床 + MinBedClearance, 水面 − MinCover − 管高]，新建时尽量浅（坡道短）。每节可设浮力等级（Ratio = 浮力 / 自重，配重自动匹配；低 1.04 / 中 1.2 / 高 1.35）、锚索根数（0~6）与种类（钢绞线 / 高强复合，每根承载 N）、加固锚固基础（Reinforced）；TunnelElement.CableCount / Cable / Buoyancy 可空（旧存档 = 类型默认），存档仍为版本 5。
 - 悬浮荷载模型（TunnelAnalysis.Floating）：浮力按浸没体积（完全浸没时洪水不加浮力，只加水压）；净上浮 = 浮力 − 自重，车辆超过它 → 锚索松弛下沉；水流横推 ½ρCdHv²（流速 TunnelConfig.CurrentNormal → CurrentFlood，按 BridgeSimulation.FloodFraction 插值）；每根锚索 = |(竖向, 横推)| / 根数；锚固基础按土质（洪水冲刷区不加固 × ScourFactor）；横向摆动 = 横推 / 横向刚度（上限 MaxDisplacement）；车辆下压位移检查接缝（两端与河岸固定）。每种原因有自己的失败文字。显示：锚索与锚块，测试时管段按摆动横移、按下压放大下沉。
 - 盾构隧道 tunnel_shield（Types.shield，Placement "ground"，无支点）：控制点 = 管底，范围 [max(河床 − MaxDepthBelowBed, 关卡 BuildMinY), 河床 − 管高 − 1]，新建时覆土 DefaultCover 6 m。所有隧道类型的最深位置都受关卡 BuildMinY 限制（同时决定固定地面起点的距离）。地层：TerrainConfig.Strata（GeoColumn X0~X1 + GeoLayer 从河床往下的 Soil / Thickness，0 = 往下一直是它），没有时按 FoundationZones（岩石 / 黏土）；参数在 tunnels.json Geology（rock / clay / sand / silt：MinCover 3/6/9/12、Gamma、EarthK、Permeability、LagTime、ExcavationCost）。Reinforced = 注浆加固（最小覆土 × GroutCoverFactor、土压 × GroutEarthFactor）。费用 = 管片 + 按轴线地层的掘进费 + 注浆 + 坡道。
@@ -139,14 +143,44 @@ Godot 4.7 .NET（C#，net8.0）3D 建桥物理模拟游戏。用户用中文交�
 - 第十三关：水深 10 m、洪水 +5 m、坡道特许 8%、岩石 / 软土 / 冲刷岩石三区；普通管节洪水时水压 147 kPa 超限，软土交界不加固会漏接缝，冲刷区要加固或埋深 ≥ 2 m。参考方案 = 全部加强管节 + 20~60 m 加固地基（预算 105000）。
 
 ## 隧道电梯（2026-11 用户要求，覆盖上面关于坡道 / 洞口防洪 / 漏水的旧规则）
-- 入口 = 两岸垂直电梯（材料 lift，IsLift，不能单独建造；BridgeRenderer.TunnelAccess.AddLift 用钢柱 / 钢梁 / deck_steel / 钢索 / 混凝土拼装）。参数在 C# LiftConfig（TunnelConfig.Lift）：平台 6~26 m、速度 2.5 m/s、承载 200 kN + 25 kN/m、井道 $300/m 高 + 平台 $250/m 长。TunnelRoute.LiftLength 可空（null = 最长）；DesignEditor.SetLiftLength / LiftLengthForLevel（自动配）。
+- 入口 = 两岸垂直电梯（材料 lift，IsLift，不能单独建造；电梯结构是玩家构件，见下文“电梯 = 普通构件”）。参数在 C# LiftConfig（TunnelConfig.Lift）：平台 6~26 m、速度 2.5 m/s、承载由构件决定（见下文）。TunnelRoute.LiftLength 可空（null = 最长）；DesignEditor.SetLiftLength / LiftLengthForLevel（自动配）。
 - 路线：RoadPath.LiftSegments 标出电梯段；BridgeSimulation.LiftState 一次运一辆，车停平台、LiftDy 动画、到达后 FrontS += Shift；太长 → VehicleBlocked，太重 → FailureReason.LiftOverload。理想时间按电梯排队（乘坐 + 空载返回）计算。
 - AddTunnel 一键从岸壁建到岸壁；两端 x 锁定在岸壁，只能上下；旧存档载入时贴合岸壁，PortalRaise / FloodGate / Pump 忽略且不计费。
 - 隧道失败只看材料强度：沉管 = 水压，悬浮 = max(水压, 锚索)，盾构 = 水压 + 土压；UpdatePortals 不再进水。参考造价：第十三关 $89,920、第十四关 $161,695、第十五关 $158,620（重型管片）。
 - 土质（2026-11 用户要求）：隧道不受土质影响，只有盾构管片的土压随地层 / 注浆 / 软化变化；沉管地基、悬浮锚点、隧道支点都与土质无关（SupportCapacity = 等级承载，天气软化只削弱桥墩地基）；只有盾构注浆计费，旧存档沉管 / 悬浮的 Reinforced 照常读取但不计费。
 - 沉管（TunnelTypeConfig.Straight）：整节预制直管，不能加控制点，只能上下拖动两端；旧存档的中间控制点载入时删除。价格 普通 / 加强 / 重型 500 / 1150 / 1950（基础价最便宜，升级比其他隧道贵）。旧 tunnels.json 备份 legacy/tunnels_v_before_straight_immersed.json。
 - 接缝圆点（2026-11 用户要求）：盾构 / 悬浮隧道的可拖动点就是管节接缝（TunnelRules.JointXs 从岸壁到岸壁等分，每节 ≤ ElementLength），每节 = 相邻两点之间的直段；接缝点只能上下拖，不能增删；旧存档和参考方案在 TunnelGeometry.Build / DesignEditor.SnapPointsToJoints 里按原路线重采样。渲染 BridgeRenderer.MiterTube 把每节两端剪切到接缝角平分面（以管底接缝为轴），相邻管节无缝隙、无重叠；沉管仍是直管（只有两端）。
+- 车辆制动（2026-11 用户要求“等候停车要缓慢停住”）：VehicleState.Speed，BridgeSimulation.VehicleBrake 3 m/s² 减速、VehicleAccel 2 m/s² 起步；每步先向前探测一个制动距离找停车线（开启桥、电梯、前车），按 √(v前² + 2a·距离) 限速，实际位移永远不越过停车线。LiftQueueTests 检查减速不超过约 2 倍制动率。
+- 电梯等候：平台不在时车辆车头停在平台前 TunnelRules.LiftWaitClearance（1.2 m），避开着陆门与井道端墙（端墙中心在平台外 LiftEndWallOffset 0.45 m、厚 0.25 m，渲染与仿真共用常量）；原来 0.5 m 时车头插进端墙（2026-11 用户报告“等候电梯时前进穿模”）。LiftQueueTests 检查排队车辆不越过端墙、不重叠、等候时不移动。
 - 电梯显示：井道与轿厢封闭（AddEnclosure），门两侧空档有固定栅栏，配重加宽；剖视时前侧墙板（_tubeFrontDetails）和前侧装饰（TerrainBuilder.CutawayFrontGroup，z > 0 的树 / 房子）隐藏。
 
 ## 桥面档次（承载 / 自重 / 成本，5 档）
 木 2/1/1 · 钢格栅 deck_grating 3/2/3 · 钢筋混凝土 road 4/5/2 · 预应力混凝土 deck_psc 5/4/3 · 加劲钢 deck_steel 5/2/4 · FRP 3~5/1/5（有回归测试）。格栅开放在第五关，预应力在第十一、十二关。
+
+## 结构化隧道与电梯（2026-11 用户规格，覆盖上面关于沉管支点、悬浮锚索根数、电梯承载 = 平台长度的旧规则）
+- 沉管 / 悬浮：Scripts/Physics/TunnelStructure.cs 把管身作为梁链加入普通求解器（每节一根，EI = 管身与一道接缝串联，抗弯 = JointStiffness × JointRotation），两端铰接在电梯井，中间接缝是自由节点（BridgeNode.TunnelJoint，在管底），玩家构件在接缝处铰接。净重 = 自重(+配重) − 浮力，悬浮配重按 浮力 / 浮力比 一次算清，不重复计。Util = max(管壁水压, 接缝弯矩)。横向摆动是标注为简化的显示项。
+- 有非盾构隧道时水下可建节点（河床以上、管身以外）；河床端点自动成为墩底浅基础（DesignEditor.IsBedPoint）。旧锚索按钮停用（LegacyCableButtons = false）。
+- 旧存档迁移 MigrateStructuralTunnel（TunnelRoute.Structure == null → 1）：沉管每道接缝一根 pier_concrete（浅基础不够就桩基础），悬浮按旧根数生成真实钢索 + 锚块。只运行一次。
+- 电梯 = 普通构件（2026-11 用户要求“像组装桥梁一样，不在信息页点击；换材料 / 改设计模型要变化；隧道编辑要影响电梯”，覆盖之前的参数式电梯）：
+  - 固定节点 BridgeNode.LiftBank（1 左 / 2 右）+ LiftRole：deck0 (X0, Bottom)、deck1 (X1, Bottom)、两个 pit (X0−ColumnOffset / X1+ColumnOffset, Bottom−Pit)。IsLiftFixed 属于 IsTunnelNode：不能删；只有外端（左岸 deck0、右岸 deck1）能横向拖动 → SetLiftLength。ColumnRules 的 Land 基础接受 LiftRole == "pit"。
+  - LiftStructure.Analyze：按 LiftBank 或井道区域 InZone 归属节点；平台 = 从 deck0/deck1 经非钢索构件 BFS；Ties = 靠端墙面 TieTolerance 内的非平台节点（FixX，每处 BraceCost）；Hoists = 一端在平台的钢索；Sheaves = 吊索上端；DeckPath = 桥面构件从 deck0 到 deck1。Problem：缺端点 / 桥面不通 / 平台刚接井道 / 无吊索。
+  - ApplySupports（StructuralModel.Build 也调用，主模型里电梯构件同样受自重和配重）：先清掉井道内节点的陆地基础（井道是挖空的：否则中间柱节点会白拿支撑，2026-11 发现并修复），再 pit 固定 + 锚点、deck0 FixX（导轨）、Ties FixX、配重按绳数作为 NodeLoadY 挂在滑轮节点。
+  - Check(design, level, db, L, axles)：只取该电梯的子结构单独求解（平台在下层站台位置分析），轴荷按 DeckPath 放到平台桥面；MemberUtil 逐根，驱动 = |吊索总拉力 − 配重| / 驱动力，BaseReaction = 井底竖向反力。
+  - LiftDesign 只保留模板来源（Deck/TrussDepth/Panel/Web/Chord/Diagonal/Hoist/Column）+ Drive + Counterweight + Built（null = 旧存档）。模板：平台桁架为 Pratt 式（斜杆从吊点向跨中向下，悬吊平台始终受拉，用钢索），柱子分段 ≤ ColumnSegment 4.5 m（< CrossBeams.MinLength，不会在上层站台产生挡公交车的横梁；同时缩短屈曲长度），每段节点靠端墙被拉结。light 也要浅桁架（求解器节点只有平动自由度，纯桥面链吊两端是机构）。
+  - DesignEditor：GenerateLifts / RebuildLifts(template?)（HUD「重建电梯结构」= liftauto：先按车身长度定平台，再选最便宜的够用模板，LiftTemplateForLevel 在编辑器副本上逐个模板生成并校核）、SetLiftMachine（HUD 选中滑轮节点时的 SetSheaveRow："liftset:drive:id" / "liftset:cw:±n"）、SyncLifts（RegenerateTunnel 每次调用：固定节点跟随井道；平台范围内的自由节点按比例拉伸 x，两侧跟随较近端；下半部跟随站台高度）、MigrateLiftStructure（Built == null → 生成一次，Built = 1，重复载入不变）、PreviewTunnel 在副本上 AddTunnel 求真实总价（_previewing 防递归）。
+  - 费用：构件按材料单价；TunnelRules.Cost 另加每部 驱动 + 配重 × CounterweightCostPerTonne + 井道高度 × ShaftCostPerMeter；RegenerateTunnel 加 Ties × BraceCost。
+  - 仿真：LiftState.Layout；BuildLifts 时有 Problem → LiftOverload 失败（写明原因与改法）；LiftGate 的 CheckLift 把车轴换算到平台 x（X0 + stop + offset − EntryS）。
+  - 渲染：实际电梯只画井道围护、站台门、轿厢装饰（门、侧墙、扶手）和滑轮下的配重（吨位决定大小，轿厢上升时配重下降）；平台构件节点在 UpdateTransforms 里加 LiftOffset（随轿厢升降，吊索自然伸缩）。未建隧道前的虚影预览仍用旧示意模型。
+  - 允许材料：第十四、十五关加了 concrete（模板井道柱）。
+- 参考方案（Tests: --gen-tube-refs --write 重新生成）：第十三关 加强沉管 + 接缝 2/4 桥墩 + 标准模板电梯构件 $212,828 / 预算 223000；第十四关 加强 + 低浮力 + 接缝 2/4/6 锚索 + 标准电梯 $253,369 / 282000；第十五关 原盾构方案 + 标准电梯 $294,108 / 315000（预算按原来的余量比例放大）。备份 legacy/*_v_before_structural_tunnels.json、*_v_before_structural_lifts.json、*_v_before_member_lifts.json。
+- 测试：TunnelStructureTests、LiftStructureTests（--lift-only；--lift-sweep 打印第十三~十五关每个模板的费用与最不利工况）。已知失败：第七关“35% > 30°”断言（单独报告，不改爬坡规则）。
+- 未完成：盾构洞口与竖井设计未做；en.json 还有 108 条与电梯无关的旧缺失（车辆说明等）。
+
+
+## 当前机构电梯规则（优先于旧版模板电梯说明）
+
+- `LevelDefinition.MechanicalLift` 用于固定通道电梯关。关卡提供井道开口、少量安装座及平台连接点，不自动生成平台和驱动；旧模板电梯仅保留给普通关卡沙盒和明确请求的参考示例。
+- `LiftMechanics` 校核竖直液压驱动行程、固定滑轮连续钢索、独立配重端点和安装支架稳定性。滑轮串联绳索使用耦合刚度、等张力，配重和滑轮质量、固定支点承载均计入求解。
+- 载荷按下层 / 半程 / 上层的二维准静态工况校核。电梯缺路面、无驱动、行程不足或损坏时停止测试，禁止继续放行；普通桥梁延迟判负规则保持。
+- 定滑轮和配重是节点设备，通过建材工具点击安装，Shift 点击拆除 / 减重，均计费且可撤销。受力显示穿透井道；不稳定或松弛为灰色，不能伪造有效受力值。
+- 上传前已同步 README 的新入口、旧模板适用范围、受力与经济评估操作。没有网页帮助中心，未创建替代帮助页面。

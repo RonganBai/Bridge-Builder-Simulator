@@ -40,14 +40,18 @@ namespace BridgeArchitect3D.Traffic
                 AddChild(n);
                 _units.Add(new Unit { Node = n, Front = u.Front, Rear = u.Rear });
             }
-            if (Def.Kind == "ambulance") CollectBeacons();
+            CollectBeacons(); CollectRunningGear();
+            SelectTractorVariant((long)GD.Randi());
         }
 
         private void CollectBeacons()
         {
             foreach (var unit in _units) foreach (var child in unit.Node.GetChildren())
             {
-                if (child is MeshInstance3D mesh && mesh.MaterialOverride is StandardMaterial3D mat && mat.ResourceName.StartsWith("AmbulanceBeacon") && !_beacons.Contains(mat)) _beacons.Add(mat);
+                if (child is MeshInstance3D mesh && mesh.MaterialOverride is StandardMaterial3D mat && (mat.ResourceName.StartsWith("AmbulanceBeacon") || mat.ResourceName.StartsWith("EmergencyBeacon")))
+                {
+                    var own=(StandardMaterial3D)mat.Duplicate();mesh.MaterialOverride=own;_beacons.Add(own);
+                }
                 if (child is OmniLight3D beacon) _beaconLights.Add(beacon);
             }
         }
@@ -74,7 +78,9 @@ namespace BridgeArchitect3D.Traffic
             {
                 SpecialVehicleFactory.Build(def,NewUnit);
                 for(int i=0;i<_units.Count;i++)LowPolyDetails.DressVehicle(_units[i].Node,def,i);
-                if(def.Kind=="ambulance")CollectBeacons();
+                FitToBody(); CollectRunningGear();
+                CollectBeacons();
+                SelectTractorVariant((long)GD.Randi());
                 return;
             }
             switch (def.Kind)
@@ -142,7 +148,8 @@ namespace BridgeArchitect3D.Traffic
                 }
                 case "tank":
                 {
-                    var n = NewUnit(2.9f, -4.1f);
+                    // Origin on the front axle like every other vehicle, so the model sits inside the simulated body
+                    var n = NewUnit(0, rear);
                     // 履带（重量集中在 1.2 m 的短距离内，对应“单点高负载”）+ 负重轮
                     var roadWheel = new CylinderMesh { TopRadius = 0.32f, BottomRadius = 0.32f, Height = 0.3f, RadialSegments = 10 };
                     for (int s = -1; s <= 1; s += 2)
@@ -150,7 +157,10 @@ namespace BridgeArchitect3D.Traffic
                         float tz = s * (w / 2 - 0.4f);
                         CurvedMeshes.Track(n,len*0.85f,tz,0.8f,dark,chrome);
                         for (int k = 0; k < 5; k++)
-                            n.AddChild(new MeshInstance3D { Mesh = roadWheel, MaterialOverride = trim, Position = new Vector3(1.6f - k * 1.1f, 0.42f, tz + s * 0.25f), RotationDegrees = new Vector3(90, 0, 0) });
+                        {
+                            var wheel = new MeshInstance3D { Name = "RoadWheel", Mesh = roadWheel, MaterialOverride = trim, Position = new Vector3(1.6f - k * 1.1f, 0.42f, tz + s * 0.25f), RotationDegrees = new Vector3(90, 0, 0) };
+                            wheel.SetMeta("animated", true); n.AddChild(wheel);
+                        }
                         AddBox(n, new Vector3(-0.6f, 0.95f, s * (w / 2 - 0.35f)), new Vector3(len * 0.88f, 0.08f, 0.95f), body);  // 挡泥板
                     }
                     AddBox(n, new Vector3(-0.8f, 1.2f, 0), new Vector3(len * 0.72f, 0.6f, w * 0.72f), body);                       // 车体
@@ -158,7 +168,8 @@ namespace BridgeArchitect3D.Traffic
                     n.AddChild(glacis);                                                                                            // 倾斜首上装甲
                     AddBox(n, new Vector3(-1.0f, 1.82f, 0), new Vector3(2.6f, 0.65f, 2.2f), body);                                  // 炮塔
                     AddBox(n, new Vector3(-1.3f, 2.2f, 0.5f), new Vector3(0.6f, 0.15f, 0.6f), trim);                                // 舱盖
-                    n.AddChild(new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0.1f, BottomRadius = 0.13f, Height = 4.0f, RadialSegments = 8 }, MaterialOverride = dark, Position = new Vector3(1.6f, 1.9f, 0), RotationDegrees = new Vector3(0, 0, 90) });
+                    // Gun barrel ends at the front of the body (it used to reach 3.6 m past it)
+                    n.AddChild(new MeshInstance3D { Mesh = new CylinderMesh { TopRadius = 0.1f, BottomRadius = 0.13f, Height = 3.0f, RadialSegments = 8 }, MaterialOverride = dark, Position = new Vector3(1.3f, 1.9f, 0), RotationDegrees = new Vector3(0, 0, 90) });
                     break;
                 }
                 default:
@@ -227,7 +238,99 @@ namespace BridgeArchitect3D.Traffic
                 }
             }
             for(int i=0;i<_units.Count;i++) LowPolyDetails.DressVehicle(_units[i].Node,def,i);
+            FitToBody(); CollectRunningGear();
         }
+        // ---------------- model fitted to the collision body ----------------
+
+        /// <summary>Allowed overshoot of the model past the collision body (m): tiny, so nothing visibly pokes out.</summary>
+        private const float FitTolerance = 0.02f;
+
+        /// <summary>
+        /// Squeezes the model into the simulated collision body (<see cref="VehicleBody"/>): along the path each part
+        /// is mapped into [Rear, Front], height into [0, Height], width into ±Width/2. The body is a plain box, the
+        /// model only has to stay inside it. Parts that already fit are left exactly as built. Done once per template.
+        /// </summary>
+        private void FitToBody()
+        {
+            if (Def == null || _units.Count == 0) return;
+            float bodyFront = (float)VehicleBody.Front(Def), bodyRear = (float)VehicleBody.Rear(Def);
+            float height = (float)Def.Height, halfWidth = (float)Def.Width / 2;
+            if (RailTrack.IsTrain(Def)) height -= (float)RailTrack.Height;   // trains are drawn raised onto the rails
+            foreach (var u in _units)
+            {
+                if (!ModelBounds(u.Node, Transform3D.Identity, out var box)) continue;
+                // Path coordinates of this part (its origin sits u.Front metres from the leading axle)
+                float x0 = box.Position.X + u.Front, x1 = box.End.X + u.Front;
+                float t0 = Mathf.Max(x0, bodyRear), t1 = Mathf.Min(x1, bodyFront);
+                float sx = 1, ox = 0, sy = 1, sz = 1;
+                if ((x0 < bodyRear - FitTolerance || x1 > bodyFront + FitTolerance) && t1 > t0 && x1 - x0 > 1e-4f)
+                { sx = (t1 - t0) / (x1 - x0); ox = (t0 - u.Front) - sx * box.Position.X; }
+                if (box.End.Y > height + FitTolerance && box.End.Y > 1e-4f) sy = height / box.End.Y;
+                float zMax = Mathf.Max(Mathf.Abs(box.Position.Z), Mathf.Abs(box.End.Z));
+                if (zMax > halfWidth + FitTolerance) sz = halfWidth / zMax;
+                if (sx == 1 && sy == 1 && sz == 1) continue;
+                var fit = new Transform3D(Basis.FromScale(new Vector3(sx, sy, sz)), new Vector3(ox, 0, 0));
+                foreach (var c in u.Node.GetChildren()) if (c is Node3D child) child.Transform = fit * child.Transform;
+            }
+        }
+
+        /// <summary>Bounding box of every mesh under node, in node space (lights and other non-meshes ignored).</summary>
+        private static bool ModelBounds(Node3D node, Transform3D toRoot, out Aabb box)
+        {
+            box = default; bool any = false;
+            foreach (var c in node.GetChildren())
+            {
+                if (c is not Node3D child) continue;
+                var xf = toRoot * child.Transform;
+                if (child is MeshInstance3D m && m.Mesh != null)
+                {
+                    var b = xf * m.Mesh.GetAabb();
+                    box = any ? box.Merge(b) : b; any = true;
+                }
+                if (ModelBounds(child, xf, out var inner)) { box = any ? box.Merge(inner) : inner; any = true; }
+            }
+            return any;
+        }
+
+        // ---------------- running gear animation ----------------
+
+        private readonly List<Node3D> _tracks = new();
+        private readonly List<(Node3D wheel, Basis rest, float radius)> _rollers = new();
+        private double _lastFrontS = double.NaN;
+        private float _travel;
+
+        /// <summary>Finds the animated parts (tank tracks and road wheels, marked with meta "animated") of the model.</summary>
+        private void CollectRunningGear()
+        {
+            _tracks.Clear(); _rollers.Clear();
+            void Walk(Node node)
+            {
+                foreach (var c in node.GetChildren())
+                {
+                    if (c is Node3D t && t.HasMeta("loop")) { _tracks.Add(t); continue; }
+                    if (c is MeshInstance3D w && w.HasMeta("animated") && w.Mesh is CylinderMesh cyl) _rollers.Add((w, w.Basis, cyl.TopRadius));
+                    Walk(c);
+                }
+            }
+            foreach (var u in _units) Walk(u.Node);
+        }
+
+        /// <summary>
+        /// Runs the tracks and spins the road wheels by the distance driven since the last frame, so the bottom of
+        /// each track stays put on the road while the tank moves (links run backwards along the bottom).
+        /// </summary>
+        private void AnimateRunningGear(double frontS)
+        {
+            if (_tracks.Count == 0 && _rollers.Count == 0) return;
+            double moved = double.IsNaN(_lastFrontS) ? 0 : frontS - _lastFrontS;
+            _lastFrontS = frontS;
+            if (Math.Abs(moved) < 1e-6 || Math.Abs(moved) > 20) return;   // standing, or a replay jump
+            _travel += (float)moved;
+            foreach (var t in _tracks) CurvedMeshes.PlaceLinks(t, -_travel);
+            foreach (var (wheel, rest, radius) in _rollers)
+                wheel.Basis = new Basis(Vector3.Back, -_travel / Mathf.Max(0.05f, radius)) * rest;
+        }
+
         private Node3D NewUnit(float front, float rearOffset)
         {
             var n = new Node3D();
@@ -255,6 +358,7 @@ namespace BridgeArchitect3D.Traffic
         public void PlaceAlongPath(Func<double, Vector3> eval, double frontS)
         {
             if (_falling || _derailing) return;
+            AnimateRunningGear(frontS);
             Transform = Transform3D.Identity;
             foreach (var u in _units)
             {
@@ -277,7 +381,9 @@ namespace BridgeArchitect3D.Traffic
                     f += n * lift;
                 }
                 // 部件原点放在其前端，局部 -X 指向后方
-                u.Node.Transform = new Transform3D(new Basis(Vector3.Back, ang), f);
+                var forward=dir.LengthSquared()>1e-6f?dir.Normalized():Vector3.Right;
+                var upright=new Vector3(-forward.Y,forward.X,0);if(upright.Y<0)upright=-upright;
+                u.Node.Transform = new Transform3D(new Basis(forward,upright,forward.Cross(upright)), f);
             }
         }
 
@@ -304,26 +410,56 @@ namespace BridgeArchitect3D.Traffic
             foreach (var u in _units) _derailBase.Add(u.Node.Transform);
         }
 
-        public void ResetState() { _derailing = false; _derailBase.Clear(); _falling = false; Position = Vector3.Zero; Rotation = Vector3.Zero; Visible = true; }
+        public void ResetState() { _lastFrontS = double.NaN; _derailing = false; _derailBase.Clear(); _falling = false; Position = Vector3.Zero; Rotation = Vector3.Zero; Visible = true; }
+
+        private long _payloadTrip=long.MinValue;
+        public void SelectPayloadVariant(long trip)
+        {
+            if(Def.Kind!="flatbed" || trip==_payloadTrip)return;
+            _payloadTrip=trip;
+            int choice=(int)(GD.Randi()%4);
+            string[] names={"PayloadExcavator","PayloadForklifts","PayloadSteel","PayloadTransformer"};
+            foreach(var u in _units)for(int i=0;i<names.Length;i++)
+            {
+                var payload=u.Node.GetNodeOrNull<Node3D>(names[i]);
+                if(payload!=null)payload.Visible=i==choice;
+            }
+        }
+        private long _tractorTrip=long.MinValue;
+        public void SelectTractorVariant(long trip)
+        {
+            SelectPayloadVariant(trip);
+            if(Def.Kind!="semi" || trip==_tractorTrip)return;
+            _tractorTrip=trip;
+            bool american=(GD.Randi()&1)==0;
+            int advertisement=(int)(GD.Randi()%4);
+            foreach(var u in _units)
+            {
+                var cab=u.Node.GetNodeOrNull<Node3D>("CabOver");
+                var nose=u.Node.GetNodeOrNull<Node3D>("AmericanCab");
+                for(int i=0;i<4;i++)
+                {
+                    var ad=u.Node.GetNodeOrNull<Node3D>("Advertisement"+i);
+                    if(ad!=null)ad.Visible=i==advertisement;
+                }
+                if(cab!=null)cab.Visible=!american;
+                if(nose!=null)nose.Visible=american;
+            }
+        }
 
         public void SetEmergencyLights(bool active,double time)
         {
-            double phase=time-Math.Floor(time);
             foreach(var material in _beacons)
             {
-                bool red=material.ResourceName=="AmbulanceBeaconRed";
-                double pulse=red?phase:(phase+0.5)%1;
-                bool lit=active && (pulse<0.08 || pulse>=0.16 && pulse<0.24);
-                var color=new Color(red?"ef5147":"418ff0");
-                material.AlbedoColor=lit?color:color.Darkened(0.4f);
-                material.EmissionEnabled=lit;material.Emission=color;material.EmissionEnergyMultiplier=lit?3:0;
+                string name=material.ResourceName;
+                var color=EmergencyBeaconPattern.ColorFor(name);
+                bool lit=active && EmergencyBeaconPattern.IsLit(name,time);
+                material.AlbedoColor=lit?new Color(color):new Color(color).Darkened(0.55f);
+                material.EmissionEnabled=lit;material.Emission=new Color(color);material.EmissionEnergyMultiplier=lit?3:0;
                 material.ShadingMode=lit?BaseMaterial3D.ShadingModeEnum.Unshaded:BaseMaterial3D.ShadingModeEnum.PerPixel;
             }
             foreach(var light in _beaconLights)
-            {
-                double pulse=light.Name.ToString().Contains("Red")?phase:(phase+0.5)%1;
-                light.Visible=active && (pulse<0.08 || pulse>=0.16 && pulse<0.24);
-            }
+                light.Visible=active && EmergencyBeaconPattern.IsLit(light.Name.ToString(),time);
         }
 
         public override void _Process(double delta)

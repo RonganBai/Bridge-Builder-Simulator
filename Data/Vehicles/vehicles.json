@@ -1,34 +1,1140 @@
-﻿{
+{
   "_units": "质量 kg, 速度 m/s, 车轴偏移 m（相对车头轴，向后为负）, LoadFraction 为该轴承担的质量比例。Kind 只影响外观。",
   "Vehicles": [
-    { "Id": "car", "Name": "轿车", "Kind": "car", "Mass": 1500, "Speed": 8, "Wheelbase": 2.6, "Length": 4.4, "Width": 1.8, "Height": 1.4, "Color": "#D9483B",
-      "Axles": [ { "Offset": 0, "LoadFraction": 0.5 }, { "Offset": -2.6, "LoadFraction": 0.5 } ] },
-    { "Id": "truck", "MaxRampGrade": 0.5774, "Name": "重型货车", "Kind": "truck", "Mass": 25000, "Speed": 4, "Wheelbase": 5.3, "Length": 8.0, "Width": 2.5, "Height": 3.2, "Color": "#E3A72F",
-      "Axles": [ { "Offset": 0, "LoadFraction": 0.2 }, { "Offset": -4.0, "LoadFraction": 0.4 }, { "Offset": -5.3, "LoadFraction": 0.4 } ] },
-    { "Id": "pedestrians", "MaxRampGrade": 0.5774, "Name": "行人队伍", "Kind": "pedestrians", "Mass": 1200, "Speed": 1.4, "Wheelbase": 16.8, "Length": 17.5, "Width": 1.2, "Height": 1.75, "Color": "#3F6FB5",
-      "Units": 15, "FollowGap": 2,
-      "Axles": [ { "Offset": 0, "LoadFraction": 0.0667 }, { "Offset": -1.2, "LoadFraction": 0.0667 }, { "Offset": -2.4, "LoadFraction": 0.0667 }, { "Offset": -3.6, "LoadFraction": 0.0667 }, { "Offset": -4.8, "LoadFraction": 0.0667 },
-                 { "Offset": -6.0, "LoadFraction": 0.0667 }, { "Offset": -7.2, "LoadFraction": 0.0667 }, { "Offset": -8.4, "LoadFraction": 0.0667 }, { "Offset": -9.6, "LoadFraction": 0.0667 }, { "Offset": -10.8, "LoadFraction": 0.0667 },
-                 { "Offset": -12.0, "LoadFraction": 0.0667 }, { "Offset": -13.2, "LoadFraction": 0.0667 }, { "Offset": -14.4, "LoadFraction": 0.0667 }, { "Offset": -15.6, "LoadFraction": 0.0667 }, { "Offset": -16.8, "LoadFraction": 0.0662 } ] },
-    { "Id": "bus", "MaxRampGrade": 0.5774, "Name": "公交车", "Kind": "bus", "Mass": 15000, "Speed": 6, "Wheelbase": 6.0, "Length": 11.0, "Width": 2.5, "Height": 3.0, "Color": "#2E9A5B",
-      "Axles": [ { "Offset": 0, "LoadFraction": 0.35 }, { "Offset": -6.0, "LoadFraction": 0.65 } ] },
-    { "Id": "tank", "MaxRampGrade": 0.5774, "Name": "坦克", "Kind": "tank", "Mass": 60000, "Speed": 3, "Wheelbase": 1.2, "Length": 7.0, "Width": 3.5, "Height": 2.4, "Color": "#5E6B3F",
-      "Axles": [ { "Offset": 0, "LoadFraction": 0.5 }, { "Offset": -1.2, "LoadFraction": 0.5 } ] },
-    { "Id": "train", "Name": "货运列车", "Kind": "train", "Mass": 160000, "Speed": 6, "Wheelbase": 57, "Length": 60, "Width": 3.0, "Height": 3.8, "Color": "#7A3E2E",
-      "Units": 4, "UnitLength": 15, "FollowGap": 5,
-      "Axles": [ { "Offset": -1.5, "LoadFraction": 0.0625 }, { "Offset": -3.5, "LoadFraction": 0.0625 }, { "Offset": -11.5, "LoadFraction": 0.0625 }, { "Offset": -13.5, "LoadFraction": 0.0625 },
-                 { "Offset": -16.5, "LoadFraction": 0.0625 }, { "Offset": -18.5, "LoadFraction": 0.0625 }, { "Offset": -26.5, "LoadFraction": 0.0625 }, { "Offset": -28.5, "LoadFraction": 0.0625 },
-                 { "Offset": -31.5, "LoadFraction": 0.0625 }, { "Offset": -33.5, "LoadFraction": 0.0625 }, { "Offset": -41.5, "LoadFraction": 0.0625 }, { "Offset": -43.5, "LoadFraction": 0.0625 },
-                 { "Offset": -46.5, "LoadFraction": 0.0625 }, { "Offset": -48.5, "LoadFraction": 0.0625 }, { "Offset": -56.5, "LoadFraction": 0.0625 }, { "Offset": -58.5, "LoadFraction": 0.0625 } ] },
-    { "Id": "van", "Name": "厢式货车（空载）", "Kind": "truck", "Mass": 3500, "Speed": 7, "Wheelbase": 3.4, "Length": 5.5, "Width": 2.0, "Height": 2.4, "Color": "#9AA7B5", "FollowGap": 4,
-      "Axles": [ { "Offset": 0, "LoadFraction": 0.45 }, { "Offset": -3.4, "LoadFraction": 0.55 } ] },
-    { "Id": "truck_heavy", "MaxRampGrade": 0.5774, "Name": "满载重卡", "Kind": "truck", "Mass": 32000, "Speed": 3.5, "Wheelbase": 5.3, "Length": 9.0, "Width": 2.5, "Height": 3.4, "Color": "#C0392B", "FollowGap": 6,
-      "Axles": [ { "Offset": 0, "LoadFraction": 0.2 }, { "Offset": -4.0, "LoadFraction": 0.4 }, { "Offset": -5.3, "LoadFraction": 0.4 } ] },
-    {"Id": "suv", "Name": "紧凑型SUV", "Kind": "suv", "Mass": 1650, "Speed": 8, "Wheelbase": 2.68, "Length": 4.45, "Width": 2.04, "Height": 1.67, "Color": "#658E93", "FollowGap": 3, "Axles": [{"Offset": 0, "LoadFraction": 0.57}, {"Offset": -2.68, "LoadFraction": 0.43}]},
-    {"Id": "suv_large", "Name": "大型SUV", "Kind": "suv", "Mass": 2750, "Speed": 7, "Wheelbase": 3.12, "Length": 5.25, "Width": 2.22, "Height": 1.96, "Color": "#727B63", "FollowGap": 3.5, "Axles": [{"Offset": 0, "LoadFraction": 0.53}, {"Offset": -3.12, "LoadFraction": 0.47}]},
-    {"Id": "motorcycle", "Name": "摩托车（含骑手）", "Kind": "motorcycle", "Mass": 300, "Speed": 10, "Wheelbase": 1.45, "Length": 2.2, "Width": 0.9, "Height": 1.55, "Color": "#C47E38", "FollowGap": 3, "Axles": [{"Offset": 0, "LoadFraction": 0.45}, {"Offset": -1.45, "LoadFraction": 0.55}]},
-    {"Id": "pickup", "Name": "双排皮卡", "Kind": "pickup", "Mass": 2450, "Speed": 7, "Wheelbase": 3.2, "Length": 5.6, "Width": 2, "Height": 1.85, "Color": "#66856B", "FollowGap": 3, "Axles": [{"Offset": 0, "LoadFraction": 0.53}, {"Offset": -3.2, "LoadFraction": 0.47}]},
-    {"Id": "semi_long", "MaxRampGrade": 0.5774, "Name": "超长重型半挂车", "Kind": "semi", "Mass": 48000, "Speed": 3.5, "Wheelbase": 21, "Length": 24.5, "Width": 2.6, "Height": 4.1, "Color": "#9A5048", "FollowGap": 6, "Axles": [{"Offset": 0, "LoadFraction": 0.1}, {"Offset": -3.6, "LoadFraction": 0.13}, {"Offset": -4.9, "LoadFraction": 0.13}, {"Offset": -18.4, "LoadFraction": 0.21}, {"Offset": -19.7, "LoadFraction": 0.21}, {"Offset": -21, "LoadFraction": 0.22}]},
-    {"Id": "ambulance", "Name": "救护车", "Kind": "ambulance", "Mass": 3500, "Speed": 8, "Wheelbase": 3.3, "Length": 5.5, "Width": 2.05, "Height": 2.7, "Color": "#ECE8DB", "FollowGap": 3, "Axles": [{"Offset": 0, "LoadFraction": 0.45}, {"Offset": -3.3, "LoadFraction": 0.55}]}
+    {
+      "Id": "car",
+      "Name": "轿车",
+      "Kind": "car",
+      "Mass": 1500,
+      "Speed": 8,
+      "Wheelbase": 2.6,
+      "Length": 4.4,
+      "Width": 1.8,
+      "Height": 1.4,
+      "Color": "#D9483B",
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.5
+        },
+        {
+          "Offset": -2.6,
+          "LoadFraction": 0.5
+        }
+      ],
+      "Category": "日常车辆",
+      "Purpose": "轻型桥面与日常通行",
+      "Features": "低矮轿车，双轴分担载荷。"
+    },
+    {
+      "Id": "truck",
+      "MaxRampGrade": 0.5774,
+      "Name": "重型货车",
+      "Kind": "truck",
+      "Mass": 25000,
+      "Speed": 4,
+      "Wheelbase": 5.3,
+      "Length": 8.0,
+      "Width": 2.5,
+      "Height": 3.2,
+      "Color": "#E3A72F",
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.2
+        },
+        {
+          "Offset": -4.0,
+          "LoadFraction": 0.4
+        },
+        {
+          "Offset": -5.3,
+          "LoadFraction": 0.4
+        }
+      ],
+      "Category": "货运车辆",
+      "Purpose": "中重载桥面测试",
+      "Features": "箱式货厢，多轴分担载荷；质量按当前车型条目计算。"
+    },
+    {
+      "Id": "pedestrians",
+      "MaxRampGrade": 0.5774,
+      "Name": "行人队伍",
+      "Kind": "pedestrians",
+      "Mass": 1200,
+      "Speed": 1.4,
+      "Wheelbase": 16.8,
+      "Length": 17.5,
+      "Width": 1.2,
+      "Height": 1.75,
+      "Color": "#3F6FB5",
+      "Units": 15,
+      "FollowGap": 2,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -1.2,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -2.4,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -3.6,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -4.8,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -6.0,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -7.2,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -8.4,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -9.6,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -10.8,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -12.0,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -13.2,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -14.4,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -15.6,
+          "LoadFraction": 0.0667
+        },
+        {
+          "Offset": -16.8,
+          "LoadFraction": 0.0662
+        }
+      ],
+      "Category": "行人",
+      "Purpose": "分散小载荷测试",
+      "Features": "多人队伍，各成员沿真实路面摆放，质量按多个落点分配。"
+    },
+    {
+      "Id": "bus",
+      "MaxRampGrade": 0.5774,
+      "Name": "公交车",
+      "Kind": "bus",
+      "Mass": 15000,
+      "Speed": 6,
+      "Wheelbase": 6.0,
+      "Length": 11.0,
+      "Width": 2.5,
+      "Height": 3.0,
+      "Color": "#2E9A5B",
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.35
+        },
+        {
+          "Offset": -6.0,
+          "LoadFraction": 0.65
+        }
+      ],
+      "Category": "公共交通",
+      "Purpose": "长轴距客运承载测试",
+      "Features": "公交车窗带、前后车门与车顶空调。"
+    },
+    {
+      "Id": "tank",
+      "MaxRampGrade": 0.5774,
+      "Name": "坦克",
+      "Kind": "tank",
+      "Mass": 60000,
+      "Speed": 3,
+      "Wheelbase": 1.2,
+      "Length": 7.0,
+      "Width": 3.5,
+      "Height": 2.4,
+      "Color": "#5E6B3F",
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.5
+        },
+        {
+          "Offset": -1.2,
+          "LoadFraction": 0.5
+        }
+      ],
+      "Category": "特种车辆",
+      "Purpose": "高质量短轴距集中载荷测试",
+      "Features": "履带与负重轮；按行驶距离驱动履带动画，结构载荷集中在短轴距内。"
+    },
+    {
+      "Id": "train",
+      "Name": "货运列车",
+      "Kind": "train",
+      "Mass": 160000,
+      "Speed": 6,
+      "Wheelbase": 57,
+      "Length": 60,
+      "Width": 3.0,
+      "Height": 3.8,
+      "Color": "#7A3E2E",
+      "Units": 4,
+      "UnitLength": 15,
+      "FollowGap": 5,
+      "Axles": [
+        {
+          "Offset": -1.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -3.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -11.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -13.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -16.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -18.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -26.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -28.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -31.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -33.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -41.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -43.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -46.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -48.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -56.5,
+          "LoadFraction": 0.0625
+        },
+        {
+          "Offset": -58.5,
+          "LoadFraction": 0.0625
+        }
+      ],
+      "Category": "铁路车辆",
+      "Purpose": "铁路桥与重载列车测试",
+      "Features": "多节货运列车，仅走铁路或公铁复合桥面；具有铁轨晃动与脱轨判定。"
+    },
+    {
+      "Id": "van",
+      "Name": "厢式货车（空载）",
+      "Kind": "truck",
+      "Mass": 3500,
+      "Speed": 7,
+      "Wheelbase": 3.4,
+      "Length": 5.5,
+      "Width": 2.0,
+      "Height": 2.4,
+      "Color": "#9AA7B5",
+      "FollowGap": 4,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.45
+        },
+        {
+          "Offset": -3.4,
+          "LoadFraction": 0.55
+        }
+      ],
+      "Category": "货运车辆",
+      "Purpose": "中重载桥面测试",
+      "Features": "箱式货厢，多轴分担载荷；质量按当前车型条目计算。"
+    },
+    {
+      "Id": "truck_heavy",
+      "MaxRampGrade": 0.5774,
+      "Name": "满载重卡",
+      "Kind": "truck",
+      "Mass": 32000,
+      "Speed": 3.5,
+      "Wheelbase": 5.3,
+      "Length": 9.0,
+      "Width": 2.5,
+      "Height": 3.4,
+      "Color": "#C0392B",
+      "FollowGap": 6,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.2
+        },
+        {
+          "Offset": -4.0,
+          "LoadFraction": 0.4
+        },
+        {
+          "Offset": -5.3,
+          "LoadFraction": 0.4
+        }
+      ],
+      "Category": "货运车辆",
+      "Purpose": "中重载桥面测试",
+      "Features": "箱式货厢，多轴分担载荷；质量按当前车型条目计算。"
+    },
+    {
+      "Id": "suv",
+      "Name": "紧凑型SUV",
+      "Kind": "suv",
+      "Mass": 1650,
+      "Speed": 8,
+      "Wheelbase": 2.68,
+      "Length": 4.45,
+      "Width": 2.04,
+      "Height": 1.67,
+      "Color": "#658E93",
+      "FollowGap": 3,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.57
+        },
+        {
+          "Offset": -2.68,
+          "LoadFraction": 0.43
+        }
+      ],
+      "Category": "日常车辆",
+      "Purpose": "较高车身的乘用车通行",
+      "Features": "独立 SUV 轮廓，双轴承载。"
+    },
+    {
+      "Id": "suv_large",
+      "Name": "大型SUV",
+      "Kind": "suv",
+      "Mass": 2750,
+      "Speed": 7,
+      "Wheelbase": 3.12,
+      "Length": 5.25,
+      "Width": 2.22,
+      "Height": 1.96,
+      "Color": "#727B63",
+      "FollowGap": 3.5,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.53
+        },
+        {
+          "Offset": -3.12,
+          "LoadFraction": 0.47
+        }
+      ],
+      "Category": "日常车辆",
+      "Purpose": "较高车身的乘用车通行",
+      "Features": "独立 SUV 轮廓，双轴承载。"
+    },
+    {
+      "Id": "motorcycle",
+      "Name": "摩托车（含骑手）",
+      "Kind": "motorcycle",
+      "Mass": 300,
+      "Speed": 10,
+      "Wheelbase": 1.45,
+      "Length": 2.2,
+      "Width": 0.9,
+      "Height": 1.55,
+      "Color": "#C47E38",
+      "FollowGap": 3,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.45
+        },
+        {
+          "Offset": -1.45,
+          "LoadFraction": 0.55
+        }
+      ],
+      "Category": "日常车辆",
+      "Purpose": "轻载与快速车流展示",
+      "Features": "包含骑手总质量，小轴距双轮模型。"
+    },
+    {
+      "Id": "pickup",
+      "Name": "双排皮卡",
+      "Kind": "pickup",
+      "Mass": 2450,
+      "Speed": 7,
+      "Wheelbase": 3.2,
+      "Length": 5.6,
+      "Width": 2,
+      "Height": 1.85,
+      "Color": "#66856B",
+      "FollowGap": 3,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.53
+        },
+        {
+          "Offset": -3.2,
+          "LoadFraction": 0.47
+        }
+      ],
+      "Category": "日常车辆",
+      "Purpose": "轻型货运与乘用混合车流",
+      "Features": "双排驾驶室、开放式货斗。"
+    },
+    {
+      "Id": "semi_long",
+      "MaxRampGrade": 0.5774,
+      "Name": "超长重型半挂车",
+      "Kind": "semi",
+      "Mass": 48000,
+      "Speed": 3.5,
+      "Wheelbase": 21,
+      "Length": 24.5,
+      "Width": 2.6,
+      "Height": 4.1,
+      "Color": "#9A5048",
+      "FollowGap": 6,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.1
+        },
+        {
+          "Offset": -3.6,
+          "LoadFraction": 0.13
+        },
+        {
+          "Offset": -4.9,
+          "LoadFraction": 0.13
+        },
+        {
+          "Offset": -18.4,
+          "LoadFraction": 0.21
+        },
+        {
+          "Offset": -19.7,
+          "LoadFraction": 0.21
+        },
+        {
+          "Offset": -21,
+          "LoadFraction": 0.22
+        }
+      ],
+      "Category": "货运车辆",
+      "Purpose": "超长多轴重载测试",
+      "Features": "平头／美式长鼻车头随机切换；箱体双侧四套广告每趟随机，外观切换不改变质量。"
+    },
+    {
+      "Id": "ambulance",
+      "Name": "救护车",
+      "Kind": "ambulance",
+      "Mass": 3500,
+      "Speed": 8,
+      "Wheelbase": 3.3,
+      "Length": 5.5,
+      "Width": 2.05,
+      "Height": 2.7,
+      "Color": "#ECE8DB",
+      "FollowGap": 3,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.45
+        },
+        {
+          "Offset": -3.3,
+          "LoadFraction": 0.55
+        }
+      ],
+      "Category": "应急车辆",
+      "Purpose": "医疗救援车流展示",
+      "Features": "红蓝警灯按固定周期闪烁；主菜单达到行驶速度后启用，排队期间保持。"
+    },
+    {
+      "Id": "mixer",
+      "Name": "水泥搅拌车",
+      "Kind": "mixer",
+      "Mass": 32000,
+      "Speed": 4,
+      "Length": 8.6,
+      "Width": 2.5,
+      "Height": 3.7,
+      "Color": "#D8D4C6",
+      "Wheelbase": 5.3,
+      "FollowGap": 4,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.2
+        },
+        {
+          "Offset": -4,
+          "LoadFraction": 0.4
+        },
+        {
+          "Offset": -5.3,
+          "LoadFraction": 0.4
+        }
+      ],
+      "Category": "工程车辆",
+      "Purpose": "混凝土运输重载测试",
+      "Features": "加长加粗的一体滚筒、支座、进料斗和出料槽；滚筒当前为静态模型。"
+    },
+    {
+      "Id": "fire_engine",
+      "Name": "消防车",
+      "Kind": "fire_engine",
+      "Mass": 18000,
+      "Speed": 7,
+      "Length": 8.2,
+      "Width": 2.5,
+      "Height": 3.65,
+      "Color": "#C93632",
+      "Wheelbase": 4.8,
+      "FollowGap": 4,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.35
+        },
+        {
+          "Offset": -4.8,
+          "LoadFraction": 0.65
+        }
+      ],
+      "Category": "应急车辆",
+      "Purpose": "消防救援与中型重载展示",
+      "Features": "三节收拢云梯、作业篮与器材舱；红白警灯，尾灯避开梯架；云梯不执行升降。"
+    },
+    {
+      "Id": "machinery_flatbed",
+      "Name": "多用途重型平板货卡",
+      "Kind": "flatbed",
+      "Mass": 42000,
+      "Speed": 3.5,
+      "Length": 12,
+      "Width": 2.6,
+      "Height": 4,
+      "Color": "#BD873E",
+      "Wheelbase": 9.2,
+      "FollowGap": 4,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.18
+        },
+        {
+          "Offset": -5.8,
+          "LoadFraction": 0.25
+        },
+        {
+          "Offset": -7.1,
+          "LoadFraction": 0.27
+        },
+        {
+          "Offset": -9.2,
+          "LoadFraction": 0.3
+        }
+      ],
+      "Category": "特种运输",
+      "Purpose": "不同货物的重型运输展示",
+      "Features": "每趟随机装载挖掘机、三台叉车、三组钢卷或变压器；使用统一的保守总质量，货物切换不改变轴重。"
+    },
+    {
+      "Id": "police",
+      "Name": "轿车警车",
+      "Kind": "police",
+      "Mass": 1850,
+      "Speed": 9,
+      "Length": 4.9,
+      "Width": 1.95,
+      "Height": 1.65,
+      "Color": "#202D38",
+      "Wheelbase": 2.85,
+      "FollowGap": 4,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.52
+        },
+        {
+          "Offset": -2.85,
+          "LoadFraction": 0.48
+        }
+      ],
+      "Category": "应急车辆",
+      "Purpose": "警务应急车流展示",
+      "Features": "轿车警用涂装、防撞杠与蓝白红规律闪烁灯条。"
+    },
+    {
+      "Id": "police_suv",
+      "Name": "探险者风格SUV警车",
+      "Kind": "police_suv",
+      "Mass": 2450,
+      "Speed": 8,
+      "Length": 5.05,
+      "Width": 2.1,
+      "Height": 2.05,
+      "Color": "#25343F",
+      "Wheelbase": 3.02,
+      "FollowGap": 4,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.54
+        },
+        {
+          "Offset": -3.02,
+          "LoadFraction": 0.46
+        }
+      ],
+      "Category": "应急车辆",
+      "Purpose": "较高车身的警务车辆通行",
+      "Features": "探险者风格 SUV 警车，蓝白红灯条。"
+    },
+    {
+      "Id": "jeep",
+      "Name": "牧马人风格JEEP越野车",
+      "Kind": "jeep",
+      "Mass": 2150,
+      "Speed": 7,
+      "Length": 4.75,
+      "Width": 1.95,
+      "Height": 1.95,
+      "Color": "#A69665",
+      "Wheelbase": 2.9,
+      "FollowGap": 4,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.52
+        },
+        {
+          "Offset": -2.9,
+          "LoadFraction": 0.48
+        }
+      ],
+      "Category": "日常车辆",
+      "Purpose": "越野车轮廓与车流展示",
+      "Features": "牧马人风格硬顶、竖条格栅与外挂备胎；路面规则与普通车辆一致。"
+    },
+    {
+      "Id": "utility",
+      "Name": "电力抢修车",
+      "Kind": "utility",
+      "Mass": 6200,
+      "Speed": 6,
+      "Length": 6.5,
+      "Width": 2.2,
+      "Height": 3.2,
+      "Color": "#E5B83D",
+      "Wheelbase": 3.8,
+      "FollowGap": 4,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.4
+        },
+        {
+          "Offset": -3.8,
+          "LoadFraction": 0.6
+        }
+      ],
+      "Category": "市政车辆",
+      "Purpose": "电力设施抢修车流展示",
+      "Features": "黄黑工具舱、线缆卷盘、折叠绝缘臂和作业斗；车顶与尾部两侧黄灯同步慢闪。"
+    },
+    {
+      "Id": "coupe",
+      "Name": "双门轿跑",
+      "Kind": "coupe",
+      "Mass": 1600,
+      "Speed": 9,
+      "Wheelbase": 2.7,
+      "Length": 4.55,
+      "Width": 1.88,
+      "Height": 1.35,
+      "Color": "#347A99",
+      "FollowGap": 3,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.52
+        },
+        {
+          "Offset": -2.7,
+          "LoadFraction": 0.48
+        }
+      ],
+      "Category": "日常车辆",
+      "Purpose": "轻型快速车流展示",
+      "Features": "低矮双门轿跑，每侧单扇长门，倾斜前后风挡。"
+    },
+    {
+      "Id": "car_carrier",
+      "Name": "超长双层汽车运输车",
+      "Kind": "car_carrier",
+      "Mass": 38000,
+      "Speed": 3.5,
+      "Wheelbase": 20,
+      "Length": 24,
+      "Width": 2.6,
+      "Height": 4.4,
+      "Color": "#436E87",
+      "FollowGap": 6,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.13
+        },
+        {
+          "Offset": -3.6,
+          "LoadFraction": 0.16
+        },
+        {
+          "Offset": -4.9,
+          "LoadFraction": 0.16
+        },
+        {
+          "Offset": -17.4,
+          "LoadFraction": 0.18
+        },
+        {
+          "Offset": -18.7,
+          "LoadFraction": 0.18
+        },
+        {
+          "Offset": -20,
+          "LoadFraction": 0.19
+        }
+      ],
+      "Category": "特种运输",
+      "Purpose": "超长高车身与多轴载荷测试",
+      "Features": "双层开放框架装载八辆轿跑，带车轮限位块；牵引车与挂车分别随路面俯仰。"
+    },
+    {
+      "Id": "crane",
+      "Name": "大型伸缩臂吊车",
+      "Kind": "crane",
+      "Mass": 36000,
+      "Speed": 3.5,
+      "Wheelbase": 9,
+      "Length": 13.8,
+      "Width": 2.6,
+      "Height": 4,
+      "Color": "#E3B12D",
+      "FollowGap": 5,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.25
+        },
+        {
+          "Offset": -3.4,
+          "LoadFraction": 0.25
+        },
+        {
+          "Offset": -7.6,
+          "LoadFraction": 0.25
+        },
+        {
+          "Offset": -9,
+          "LoadFraction": 0.25
+        }
+      ],
+      "Category": "工程车辆",
+      "Purpose": "长轴距多轴重载测试",
+      "Features": "黄色长车身、四节收拢伸缩吊臂、侧面液压支腿和外置大吊钩；黄灯慢闪，不执行吊装。"
+    },
+    {
+      "Id": "dump_loaded",
+      "Name": "满载砂石自卸车",
+      "Kind": "dump",
+      "Mass": 32000,
+      "Speed": 3.5,
+      "Wheelbase": 5.3,
+      "Length": 8.4,
+      "Width": 2.5,
+      "Height": 3.2,
+      "Color": "#C2943A",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.2
+        },
+        {
+          "Offset": -4,
+          "LoadFraction": 0.4
+        },
+        {
+          "Offset": -5.3,
+          "LoadFraction": 0.4
+        }
+      ],
+      "Category": "工程车辆",
+      "Purpose": "检验集中重载对桥面的影响",
+      "Features": "敞口加强货斗与砂石堆；32 吨实际总质量。货斗为运输收拢状态，不执行卸料。"
+    },
+    {
+      "Id": "dump_empty",
+      "Name": "空载自卸车",
+      "Kind": "dump",
+      "Mass": 12000,
+      "Speed": 5,
+      "Wheelbase": 5.3,
+      "Length": 8.4,
+      "Width": 2.5,
+      "Height": 3.2,
+      "Color": "#C2943A",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.35
+        },
+        {
+          "Offset": -4,
+          "LoadFraction": 0.325
+        },
+        {
+          "Offset": -5.3,
+          "LoadFraction": 0.325
+        }
+      ],
+      "Category": "工程车辆",
+      "Purpose": "与满载版本比较同车不同载荷",
+      "Features": "空货斗可见内部；12 吨实际总质量，与满载车采用不同轴重分配。"
+    },
+    {
+      "Id": "articulated_bus",
+      "Name": "城市铰接公交车",
+      "Kind": "articulated_bus",
+      "Mass": 28000,
+      "Speed": 5.5,
+      "Wheelbase": 12.9,
+      "Length": 18,
+      "Width": 2.55,
+      "Height": 3.2,
+      "Color": "#3D999A",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.25
+        },
+        {
+          "Offset": -5.6,
+          "LoadFraction": 0.37
+        },
+        {
+          "Offset": -12.9,
+          "LoadFraction": 0.38
+        }
+      ],
+      "Category": "公共交通",
+      "Purpose": "观察长车与分节车身随坡度变化",
+      "Features": "两节车身独立沿路径俯仰，中间设折叠风琴连接；三轴分担载荷。"
+    },
+    {
+      "Id": "tanker",
+      "Name": "油罐半挂车",
+      "Kind": "tanker",
+      "Mass": 40000,
+      "Speed": 4,
+      "Wheelbase": 14.6,
+      "Length": 18.5,
+      "Width": 2.55,
+      "Height": 3.85,
+      "Color": "#BB6545",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.12
+        },
+        {
+          "Offset": -3.6,
+          "LoadFraction": 0.16
+        },
+        {
+          "Offset": -4.9,
+          "LoadFraction": 0.16
+        },
+        {
+          "Offset": -12,
+          "LoadFraction": 0.18
+        },
+        {
+          "Offset": -13.3,
+          "LoadFraction": 0.18
+        },
+        {
+          "Offset": -14.6,
+          "LoadFraction": 0.2
+        }
+      ],
+      "Category": "货运车辆",
+      "Purpose": "长轴距液体运输重载测试",
+      "Features": "银色圆筒罐体、顶部检修口和护栏；牵引车与挂车分别随路面摆放。液体晃动不参与当前物理计算。"
+    },
+    {
+      "Id": "tractor_trailer",
+      "Name": "拖拉机与草捆挂车",
+      "Kind": "tractor",
+      "Mass": 9500,
+      "Speed": 2.8,
+      "Wheelbase": 7.4,
+      "Length": 10.4,
+      "Width": 2.4,
+      "Height": 2.8,
+      "Color": "#64823E",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.12
+        },
+        {
+          "Offset": -2.5,
+          "LoadFraction": 0.28
+        },
+        {
+          "Offset": -6.2,
+          "LoadFraction": 0.3
+        },
+        {
+          "Offset": -7.4,
+          "LoadFraction": 0.3
+        }
+      ],
+      "Category": "农业车辆",
+      "Purpose": "以慢速车流检验持续占桥与分布载荷",
+      "Features": "小前轮、大后轮、深胎纹、黄色轮毂、玻璃驾驶室、排气管与三组草捆；拖拉机、挂车分别跟随坡度，车顶黄灯慢闪。"
+    },
+    {
+      "Id": "garbage",
+      "Name": "垃圾清运车",
+      "Kind": "garbage",
+      "Mass": 18000,
+      "Speed": 5.5,
+      "Wheelbase": 5.5,
+      "Length": 8.6,
+      "Width": 2.5,
+      "Height": 3.25,
+      "Color": "#508567",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.3
+        },
+        {
+          "Offset": -4.2,
+          "LoadFraction": 0.35
+        },
+        {
+          "Offset": -5.5,
+          "LoadFraction": 0.35
+        }
+      ],
+      "Category": "市政车辆",
+      "Purpose": "城市中型重载与车流展示",
+      "Features": "压缩厢、后部装料机构、反光侧带与黄色警示灯；机构保持运输状态。"
+    },
+    {
+      "Id": "concrete_pump",
+      "Name": "混凝土泵车",
+      "Kind": "pump",
+      "Mass": 38000,
+      "Speed": 3.5,
+      "Wheelbase": 8.7,
+      "Length": 12.8,
+      "Width": 2.55,
+      "Height": 3.6,
+      "Color": "#E9DCC7",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.2
+        },
+        {
+          "Offset": -2.5,
+          "LoadFraction": 0.2
+        },
+        {
+          "Offset": -7.4,
+          "LoadFraction": 0.3
+        },
+        {
+          "Offset": -8.7,
+          "LoadFraction": 0.3
+        }
+      ],
+      "Category": "工程车辆",
+      "Purpose": "多轴工程重车的桥梁承载测试",
+      "Features": "四节红白折叠泵臂、输送管和收拢支腿，黄色警灯慢闪；不执行现场泵送。"
+    },
+    {
+      "Id": "modular_transport",
+      "Name": "重型模块运输车",
+      "Kind": "modular",
+      "Mass": 120000,
+      "Speed": 1.8,
+      "Wheelbase": 14.850000000000001,
+      "Length": 17.4,
+      "Width": 3.2,
+      "Height": 4.1,
+      "Color": "#BB8737",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0.0,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -1.35,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -2.7,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -4.050000000000001,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -5.4,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -6.75,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -8.100000000000001,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -9.450000000000001,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -10.8,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -12.15,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -13.5,
+          "LoadFraction": 0.08333333333333333
+        },
+        {
+          "Offset": -14.850000000000001,
+          "LoadFraction": 0.08333333333333337
+        }
+      ],
+      "Category": "特种运输",
+      "Purpose": "比较极高总质量与多轴分散载荷",
+      "Features": "十二排车轴承运大型工业模块，平均每轴 10 吨；自行式低速运输平台，带黄色警示灯。"
+    },
+    {
+      "Id": "school_bus",
+      "Name": "美式校车",
+      "Kind": "school_bus",
+      "Mass": 12500,
+      "Speed": 6,
+      "Wheelbase": 6.1,
+      "Length": 10.5,
+      "Width": 2.5,
+      "Height": 3.2,
+      "Color": "#E6B82F",
+      "FollowGap": 5,
+      "MaxRampGrade": 0.5773502691896257,
+      "Axles": [
+        {
+          "Offset": 0,
+          "LoadFraction": 0.35
+        },
+        {
+          "Offset": -6.1,
+          "LoadFraction": 0.65
+        }
+      ],
+      "Category": "公共交通",
+      "Purpose": "丰富日常客运与长轴距双轴载荷",
+      "Features": "弧形车顶、长发动机舱、分格车窗、黑色条纹、SCHOOL BUS 标牌与 STOP 八角停车牌；停车牌为收拢外观，不改变交通规则。"
+    }
   ]
 }

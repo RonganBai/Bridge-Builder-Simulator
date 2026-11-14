@@ -25,13 +25,15 @@
       "_straight": "沉管是整节预制的直管：不能加控制点弯曲，只能上下拖动两端。基础价最便宜，但升级等级比其他隧道贵得多。",
       "Straight": true,
       "TubeHeight": 8, "TubeWidth": 9, "FloorHeight": 0.8,
-      "MaxTrenchDepth": 6, "DredgeCostPerMeterDepth": 120, "RampCostPerMeter": 0,
+      "_structure": "管节是结构模型里的连续梁：管身刚度 TubeEA / TubeEI，每道接缝的转动刚度 JointStiffness（N·m/rad），接缝转角达到等级的 JointRotation 时张开（接缝抗弯 = 刚度 × 转角）。沉管悬在河床上方 MinBedClearance~MaxBedClearance，靠玩家建在接缝下的桥墩 / 柱子支撑；净重 = 管节质量 − 排开水的浮力。",
+      "MinBedClearance": 1.5, "MaxBedClearance": 4, "MinCover": 1, "TubeEA": 9e11, "TubeEI": 7.7e12, "JointStiffness": 8e8,
+      "MaxTrenchDepth": 0, "DredgeCostPerMeterDepth": 120, "RampCostPerMeter": 0,
       "ReinforceCostPerMeter": 300, "ReinforceFactor": 2.5,
       "ScourFactor": 0.02, "ScourCover": 2,
       "Grades": {
         "normal":     { "Name": "普通管节", "CostPerMeter": 500,  "MassPerMeter": 74000, "PressureCapacity": 140000, "JointRotation": 0.006, "SupportLoad": 600000,  "Color": "#A3A096" },
         "reinforced": { "Name": "加强管节", "CostPerMeter": 1150, "MassPerMeter": 78000, "PressureCapacity": 220000, "JointRotation": 0.012, "SupportLoad": 1200000, "Color": "#8E9690" },
-        "heavy":      { "Name": "重型管节", "CostPerMeter": 1950, "MassPerMeter": 84000, "PressureCapacity": 320000, "JointRotation": 0.02,  "SupportLoad": 2000000, "Color": "#6F7F8C" }
+        "heavy":      { "Name": "重型管节", "CostPerMeter": 1950, "MassPerMeter": 84000, "PressureCapacity": 300000, "JointRotation": 0.02,  "SupportLoad": 2000000, "Color": "#6F7F8C" }
       }
     },
     "shield": {
@@ -49,7 +51,9 @@
     },
     "floating": {
       "Name": "悬浮隧道",
-      "Placement": "water", "HasSupports": false,
+      "Placement": "water", "HasSupports": true,
+      "_structure": "管节同样是连续梁（两端接在岸边电梯井）。浮力 B = 排开水重；配重自动补到 管节自重 + 配重 = B ÷ 浮力等级比值，所以净浮力 = B − B ÷ 比值，不重复计重。锚索由玩家用钢索 / 复合钢索从接缝连到河床锚块、岸上锚点或自建结构，只能受拉。",
+      "TubeEA": 6e11, "TubeEI": 4e12, "JointStiffness": 3e8,
       "TubeHeight": 7, "TubeWidth": 9, "FloorHeight": 0.8,
       "MinCover": 1, "MinBedClearance": 4,
       "RampCostPerMeter": 0,
@@ -71,9 +75,9 @@
         "strong":   { "Name": "高强复合锚索", "Capacity": 1000000, "CostPerMeter": 110, "Color": "#2B5D7A" }
       },
       "Grades": {
-        "normal":     { "Name": "普通管节", "CostPerMeter": 800,  "MassPerMeter": 52000, "PressureCapacity": 90000,  "JointRotation": 0.02, "SupportLoad": 0, "Color": "#B8B4A8" },
-        "reinforced": { "Name": "加强管节", "CostPerMeter": 1100, "MassPerMeter": 52000, "PressureCapacity": 160000, "JointRotation": 0.03, "SupportLoad": 0, "Color": "#9AA6A4" },
-        "heavy":      { "Name": "重型管节", "CostPerMeter": 1500, "MassPerMeter": 52000, "PressureCapacity": 240000, "JointRotation": 0.04, "SupportLoad": 0, "Color": "#7E8E9A" }
+        "normal":     { "Name": "普通管节", "CostPerMeter": 800,  "MassPerMeter": 40000, "PressureCapacity": 90000,  "JointRotation": 0.02, "SupportLoad": 0, "Color": "#B8B4A8" },
+        "reinforced": { "Name": "加强管节", "CostPerMeter": 1100, "MassPerMeter": 40000, "PressureCapacity": 160000, "JointRotation": 0.03, "SupportLoad": 0, "Color": "#9AA6A4" },
+        "heavy":      { "Name": "重型管节", "CostPerMeter": 1500, "MassPerMeter": 40000, "PressureCapacity": 240000, "JointRotation": 0.04, "SupportLoad": 0, "Color": "#7E8E9A" }
       }
     }
   }

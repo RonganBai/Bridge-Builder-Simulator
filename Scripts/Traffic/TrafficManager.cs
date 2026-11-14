@@ -193,6 +193,7 @@ namespace BridgeArchitect3D.Traffic
                 var vc = _vehicles[i];
                 bool act = i < vehicleCount && active(i);
                 vc.Visible = act;
+                vc.SetEmergencyLights(true,_seeking?_seekTime:IsReplaying?ReplayFrameTime:Sim.Time);
                 if (!act) continue;
                 double s = frontS(i);
                 var path = Sim.Vehicles[i].Path ?? Sim.Path;
@@ -202,7 +203,7 @@ namespace BridgeArchitect3D.Traffic
                 // 多节车辆（火车）与行人队伍：每一节 / 每个人分别沿路径摆放
                 // Riding a bank lift: the whole vehicle moves with the platform
                 float lift = (float)(liftDy?.Invoke(i) ?? 0);
-                vc.PlaceAlongPath(sv => { path.Evaluate(sv, d2, 1, out double x, out double y); return new Vector3((float)x, (float)y + off + lift, 0); }, s);
+                vc.PlaceAlongPath(sv => { path.Evaluate(sv, d2, 1, out double x, out double y); return new Vector3((float)x, (float)y + off + lift, RailTrack.IsTrain(vc.Def)?0:RoadLayout.LaneCenter); }, s);
             }
         }
 

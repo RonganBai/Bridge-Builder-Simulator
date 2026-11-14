@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using BridgeArchitect3D.Data;
 using Godot;
@@ -9,7 +9,7 @@ namespace BridgeArchitect3D.World
     public static class TerrainBuilder
     {
         public const float SceneDepth = (float)(SceneryLayout.HalfDepth*2);   // Scene depth matches the placement boundary.
-        public const float RoadWidth = 4f;
+        public const float RoadWidth = RoadLayout.Width;
         public const string OverlayName = "BuildOverlays";
         /// <summary>Extruded terrain meshes whose rendered front depth is trimmed in section view.</summary>
         public const string CutawayGroup = "cutaway";
@@ -80,6 +80,13 @@ namespace BridgeArchitect3D.World
             AddBox(root, new Vector3(-bankLen / 2, lh + 0.22f, 0), new Vector3(bankLen, 0.02f, 0.15f), line, false).AddToGroup(TerrainSectionView.AccessCutGroup);
             AddBox(root, new Vector3(w + bankLen / 2, rh + 0.22f, 0), new Vector3(bankLen, 0.02f, 0.15f), line, false).AddToGroup(TerrainSectionView.AccessCutGroup);
 
+            foreach(int side in new[]{-1,1})
+            {
+                AddBox(root,new Vector3(-bankLen/2,lh+.231f,side*(RoadWidth/2-.14f)),new Vector3(bankLen,.008f,.08f),line,false).AddToGroup(TerrainSectionView.AccessCutGroup);
+                AddBox(root,new Vector3(w+bankLen/2,rh+.231f,side*(RoadWidth/2-.14f)),new Vector3(bankLen,.008f,.08f),line,false).AddToGroup(TerrainSectionView.AccessCutGroup);
+                RoadMarkings.Arrow(root,new Vector3(-12,lh+.233f,RoadLayout.Z(side)),side>0);
+                RoadMarkings.Arrow(root,new Vector3(w+12,rh+.233f,RoadLayout.Z(side)),side>0);
+            }
             // Rails along both approaches when a train runs in this level (the train rides on the rail heads)
             if (level.TrafficEvents.Any(e => e.Type == TrafficEventType.Vehicle && e.VehicleId == "train"))
             {
@@ -230,7 +237,7 @@ namespace BridgeArchitect3D.World
             AddTree(root, parkC + new Vector3(3.2f, 0.15f, -3.2f), 1.0f, trunk, leaf1);
 
             // 右岸路边：沿路的小路灯
-            for (int i = 0; i < 3; i++) AddLamp(root, new Vector3(w + 8 + i * 10, rh + 0.15f, -3.2f), metal, lamp);
+            // Approach lamps formerly at z=-3.2 would stand inside the widened carriageway.
         }
 
         /// <summary>一棵低多边形树：树干高 2.4 m，树冠圆锥高 4.5 m（scale = 1 时总高约 6.9 m）。</summary>
@@ -543,7 +550,7 @@ namespace BridgeArchitect3D.World
     /// <summary>建造平面参数：初版所有节点位于 Z=0 的竖直平面，桁架在桥面两侧 ±TrussOffset 处各渲染一片。</summary>
     public static class BuildPlane
     {
-        public const float TrussOffset = 2.2f;
+        public const float TrussOffset = RoadLayout.TrussOffset;
         /// <summary>鼠标拾取平面（前侧桁架所在平面，面向默认相机）。</summary>
         public const float FrontZ = TrussOffset;
     }

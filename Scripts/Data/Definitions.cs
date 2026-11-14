@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Collections.Generic;
 
 namespace BridgeArchitect3D.Data
@@ -73,6 +74,7 @@ namespace BridgeArchitect3D.Data
         /// <summary>Underwater tunnel tool (see TunnelRules); its numbers live in Data/Tunnels/tunnels.json.</summary>
         public bool IsTunnel { get; set; }
         /// <summary>Vertical lift (tunnel access at both banks, generated with the tunnel; see TunnelConfig.Lift).</summary>
+        public string DeviceKind { get; set; }
         public bool IsLift { get; set; }
         /// <summary>Tunnel type key in tunnels.json: immersed / shield / floating.</summary>
         public string TunnelType { get; set; }
@@ -123,8 +125,27 @@ namespace BridgeArchitect3D.Data
         public static bool Allows(MaterialDefinition deck, VehicleDefinition v) => IsTrain(v) ? deck.CarriesTrains : deck.CarriesCars;
     }
 
+    /// <summary>
+    /// The collision body of a vehicle: a box along the path from Rear to Front (metres relative to the leading axle,
+    /// rear negative), Width wide and Height tall above the road. The simulation uses it for following gaps, lift
+    /// platforms and cross beams; the 3D model is fitted inside it so a vehicle never shows through what it touches.
+    /// </summary>
+    public static class VehicleBody
+    {
+        public static double RearAxle(VehicleDefinition d) => d.Axles.Count == 0 ? 0 : d.Axles.Min(a => a.Offset);
+        /// <summary>Trains use the locomotive nose; other vehicles use the leading axle.</summary>
+        public static double FrontOverhang(VehicleDefinition d) => d.Kind == "train" ? 0.2 : Math.Max(0, (d.Length + RearAxle(d)) / 2);
+        public static double RearOverhang(VehicleDefinition d) => d.Kind == "train" ? Math.Max(0, d.Length + RearAxle(d)) : FrontOverhang(d);
+        public static double Front(VehicleDefinition d) => FrontOverhang(d);
+        public static double Rear(VehicleDefinition d) => RearAxle(d) - RearOverhang(d);
+    }
+
     public class VehicleDefinition
     {
+        public string Category { get; set; } = "通用载具";
+        public string Purpose { get; set; } = "道路通行与桥梁承载测试";
+        public string Features { get; set; } = "按车轴向桥梁施加载荷。";
+
         public string Id { get; set; }
         public string Name { get; set; }
         /// <summary>整车质量 kg。</summary>
@@ -271,6 +292,8 @@ namespace BridgeArchitect3D.Data
         public string Name { get; set; } = Loc.T("货船");
         /// <summary>Shared ship model and collision profile; legacy events remain cargo ships.</summary>
         public string ShipKind { get; set; } = "cargo";
+        /// <summary>Ship depth below the waterline, m (null = the ship type's default). The editor keeps it within 10%~50% of Height.</summary>
+        public double? Draft { get; set; }
         // ---- 洪水事件参数（Type = Environment）：Height 为水位上涨高度，Duration 为持续时间 ----
         public double Duration { get; set; } = 10;
         /// <summary>Environment events: weather preset id (normal / rainstorm / flood, see weather.json).
@@ -299,6 +322,9 @@ namespace BridgeArchitect3D.Data
 
     public class LevelDefinition
     {
+        public bool MechanicalLift { get; set; }
+        public BridgeDesign ProvidedInfrastructure { get; set; }
+        public string ProvidedTerrainSignature { get; set; }
         public string Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
